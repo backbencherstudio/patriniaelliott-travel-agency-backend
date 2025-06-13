@@ -3,7 +3,6 @@ import { CreateWebsiteInfoDto } from './dto/create-website-info.dto';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SojebStorage } from '../../../common/lib/Disk/SojebStorage';
 import appConfig from '../../../config/app.config';
-import { StringHelper } from 'src/common/helper/string.helper';
 
 @Injectable()
 export class WebsiteInfoService {
@@ -44,13 +43,7 @@ export class WebsiteInfoService {
             appConfig().storageUrl.websiteInfo + logo.logo,
           );
         }
-        // upload file
-        const fileName = `${StringHelper.randomString()}${files.logo.originalname}`;
-        await SojebStorage.put(
-          appConfig().storageUrl.websiteInfo + fileName,
-          files.logo.buffer,
-        );
-        data.logo = fileName;
+        data.logo = files.logo.filename;
       }
       if (files && files.favicon) {
         // delete old favicon from storage
@@ -60,14 +53,7 @@ export class WebsiteInfoService {
             appConfig().storageUrl.websiteInfo + favicon.favicon,
           );
         }
-        // upload file
-        const fileName = `${StringHelper.randomString()}${files.favicon.originalname}`;
-        await SojebStorage.put(
-          appConfig().storageUrl.websiteInfo + fileName,
-          files.favicon.buffer,
-        );
-
-        data.favicon = fileName;
+        data.favicon = files.favicon.filename;
       }
 
       // check if website info already exists, then update it, otherwise create new

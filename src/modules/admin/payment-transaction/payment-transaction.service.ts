@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { UserRepository } from '../../../common/repository/user/user.repository';
+import { SojebStorage } from '../../../common/lib/Disk/SojebStorage';
+import appConfig from '../../../config/app.config';
 
 @Injectable()
 export class PaymentTransactionService {
@@ -31,9 +33,49 @@ export class PaymentTransactionService {
             paid_currency: true,
             created_at: true,
             updated_at: true,
+            booking: {
+              select: {
+                id: true,
+                invoice_number: true,
+                status: true,
+                total_amount: true,
+                booking_items: {
+                  select: {
+                    id: true,
+                    package: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    avatar: true,
+                  },
+                },
+              },
+            },
           },
         },
       );
+
+      // add avatar url
+      for (const paymentTransaction of paymentTransactions) {
+        if (
+          paymentTransaction.booking &&
+          paymentTransaction.booking.user &&
+          paymentTransaction.booking.user.avatar
+        ) {
+          paymentTransaction.booking.user['avatar_url'] = SojebStorage.url(
+            appConfig().storageUrl.avatar +
+              paymentTransaction.booking.user.avatar,
+          );
+        }
+      }
 
       return {
         success: true,
@@ -73,6 +115,32 @@ export class PaymentTransactionService {
             paid_currency: true,
             created_at: true,
             updated_at: true,
+            booking: {
+              select: {
+                id: true,
+                invoice_number: true,
+                status: true,
+                total_amount: true,
+                booking_items: {
+                  select: {
+                    id: true,
+                    package: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    avatar: true,
+                  },
+                },
+              },
+            },
           },
         });
 
@@ -81,6 +149,18 @@ export class PaymentTransactionService {
           success: false,
           message: 'Payment transaction not found',
         };
+      }
+
+      // add avatar url
+      if (
+        paymentTransaction.booking &&
+        paymentTransaction.booking.user &&
+        paymentTransaction.booking.user.avatar
+      ) {
+        paymentTransaction.booking.user['avatar_url'] = SojebStorage.url(
+          appConfig().storageUrl.avatar +
+            paymentTransaction.booking.user.avatar,
+        );
       }
 
       return {

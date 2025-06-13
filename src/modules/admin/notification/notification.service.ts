@@ -19,10 +19,9 @@ export class NotificationService {
           { receiver_id: { equals: user_id } },
           { receiver_id: { equals: null } },
         ];
+      } else if (userDetails.type == Role.VENDOR) {
+        where_condition['receiver_id'] = user_id;
       }
-      // else if (userDetails.type == Role.VENDOR) {
-      //   where_condition['receiver_id'] = user_id;
-      // }
 
       const notifications = await this.prisma.notification.findMany({
         where: {
