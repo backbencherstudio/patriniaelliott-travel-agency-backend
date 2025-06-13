@@ -1,0 +1,51 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: backend
+    container_name: backend
+    ports:
+      - "4000:4000"
+    environment:
+      # Required for hot-reloading to work on Windows
+      - CHOKIDAR_USEPOLLING=true
+      # 1 second polling interval
+      - CHOKIDAR_INTERVAL=1000
+
+      - NODE_ENV=development
+      # host.docker.internal is the host machine's IP address
+      # - DATABASE_URL=postgresql://postgres:root@host.docker.internal/backend 
+      # for use the "postgres" "service" name
+      - DATABASE_URL=postgresql://postgres:root@postgres/backend
+
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - postgres
+      - redis
+    command: yarn start:dev-swc
+
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: backend
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
