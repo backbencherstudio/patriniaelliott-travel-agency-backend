@@ -410,7 +410,7 @@ model Package {
   // person max capacity
   max_capacity Int? @default(1)
 
-  type String? @default("tour") // e.g. "package", "tour", "cruise"
+  type String? @default("tour") // e.g. "tour", "apartment", "hotel"
 
   cancellation_policy_id String?
   cancellation_policy    PackageCancellationPolicy? @relation(fields: [cancellation_policy_id], references: [id])
