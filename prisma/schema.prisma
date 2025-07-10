@@ -46,18 +46,28 @@ model User {
   name       String? @db.VarChar(255)
   first_name String? @db.VarChar(255)
   last_name  String? @db.VarChar(255)
+  display_name  String? @db.VarChar(255)
+  nationality   String? @db.VarChar(255)
   password   String? @db.VarChar(255)
   domain     String? @unique
   avatar     String?
 
   phone_number  String?
   country       String?
+  street_address String?
   state         String?
+  apt_suite_unit String?
   city          String?
   address       String?
   zip_code      String?
   gender        String?
   date_of_birth DateTime? @db.Date
+
+  passport_first_name String?
+  passport_last_name String?
+  passport_number String?
+  passport_issuing_country String?
+  passport_expiry_date DateTime? @db.Date
 
   // billing id. e.g. stripe customer id
   billing_id String?
