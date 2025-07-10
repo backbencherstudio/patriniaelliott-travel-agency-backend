@@ -191,8 +191,8 @@ export class UserRepository {
    */
   static async createUser({
     name,
-    first_name,
-    last_name,
+    // first_name,
+    // last_name,
     email,
     password,
     phone_number,
@@ -200,8 +200,8 @@ export class UserRepository {
     type = 'user',
   }: {
     name?: string;
-    first_name?: string;
-    last_name?: string;
+    // first_name?: string;
+    // last_name?: string;
     email: string;
     password: string;
     phone_number?: string;
@@ -213,12 +213,12 @@ export class UserRepository {
       if (name) {
         data['name'] = name;
       }
-      if (first_name) {
-        data['first_name'] = first_name;
-      }
-      if (last_name) {
-        data['last_name'] = last_name;
-      }
+      // if (first_name) {
+      //   data['first_name'] = first_name;
+      // }
+      // if (last_name) {
+      //   data['last_name'] = last_name;
+      // }
       if (phone_number) {
         data['phone_number'] = phone_number;
       }
@@ -244,6 +244,7 @@ export class UserRepository {
           appConfig().security.salt,
         );
       }
+      
 
       if (type && ArrayHelper.inArray(type, Object.values(Role))) {
         data['type'] = type;
