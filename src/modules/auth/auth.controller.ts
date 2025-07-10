@@ -282,14 +282,18 @@ export class AuthController {
   @Post('change-password')
   async changePassword(
     @Req() req: Request,
-    @Body() data: { email: string; old_password: string; new_password: string },
+    @Body() data: { old_password: string; new_password: string },
   ) {
     try {
+      console.log('data', data);
       // const email = data.email;
       const user_id = req.user.userId;
+      console.log('user_id', user_id);
 
       const oldPassword = data.old_password;
       const newPassword = data.new_password;
+      console.log('oldPassword', oldPassword);
+      console.log('newPassword', newPassword);
       // if (!email) {
       //   throw new HttpException('Email not provided', HttpStatus.UNAUTHORIZED);
       // }

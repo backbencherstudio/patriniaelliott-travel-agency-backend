@@ -28,8 +28,16 @@ export class UserProfileController {
     }
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.userProfileService.remove(+id);
+  @Delete('/delete')
+  async remove(@Req() req: Request) {
+    try {
+      const user_id = req.user.userId;
+      return this.userProfileService.remove(user_id);
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to delete user profile',
+      };
+    }
   }
 }
