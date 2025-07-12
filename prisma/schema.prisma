@@ -108,6 +108,11 @@ model User {
   vendor_checkouts              Checkout[]                  @relation("vendor")
   temp_redeems                  TempRedeem[]
   package_cancellation_policies PackageCancellationPolicy[]
+  VendorVerification            VendorVerification?
+
+  // NEW: Add these relation fields
+  withdrawals   Withdrawal[]
+  vendor_wallet VendorWallet?
 
   @@map("users")
 }
@@ -437,6 +442,43 @@ model Package {
   package_destinations    PackageDestination[]
   package_languages       PackageLanguage[]
   package_traveller_types PackageTravellerType[]
+  package_availabilities  PackageAvailability[]
+  package_room_types      PackageRoomType[] // Added for hotels and apartment buildings
+
+  // NEW: Add this relation field
+  property_calendars PropertyCalendar[]
+
+  // Location fields
+  country     String?
+  city        String?
+  address     String?
+  unit_number String?
+  postal_code String?
+  latitude    Float?
+  longitude   Float?
+
+  // Property-specific fields
+  bedrooms   Int?
+  bathrooms  Int?
+  max_guests Int?
+  size_sqm   Float?
+  beds       Json? // [{type: "queen", quantity: 1}, ...]
+
+  // Amenities & features
+  amenities           Json? // {general: [...], cooking: [...], ...}
+  breakfast_available Boolean? @default(false)
+  parking             Json? // {available: "paid", cost: 15.5, ...}
+  house_rules         Json? // {smoking: false, pets: true, ...}
+
+  // Check-in/out times
+  check_in  Json? // {start: "15:00", end: "20:00"}
+  check_out String? // "11:00"
+
+  // Booking & pricing
+  booking_method  String?  @default("instant") // instant/request
+  commission_rate Decimal? @default(15.0)
+  host_earnings   Decimal?
+  rate_plans      Json? // {standard: {...}, nonRefundable: {...}, ...}
 
   @@map("packages")
 }
@@ -653,7 +695,8 @@ model PackageFile {
   file_alt String?
 
   // metadata
-  type String? // e.g. image, video
+  type        String? // e.g. image, video
+  is_featured Boolean? @default(false)
 
   @@map("package_files")
 }
@@ -915,8 +958,10 @@ model BookingItem {
   start_date DateTime?
   end_date   DateTime?
 
-  quantity Int?     @default(1)
-  price    Decimal?
+  quantity          Int?             @default(1)
+  price             Decimal?
+  PackageRoomType   PackageRoomType? @relation(fields: [packageRoomTypeId], references: [id])
+  packageRoomTypeId String?
 
   @@map("booking_items")
 }
@@ -1180,6 +1225,9 @@ model Country {
 
   destinations Destination[]
 
+  // NEW: Add this relation field
+  taxes Tax[]
+
   @@map("countries")
 }
 
@@ -1350,3 +1398,195 @@ model UserSetting {
 //   tenant    Organization? @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 //   @@map("posts")
 // }
+
+model VendorVerification {
+  id      String @id @default(cuid())
+  user_id String @unique
+  user    User   @relation(fields: [user_id], references: [id])
+
+  // Step 1: Profile Information
+  first_name       String
+  phone_number     String
+  business_website String?
+  vendor_type      String? // e.g. "individual", "company", etc.
+  TIN              String? // Tax Identification Number
+
+  // Step 2: Vendor Verification (Multi-step)
+  // 2.1 Property Details
+  property_name String? // Full name of accommodation
+  address       String?
+  unit_number   String?
+  postal_code   String?
+  city          String?
+  country       String?
+
+  // 2.2 Owner's Details
+  owner_type          String? // "individual", "company", etc.
+  owner_first_name    String?
+  owner_last_name     String?
+  owner_phone_numbers String? // JSON or comma-separated for multiple numbers
+  owner_alt_names     String? // Alternative names, if any
+
+  // 2.3 Manager's Details
+  manager_name           String?
+  is_govt_representation Boolean? // Is a government agency/official involved?
+
+  // Step 3: Payment Method
+  payment_method       String? // e.g. "paypal", "visa"
+  payment_email        String?
+  payment_account_name String?
+  payment_TIN          String?
+  billing_address      String?
+
+  // Status & Progress
+  status           String?   @default("pending") // pending, approved, rejected
+  step             Int? // Current step in process (1, 2, 3, etc.)
+  rejection_reason String?
+  verified_at      DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @default(now())
+}
+
+model PackageAvailability {
+  id           String   @id @default(cuid())
+  package_id   String
+  package      Package  @relation(fields: [package_id], references: [id], onDelete: Cascade)
+  date         DateTime
+  status       String // open/closed/blocked
+  rates        Json? // {standardRate: {...}, nonRefundableRate: {...}}
+  restrictions Json? // {minStay: 1, maxStay: 30, closedToArrival: false, ...}
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now())
+}
+
+model PackageRoomType {
+  id         String  @id @default(cuid())
+  package_id String
+  package    Package @relation(fields: [package_id], references: [id], onDelete: Cascade)
+
+  name        String // "Standard Room", "Studio Apartment"
+  description String? @db.Text
+
+  // Room-specific details
+  bedrooms   Int?
+  bathrooms  Int?
+  max_guests Int?
+  size_sqm   Float?
+  beds       Json? // [{type: "queen", quantity: 1}]
+
+  // Pricing
+  price    Decimal
+  currency String? @default("USD")
+
+  // Default room type for search results
+  is_default Boolean @default(false)
+
+  // Availability
+  is_available Boolean @default(true)
+
+  // Photos for this specific room type
+  room_photos Json? // Array of photo URLs
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  // Relations
+  booking_items BookingItem[]
+
+  // NEW: Add this relation field
+  property_calendars PropertyCalendar[]
+
+  @@map("package_room_types")
+}
+
+model Withdrawal {
+  id      String @id @default(cuid())
+  user_id String
+  user    User   @relation(fields: [user_id], references: [id])
+
+  amount   Decimal
+  currency String  @default("USD")
+  status   String  @default("pending") // pending, approved, rejected, completed
+  method   String // paypal, bank_transfer, stripe
+
+  // Payment details
+  account_details Json? // {paypal_email: "...", bank_account: "..."}
+
+  // Admin fields
+  approved_at      DateTime?
+  rejected_at      DateTime?
+  rejection_reason String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  @@map("withdrawals")
+}
+
+model VendorWallet {
+  id      String @id @default(cuid())
+  user_id String @unique
+  user    User   @relation(fields: [user_id], references: [id])
+
+  balance  Decimal @default(0)
+  currency String  @default("USD")
+
+  // Transaction history
+  total_earnings    Decimal @default(0)
+  total_withdrawals Decimal @default(0)
+  total_refunds     Decimal @default(0)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  @@map("vendor_wallets")
+}
+
+model PropertyCalendar {
+  id         String  @id @default(cuid())
+  package_id String
+  package    Package @relation(fields: [package_id], references: [id], onDelete: Cascade)
+
+  date   DateTime
+  status String // available, blocked, maintenance, booked
+  reason String? // Why blocked (maintenance, holiday, etc.)
+
+  // For room types
+  room_type_id String?
+  room_type    PackageRoomType? @relation(fields: [room_type_id], references: [id])
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  @@map("property_calendars")
+}
+
+model Currency {
+  id            String  @id @default(cuid())
+  code          String  @unique // USD, EUR, GBP
+  name          String // US Dollar, Euro, British Pound
+  symbol        String // $, €, £
+  exchange_rate Decimal @default(1)
+  is_default    Boolean @default(false)
+  is_active     Boolean @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  @@map("currencies")
+}
+
+model Tax {
+  id         String   @id @default(cuid())
+  name       String // VAT, GST, Sales Tax
+  rate       Decimal // 10.5 for 10.5%
+  country_id String?
+  country    Country? @relation(fields: [country_id], references: [id])
+  is_active  Boolean  @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  @@map("taxes")
+}
