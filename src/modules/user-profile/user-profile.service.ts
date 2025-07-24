@@ -3,23 +3,11 @@ import { CreateUserProfileDto } from './dto/create-user-profile.dto';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { CreateUserCardDto } from './dto/create-user-card.dto';
 
 @Injectable()
 export class UserProfileService {
   constructor(private prisma: PrismaService) {}
-
-  create(createUserProfileDto: CreateUserProfileDto) {
-    return 'This action adds a new userProfile';
-  }
-
-  findAll() {
-    return `This action returns all userProfile`;
-  }
-
-  findOne(id: number) {
-    return `This action returns a #${id} userProfile`;
-  }
-
   async update(id: string, updateUserProfileDto: UpdateUserProfileDto) {
     try {
       // First check if user exists
@@ -79,6 +67,76 @@ export class UserProfileService {
         success: false,
         message: 'Failed to update profile',
         error: error.message
+      };
+    }
+  }
+
+  async addCard(user_id: string, createUserCardDto: CreateUserCardDto) {
+    try {
+      // Validate user existence
+      const user = await this.prisma.user.findUnique({ where: { id: user_id } });
+      if (!user) {
+        return {
+          success: false,
+          message: 'User not found',
+        };
+      }
+
+      const newCard = await this.prisma.userCard.create({
+        data: {
+          user_id,
+          card_number: createUserCardDto.card_number,
+          expiry_month: createUserCardDto.expiry_month,
+          expiry_year: createUserCardDto.expiry_year,
+          cvv: createUserCardDto.cvv,
+          billing_country: createUserCardDto.billing_country,
+          billing_street_address: createUserCardDto.billing_street_address,
+          billing_apt_suite_unit: createUserCardDto.billing_apt_suite_unit,
+          billing_state: createUserCardDto.billing_state,
+          billing_city: createUserCardDto.billing_city,
+          billing_zip_code: createUserCardDto.billing_zip_code,
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Card saved successfully',
+        data: newCard,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to save card',
+        error: error.message,
+      };
+    }
+  }
+
+  async deleteCard(user_id: string, card_id: string) {
+    try {
+      // Verify card exists and belongs to user
+      const card = await this.prisma.userCard.findFirst({
+        where: { id: card_id, user_id },
+      });
+
+      if (!card) {
+        return {
+          success: false,
+          message: 'Card not found',
+        };
+      }
+
+      await this.prisma.userCard.delete({ where: { id: card_id } });
+
+      return {
+        success: true,
+        message: 'Card deleted successfully',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to delete card',
+        error: error.message,
       };
     }
   }
