@@ -20,6 +20,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { UserProfileModule } from './modules/user-profile/user-profile.module';
+import { VendorVerificationModule } from './modules/vendor-verification/vendor-verification.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { UserProfileModule } from './modules/user-profile/user-profile.module';
     ChatModule,
     PaymentModule,
     UserProfileModule,
+    VendorVerificationModule,
   ],
   controllers: [AppController],
   providers: [
