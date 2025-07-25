@@ -204,6 +204,7 @@ export class AuthController {
   @Post('verify-email')
   async verifyEmail(@Body() data: VerifyEmailDto) {
     try {
+      console.log(data);
       const email = data.email;
       const token = data.token;
       if (!email) {
