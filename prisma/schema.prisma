@@ -407,29 +407,21 @@ model Package {
   updated_at DateTime  @default(now())
   deleted_at DateTime?
   status     Int?      @default(1) @db.SmallInt
-
   approved_at DateTime?
-
   user_id String?
   user    User?   @relation(fields: [user_id], references: [id])
-
   name          String
   description   String  @db.Text
-  price         Decimal
-  // e.g, 5 days, 4 nights
+  price         Decimal // e.g, 5 days, 4 nights
   duration      Int?
   duration_type String? // e.g. days, nights, hours
-
   // minimum capacity
   min_capacity Int? @default(1)
   // person max capacity
   max_capacity Int? @default(1)
-
   type String? @default("tour") // e.g. "tour", "apartment", "hotel"
-
   cancellation_policy_id String?
   cancellation_policy    PackageCancellationPolicy? @relation(fields: [cancellation_policy_id], references: [id])
-
   package_files           PackageFile[]
   reviews                 Review[]
   package_trip_plans      PackageTripPlan[]
@@ -444,10 +436,8 @@ model Package {
   package_traveller_types PackageTravellerType[]
   package_availabilities  PackageAvailability[]
   package_room_types      PackageRoomType[] // Added for hotels and apartment buildings
-
   // NEW: Add this relation field
   property_calendars PropertyCalendar[]
-
   // Location fields
   country     String?
   city        String?
@@ -456,30 +446,25 @@ model Package {
   postal_code String?
   latitude    Float?
   longitude   Float?
-
   // Property-specific fields
   bedrooms   Int?
   bathrooms  Int?
   max_guests Int?
   size_sqm   Float?
   beds       Json? // [{type: "queen", quantity: 1}, ...]
-
   // Amenities & features
   amenities           Json? // {general: [...], cooking: [...], ...}
   breakfast_available Boolean? @default(false)
   parking             Json? // {available: "paid", cost: 15.5, ...}
   house_rules         Json? // {smoking: false, pets: true, ...}
-
   // Check-in/out times
   check_in  Json? // {start: "15:00", end: "20:00"}
   check_out String? // "11:00"
-
   // Booking & pricing
   booking_method  String?  @default("instant") // instant/request
   commission_rate Decimal? @default(15.0)
   host_earnings   Decimal?
   rate_plans      Json? // {standard: {...}, nonRefundable: {...}, ...}
-
   @@map("packages")
 }
 

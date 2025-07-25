@@ -50,6 +50,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Register a user' })
   @Post('register')
   async create(@Body() data: CreateUserDto) {
+    console.log(data);
     try {
       const name = data.name;
       // const first_name = data.first_name;
@@ -106,6 +107,7 @@ export class AuthController {
   @UseGuards(LocalAuthGuard)
   @Post('login')
   async login(@Req() req: Request) {
+    console.log(req.user);
     try {
       const user_id = req.user.id;
 
