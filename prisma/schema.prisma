@@ -92,6 +92,8 @@ model User {
   roles                Role[]
   role_users           RoleUser[]
   payment_transactions PaymentTransaction[]
+  // Relation to store users' saved payment cards
+  user_cards           UserCard[]
 
   reviews         Review[]
   blog_comments   BlogComment[]
@@ -1574,4 +1576,33 @@ model Tax {
   updated_at DateTime @default(now())
 
   @@map("taxes")
+}
+
+model UserCard {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+  deleted_at DateTime?
+
+  status Int? @default(1) @db.SmallInt
+
+  // Relation to user
+  user_id String
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  // Card details (store securely / consider tokenization in production)
+  card_number   String
+  expiry_month  Int
+  expiry_year   Int
+  cvv           String
+
+  // Billing address snapshot (optional, so that historical records remain even if user updates their profile)
+  billing_country        String?
+  billing_street_address String?
+  billing_apt_suite_unit String?
+  billing_state          String?
+  billing_city           String?
+  billing_zip_code       String?
+
+  @@map("user_cards")
 }
