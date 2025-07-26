@@ -1,0 +1,13 @@
+{
+  "name": "City Center Apartment",
+  "description": "Modern apartment in the heart of the city with all amenities",
+  "price": 150.00,
+  "type": "apartment",
+  "country": "USA",
+  "city": "New York",
+  "address": "123 Main Street",
+  "bedrooms": 1,
+  "bathrooms": 1,
+  "max_guests": 2,
+  "booking_method": "instant"
+} 

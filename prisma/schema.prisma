@@ -450,6 +450,15 @@ model Package {
   // NEW: Add this relation field
   property_calendars PropertyCalendar[]
 
+  //Host Profile......
+  is_property    Boolean?
+  property_details String?
+  is_host       Boolean?
+  host_name     String?
+  about_host    String?  
+  is_neighborhood  Boolean?
+  neighborhood_details String?
+
   // Location fields
   country     String?
   city        String?

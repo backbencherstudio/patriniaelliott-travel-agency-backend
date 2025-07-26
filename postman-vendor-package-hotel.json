@@ -1,0 +1,188 @@
+{
+  "name": "Grand Hotel & Spa",
+  "description": "Luxury 5-star hotel in the heart of downtown with spa, restaurant, and conference facilities.",
+  "price": 450.00,
+  "duration": 1,
+  "duration_type": "nights",
+  "min_capacity": 1,
+  "max_capacity": 4,
+  "type": "hotel",
+  "cancellation_policy_id": "cuid_cancellation_policy_hotel",
+  
+  "country": "France",
+  "city": "Paris",
+  "address": "123 Champs-Élysées",
+  "unit_number": "Room 501",
+  "postal_code": "75008",
+  "latitude": 48.8566,
+  "longitude": 2.3522,
+  
+  "bedrooms": 1,
+  "bathrooms": 1,
+  "max_guests": 2,
+  "size_sqm": 45.0,
+  
+  "beds": [
+    {
+      "type": "king",
+      "quantity": 1
+    }
+  ],
+  
+  "amenities": {
+    "room": [
+      "Air Conditioning",
+      "WiFi",
+      "TV",
+      "Mini Bar",
+      "Room Service",
+      "City View"
+    ],
+    "hotel": [
+      "Spa",
+      "Swimming Pool",
+      "Gym",
+      "Restaurant",
+      "Bar",
+      "Concierge",
+      "Valet Parking"
+    ],
+    "business": [
+      "Business Center",
+      "Conference Rooms",
+      "Meeting Facilities"
+    ]
+  },
+  
+  "breakfast_available": true,
+  
+  "parking": {
+    "available": "paid",
+    "cost": 25.0,
+    "spaces": 1,
+    "covered": true,
+    "valet": true
+  },
+  
+  "house_rules": {
+    "smoking": false,
+    "pets": false,
+    "parties": false,
+    "quiet_hours": "22:00-08:00",
+    "check_in_time": "15:00",
+    "check_out_time": "11:00",
+    "late_checkout": "13:00"
+  },
+  
+  "check_in": {
+    "start": "15:00",
+    "end": "23:00",
+    "flexible": false
+  },
+  
+  "check_out": "11:00",
+  "booking_method": "instant",
+  "commission_rate": 18.0,
+  "host_earnings": 369.00,
+  
+  "rate_plans": {
+    "standard": {
+      "price": 450.00,
+      "cancellation": "free_cancellation",
+      "refundable": true
+    },
+    "premium": {
+      "price": 550.00,
+      "cancellation": "free_cancellation",
+      "refundable": true,
+      "includes": ["Breakfast", "Spa Access"]
+    },
+    "suite": {
+      "price": 750.00,
+      "cancellation": "free_cancellation",
+      "refundable": true,
+      "includes": ["Breakfast", "Spa Access", "Concierge Service"]
+    }
+  },
+  
+  "is_property": true,
+  "property_details": "Historic luxury hotel with modern amenities and exceptional service",
+  "is_host": true,
+  "host_name": "Grand Hotels International",
+  "about_host": "Leading luxury hotel chain with properties in major cities worldwide.",
+  "is_neighborhood": true,
+  "neighborhood_details": "Located on the famous Champs-Élysées, walking distance to Eiffel Tower, Louvre, and shopping districts.",
+  
+  "category_ids": [
+    "cuid_category_luxury",
+    "cuid_category_hotel",
+    "cuid_category_business"
+  ],
+  
+  "tag_ids": [
+    "cuid_tag_luxury",
+    "cuid_tag_spa",
+    "cuid_tag_central_location"
+  ],
+  
+  "destination_ids": [
+    "cuid_destination_paris",
+    "cuid_destination_france"
+  ],
+  
+  "language_ids": [
+    "cuid_language_french",
+    "cuid_language_english"
+  ],
+  
+  "traveller_type_ids": [
+    "cuid_traveller_adult",
+    "cuid_traveller_child"
+  ],
+  
+  "extra_service_ids": [
+    "cuid_extra_airport_transfer",
+    "cuid_extra_spa_treatment",
+    "cuid_extra_city_tour",
+    "cuid_extra_room_upgrade"
+  ],
+  
+  "min_price": 300.00,
+  "max_price": 1000.00,
+  "min_duration": 1,
+  "max_duration": 30,
+  "min_capacity_filter": 1,
+  "max_capacity_filter": 4,
+  
+  "available_from": "2024-01-01T00:00:00.000Z",
+  "available_until": "2024-12-31T23:59:59.000Z",
+  
+  "status_list": [1],
+  "countries": ["France"],
+  "cities": ["Paris", "Lyon", "Nice"],
+  "property_types": ["hotel", "luxury"],
+  "required_amenities": ["WiFi", "Air Conditioning", "Room Service"],
+  
+  "min_bedrooms": 1,
+  "max_bedrooms": 1,
+  "min_bathrooms": 1,
+  "max_bathrooms": 1,
+  "min_max_guests": 1,
+  "max_max_guests": 4,
+  
+  "min_size_sqm": 30.0,
+  "max_size_sqm": 100.0,
+  
+  "booking_methods": ["instant"],
+  "min_commission_rate": 15.0,
+  "max_commission_rate": 20.0,
+  "min_host_earnings": 300.00,
+  "max_host_earnings": 800.00,
+  
+  "is_approved": true,
+  "search_term": "luxury hotel paris",
+  "sort_by": "price",
+  "sort_order": "desc",
+  "page": 1,
+  "limit": 10
+} 

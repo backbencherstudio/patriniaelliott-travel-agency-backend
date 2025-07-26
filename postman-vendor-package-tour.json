@@ -1,0 +1,90 @@
+{
+  "name": "Mountain Adventure Tour",
+  "description": "Explore the beautiful mountains with our guided adventure tour. Includes hiking, camping, and breathtaking views.",
+  "price": 89.99,
+  "duration": 3,
+  "duration_type": "days",
+  "min_capacity": 4,
+  "max_capacity": 12,
+  "type": "tour",
+  "country": "Canada",
+  "city": "Banff",
+  "address": "Mountain Trail Head",
+  "latitude": 51.1784,
+  "longitude": -115.5708,
+  
+  "amenities": {
+    "included": [
+      "Professional Guide",
+      "Camping Equipment",
+      "Meals",
+      "Transportation",
+      "Safety Gear"
+    ],
+    "optional": [
+      "Photography Service",
+      "Premium Camping",
+      "Private Guide"
+    ]
+  },
+  
+  "house_rules": {
+    "age_restriction": "18+",
+    "fitness_level": "moderate",
+    "weather_dependent": true,
+    "group_size": "4-12 people"
+  },
+  
+  "booking_method": "request",
+  "commission_rate": 12.0,
+  "host_earnings": 79.19,
+  
+  "is_host": true,
+  "host_name": "Adventure Tours Canada",
+  "about_host": "Professional adventure guides with 15+ years of experience in mountain tourism.",
+  
+  "category_ids": [
+    "cuid_category_adventure",
+    "cuid_category_outdoor",
+    "cuid_category_tour"
+  ],
+  
+  "destination_ids": [
+    "cuid_destination_banff",
+    "cuid_destination_rocky_mountains"
+  ],
+  
+  "traveller_type_ids": [
+    "cuid_traveller_adult"
+  ],
+  
+  "extra_service_ids": [
+    "cuid_extra_photography",
+    "cuid_extra_private_guide",
+    "cuid_extra_premium_equipment"
+  ],
+  
+  "min_price": 50.00,
+  "max_price": 150.00,
+  "min_duration": 1,
+  "max_duration": 7,
+  
+  "available_from": "2024-06-01T00:00:00.000Z",
+  "available_until": "2024-09-30T23:59:59.000Z",
+  
+  "status_list": [1],
+  "countries": ["Canada"],
+  "cities": ["Banff", "Jasper", "Whistler"],
+  "property_types": ["tour", "adventure"],
+  
+  "booking_methods": ["request"],
+  "min_commission_rate": 10.0,
+  "max_commission_rate": 15.0,
+  
+  "is_approved": true,
+  "search_term": "mountain adventure tour",
+  "sort_by": "price",
+  "sort_order": "asc",
+  "page": 1,
+  "limit": 10
+} 
