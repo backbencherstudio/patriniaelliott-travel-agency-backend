@@ -1601,7 +1601,7 @@ model UserCard {
 
   status Int? @default(1) @db.SmallInt
 
-  // Relation to user
+  // Relation to user 
   user_id String
   user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
