@@ -1,7 +1,7 @@
 import { Controller, Post, Body, UseGuards, Req } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { VendorVerificationService } from './vendor-verification.service';
-import { CreateVendorVerificationDto } from './dto/create-vendor-verification.dto/create-vendor-verification.dto';
+import { CreateVendorVerificationDto} from './dto/create-vendor-verification.dto/create-vendor-verification.dto';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 @Controller('application/vendor-verification')
 export class VendorVerificationController {
   constructor(private readonly vendorVerificationService: VendorVerificationService) {}
+
 
   @ApiOperation({ summary: 'Create vendor verification' })
   @UseGuards(JwtAuthGuard)

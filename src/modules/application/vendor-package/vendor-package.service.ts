@@ -6,6 +6,63 @@ import { CreateVendorPackageDto } from './dto/create-vendor-package.dto';
 export class VendorPackageService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async getVendorPackage(page: number, limit: number, user_id: string) {
+    const skip = (page - 1) * limit;
+  
+    const [data, total] = await Promise.all([
+      this.prisma.package.findMany({
+        skip,
+        take: limit,
+        orderBy: { created_at: 'desc' },
+        where: {
+          user_id: user_id 
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              display_name: true,
+              avatar: true,
+              created_at: true
+            }
+          },
+        },
+      }),
+      this.prisma.package.count({
+        where: {
+          user_id: user_id
+        }
+      }),
+    ]);
+  
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+  async getVendorIdWise(user_id: string) {
+    console.log('Searching for user_id:', user_id);
+  
+    const data = await this.prisma.package.findUnique({
+      where: {
+        id: user_id  
+      }
+    });
+  
+    console.log('Found packages:', data);
+    return {
+      success: true,
+      data: data,
+    };
+  }
+
   async create(createVendorPackageDto: CreateVendorPackageDto, userId: string) {
     // Check if user exists
     const userData = await this.prisma.user.findUnique({ where: { id: userId } });
