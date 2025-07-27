@@ -38,18 +38,18 @@ export class CreateVendorPackageDto {
   user_id?: string;
 
   @ApiProperty({ required: true })
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  name: string;
+  name?: string;
 
   @ApiProperty({ required: true })
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  description: string;
+  description?: string;
 
   @ApiProperty({ required: true })
-  @IsNotEmpty()
-  price: any; // Use string or Decimal type if you have a custom scalar
+  @IsOptional()
+  price?: any; // Use string or Decimal type if you have a custom scalar
 
   @ApiProperty({ required: false })
   @IsOptional()

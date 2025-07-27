@@ -84,4 +84,67 @@ export class VendorPackageService {
       data: vendorPackage,
     };
   }
+
+  async updateVendorPackage(packageId: string, userId: string, updateVendorPackageDto: any) {
+    try {
+      const packageData = await this.prisma.package.findFirst({
+        where: {
+          id: packageId,
+          user_id: userId
+        }
+      });
+  
+      if (!packageData) {
+        throw new Error('Package not found or you do not have permission to update it');
+      }
+      const updatedPackage = await this.prisma.package.update({
+        where: {
+          id: packageId
+        },
+        data: updateVendorPackageDto
+      });
+  
+      return {
+        success: true,
+        message: 'Package updated successfully',
+        data: updatedPackage
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  async deleteVendorPackage(packageId: string, userId: string) {
+    try {
+      const packageData = await this.prisma.package.findFirst({
+        where: {
+          id: packageId,
+          user_id: userId
+        }
+      });
+  
+      if (!packageData) {
+        throw new Error('Package not found or you do not have permission to delete it');
+      }
+  
+      await this.prisma.package.delete({
+        where: {
+          id: packageId
+        }
+      });
+  
+      return {
+        success: true,
+        message: 'Package deleted successfully'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
 }
