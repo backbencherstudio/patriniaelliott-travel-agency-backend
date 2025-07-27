@@ -19,7 +19,7 @@ export class VendorVerificationController {
   ) {
     const user_id = req.user.userId;
      console.log(user_id);
-    //console.log(createVendorVerificationDto);
+    console.log(createVendorVerificationDto);
     try {
       const result = await this.vendorVerificationService.create(createVendorVerificationDto, user_id);
       return result;

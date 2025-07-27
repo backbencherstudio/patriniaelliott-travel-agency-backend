@@ -6,6 +6,7 @@ import { CreateReviewDto } from './dto/create-review.dto';
 import { MessageGateway } from '../../../modules/chat/message/message.gateway';
 import { NotificationRepository } from '../../../common/repository/notification/notification.repository';
 import { UpdateReviewDto } from './dto/update-review.dto';
+import { GetPackagesDto } from './dto/get-packages.dto';
 
 @Injectable()
 export class PackageService {
@@ -13,6 +14,312 @@ export class PackageService {
     private prisma: PrismaService,
     private readonly messageGateway: MessageGateway,
   ) {}
+
+  async getPackages(filters: GetPackagesDto) {
+    try {
+      const {
+        q,
+        type,
+        duration_start,
+        duration_end,
+        budget_start,
+        budget_end,
+        ratings,
+        free_cancellation,
+        destinations,
+        languages,
+        page = 1,
+        limit = 10,
+        sort_by = 'created_at',
+        sort_order = 'desc',
+      } = filters;
+
+      // Build where conditions
+      const where_condition: any = {
+        status: 1,
+        approved_at: { not: null },
+        deleted_at: null,
+      };
+
+      // Search query
+      if (q) {
+        where_condition['OR'] = [
+          { name: { contains: q, mode: 'insensitive' } },
+          { description: { contains: q, mode: 'insensitive' } },
+          {
+            package_destinations: {
+              some: {
+                destination: { name: { contains: q, mode: 'insensitive' } },
+              },
+            },
+          },
+          {
+            package_languages: {
+              some: {
+                language: { name: { contains: q, mode: 'insensitive' } },
+              },
+            },
+          },
+        ];
+      }
+
+      // Type filter
+      if (type) {
+        where_condition['type'] = type;
+      }
+
+      // Duration filter
+      if (duration_start || duration_end) {
+        where_condition['duration'] = {};
+        if (duration_start) {
+          where_condition['duration']['gte'] = duration_start;
+        }
+        if (duration_end) {
+          where_condition['duration']['lte'] = duration_end;
+        }
+      }
+
+      // Price filter
+      if (budget_start || budget_end) {
+        where_condition['price'] = {};
+        if (budget_start) {
+          where_condition['price']['gte'] = budget_start;
+        }
+        if (budget_end) {
+          where_condition['price']['lte'] = budget_end;
+        }
+      }
+
+      // Rating filter
+      if (ratings && ratings.length > 0) {
+        const minRating = Math.min(...ratings);
+        const maxRating = Math.max(...ratings);
+        
+        where_condition['reviews'] = {
+          some: {
+            rating_value: {
+              gte: minRating,
+              lte: maxRating,
+            },
+          },
+        };
+      }
+
+      // Free cancellation filter
+      if (free_cancellation && free_cancellation.length > 0) {
+        where_condition['cancellation_policy'] = {
+          policy: { in: free_cancellation },
+        };
+      }
+
+      // Destinations filter
+      if (destinations && destinations.length > 0) {
+        where_condition['package_destinations'] = {
+          some: {
+            destination_id: { in: destinations },
+          },
+        };
+      }
+
+      // Languages filter
+      if (languages && languages.length > 0) {
+        where_condition['package_languages'] = {
+          some: {
+            language_id: { in: languages },
+          },
+        };
+      }
+
+      // Calculate pagination
+      const skip = (page - 1) * limit;
+      const take = limit;
+
+      // Build order by
+      const orderBy: any = {};
+      orderBy[sort_by] = sort_order;
+
+      // Get total count for pagination
+      const totalCount = await this.prisma.package.count({
+        where: where_condition,
+      });
+
+      // Get packages with relations
+      const packages = await this.prisma.package.findMany({
+        where: where_condition,
+        orderBy: orderBy,
+        skip: skip,
+        take: take,
+        select: {
+          id: true,
+          created_at: true,
+          updated_at: true,
+          user_id: true,
+          name: true,
+          description: true,
+          price: true,
+          duration: true,
+          duration_type: true,
+          min_capacity: true,
+          max_capacity: true,
+          type: true,
+          status: true,
+          approved_at: true,
+          // Location fields
+          country: true,
+          city: true,
+          address: true,
+          latitude: true,
+          longitude: true,
+          // Property fields
+          bedrooms: true,
+          bathrooms: true,
+          max_guests: true,
+          size_sqm: true,
+          // Host fields
+          is_property: true,
+          is_host: true,
+          host_name: true,
+          about_host: true,
+          // Relations
+          user: {
+            select: {
+              id: true,
+              name: true,
+              avatar: true,
+              type: true,
+            },
+          },
+          package_traveller_types: {
+            select: {
+              traveller_type: {
+                select: {
+                  id: true,
+                  type: true,
+                },
+              },
+            },
+          },
+          package_languages: {
+            select: {
+              language: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+          reviews: {
+            select: {
+              id: true,
+              rating_value: true,
+              comment: true,
+              user_id: true,
+              created_at: true,
+            },
+          },
+          package_destinations: {
+            select: {
+              destination: {
+                select: {
+                  id: true,
+                  name: true,
+                  country: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          cancellation_policy: {
+            select: {
+              id: true,
+              policy: true,
+              description: true,
+            },
+          },
+          package_files: {
+            where: { status: 1 },
+            select: {
+              id: true,
+              file: true,
+              file_alt: true,
+              type: true,
+              is_featured: true,
+              sort_order: true,
+            },
+            orderBy: { sort_order: 'asc' },
+          },
+          package_categories: {
+            select: {
+              category: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // Process packages to add image URLs and calculate average rating
+      const processedPackages = packages.map((pkg) => {
+        // Add image URLs
+        if (pkg.package_files && pkg.package_files.length > 0) {
+          pkg.package_files = pkg.package_files.map((file) => ({
+            ...file,
+            file_url: SojebStorage.url(appConfig().storageUrl.package + file.file),
+          }));
+        }
+
+        // Add user avatar URL
+        if (pkg.user && pkg.user.avatar) {
+          pkg.user.avatar_url = SojebStorage.url(appConfig().storageUrl.avatar + pkg.user.avatar);
+        }
+
+        // Calculate average rating
+        if (pkg.reviews && pkg.reviews.length > 0) {
+          const totalRating = pkg.reviews.reduce((sum, review) => sum + review.rating_value, 0);
+          pkg.average_rating = totalRating / pkg.reviews.length;
+          pkg.reviews_count = pkg.reviews.length;
+        } else {
+          pkg.average_rating = 0;
+          pkg.reviews_count = 0;
+        }
+
+        return pkg;
+      });
+
+      // Calculate pagination metadata
+      const totalPages = Math.ceil(totalCount / limit);
+      const hasNextPage = page < totalPages;
+      const hasPreviousPage = page > 1;
+
+      return {
+        success: true,
+        data: {
+          packages: processedPackages,
+          pagination: {
+            current_page: page,
+            total_pages: totalPages,
+            total_items: totalCount,
+            items_per_page: limit,
+            has_next_page: hasNextPage,
+            has_previous_page: hasPreviousPage,
+          },
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
 
   async findAll({
     filters: {

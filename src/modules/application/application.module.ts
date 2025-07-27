@@ -10,7 +10,7 @@ import { CheckoutModule } from './checkout/checkout.module';
 import { CancellationPolicyModule } from './cancellation-policy/cancellation-policy.module';
 import { LanguageModule } from './language/language.module';
 import { PageModule } from './page/page.module';
-// import { VendorVerificationModule } from './vendor-verification/vendor-verification.module';
+ import { VendorVerificationModule } from './vendor-verification/vendor-verification.module';
 import { VendorPackageModule } from './vendor-package/vendor-package.module';
 
 @Module({
@@ -27,7 +27,7 @@ import { VendorPackageModule } from './vendor-package/vendor-package.module';
     LanguageModule,
     PageModule,
     VendorPackageModule,
-    // VendorVerificationModule,
+     VendorVerificationModule,
   ],
 })
 export class ApplicationModule {}

@@ -11,17 +11,38 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { PackageService } from './package.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { QueryPackageDto } from './dto/query-package.dto';
 import { UpdateReviewDto } from 'src/modules/admin/reviews/dto/update-review.dto';
+import { GetPackagesDto } from './dto/get-packages.dto';
+import { PackagesResponseDto } from './dto/package-response.dto';
 
 @ApiTags('Package')
 @Controller('package')
 export class PackageController {
   constructor(private readonly packageService: PackageService) {}
+
+  @ApiOperation({ summary: 'Get all packages with pagination and filters' })
+  @ApiResponse({
+    status: 200,
+    description: 'Successfully retrieved packages with pagination',
+    type: PackagesResponseDto,
+  })
+  @Get('list')
+  async getPackages(@Query() filters: GetPackagesDto) {
+    try {
+      const result = await this.packageService.getPackages(filters);
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
 
   @ApiOperation({ summary: 'Get all packages' })
   @Get()
