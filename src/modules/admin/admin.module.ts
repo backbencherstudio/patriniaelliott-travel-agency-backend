@@ -20,6 +20,7 @@ import { UserModule } from './user/user.module';
 import { BookingModule } from './booking/booking.module';
 import { NotificationModule } from './notification/notification.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import {VendorPackageModule} from './vendor-package/vendor-package.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     BookingModule,
     NotificationModule,
     DashboardModule,
+    VendorPackageModule,
   ],
 })
 export class AdminModule {}
