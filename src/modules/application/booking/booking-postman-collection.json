@@ -1,0 +1,260 @@
+{
+  "info": {
+    "name": "Dynamic ID Processing Booking System",
+    "description": "Complete Postman collection for testing the booking system with automatic ID resolution",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"your_password\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Set JWT Token\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.success && jsonData.data.access_token) {",
+                  "        pm.collectionVariables.set(\"jwt_token\", jsonData.data.access_token);",
+                  "        console.log(\"JWT Token set successfully\");",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Create Booking",
+      "item": [
+        {
+          "name": "Basic Hotel Booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"hotel\",\n  \"status\": \"pending\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phone_number\": \"+1234567890\",\n  \"address1\": \"123 Main St\",\n  \"city\": \"New York\",\n  \"state\": \"NY\",\n  \"zip_code\": \"10001\",\n  \"country\": \"USA\",\n  \"comments\": \"Early check-in preferred\",\n  \"booking_items\": [\n    {\n      \"package_id\": \"package_123\",\n      \"start_date\": \"2024-02-15T00:00:00.000Z\",\n      \"end_date\": \"2024-02-18T00:00:00.000Z\",\n      \"quantity\": 1,\n      \"packageRoomTypeId\": \"room_type_456\"\n    }\n  ],\n  \"booking_travellers\": [\n    {\n      \"type\": \"adult\",\n      \"gender\": \"male\",\n      \"full_name\": \"John Doe\",\n      \"first_name\": \"John\",\n      \"last_name\": \"Doe\",\n      \"email\": \"john.doe@example.com\",\n      \"phone_number\": \"+1234567890\"\n    },\n    {\n      \"type\": \"child\",\n      \"gender\": \"female\",\n      \"full_name\": \"Jane Doe\",\n      \"first_name\": \"Jane\",\n      \"last_name\": \"Doe\",\n      \"email\": \"jane.doe@example.com\"\n    }\n  ],\n  \"booking_extra_services\": [\n    {\n      \"extra_service_id\": \"service_789\",\n      \"price\": 50.00\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/booking",
+              "host": ["{{base_url}}"],
+              "path": ["booking"]
+            }
+          }
+        },
+        {
+          "name": "Tour Package Booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"tour\",\n  \"first_name\": \"Alice\",\n  \"last_name\": \"Smith\",\n  \"email\": \"alice.smith@example.com\",\n  \"phone_number\": \"+1987654321\",\n  \"booking_items\": [\n    {\n      \"package_id\": \"tour_package_001\",\n      \"start_date\": \"2024-03-01T00:00:00.000Z\",\n      \"end_date\": \"2024-03-05T00:00:00.000Z\",\n      \"quantity\": 2\n    }\n  ],\n  \"booking_travellers\": [\n    {\n      \"type\": \"adult\",\n      \"full_name\": \"Alice Smith\",\n      \"email\": \"alice.smith@example.com\"\n    },\n    {\n      \"type\": \"adult\",\n      \"full_name\": \"Bob Smith\",\n      \"email\": \"bob.smith@example.com\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/booking",
+              "host": ["{{base_url}}"],
+              "path": ["booking"]
+            }
+          }
+        },
+        {
+          "name": "Multi-Package Booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"mixed\",\n  \"first_name\": \"Sarah\",\n  \"last_name\": \"Johnson\",\n  \"email\": \"sarah.johnson@example.com\",\n  \"booking_items\": [\n    {\n      \"package_id\": \"hotel_package_001\",\n      \"start_date\": \"2024-04-10T00:00:00.000Z\",\n      \"end_date\": \"2024-04-15T00:00:00.000Z\",\n      \"quantity\": 1,\n      \"packageRoomTypeId\": \"deluxe_room_001\"\n    },\n    {\n      \"package_id\": \"activity_package_001\",\n      \"start_date\": \"2024-04-12T00:00:00.000Z\",\n      \"end_date\": \"2024-04-12T00:00:00.000Z\",\n      \"quantity\": 2\n    }\n  ],\n  \"booking_travellers\": [\n    {\n      \"type\": \"adult\",\n      \"full_name\": \"Sarah Johnson\",\n      \"email\": \"sarah.johnson@example.com\"\n    },\n    {\n      \"type\": \"adult\",\n      \"full_name\": \"Mike Johnson\",\n      \"email\": \"mike.johnson@example.com\"\n    }\n  ],\n  \"booking_extra_services\": [\n    {\n      \"extra_service_id\": \"airport_transfer\",\n      \"price\": 75.00\n    },\n    {\n      \"extra_service_id\": \"guided_tour\",\n      \"price\": 120.00\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/booking",
+              "host": ["{{base_url}}"],
+              "path": ["booking"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Bookings",
+      "item": [
+        {
+          "name": "Get All Bookings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/booking",
+              "host": ["{{base_url}}"],
+              "path": ["booking"]
+            }
+          }
+        },
+        {
+          "name": "Get Bookings with Search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/booking?q=hotel&status=1",
+              "host": ["{{base_url}}"],
+              "path": ["booking"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "hotel"
+                },
+                {
+                  "key": "status",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Specific Booking",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/booking/booking_abc123",
+              "host": ["{{base_url}}"],
+              "path": ["booking", "booking_abc123"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Error Testing",
+      "item": [
+        {
+          "name": "Invalid Package ID",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"hotel\",\n  \"booking_items\": [\n    {\n      \"package_id\": \"invalid_package_999\",\n      \"start_date\": \"2024-02-15T00:00:00.000Z\",\n      \"end_date\": \"2024-02-18T00:00:00.000Z\",\n      \"quantity\": 1\n    }\n  ],\n  \"booking_travellers\": [\n    {\n      \"type\": \"adult\",\n      \"full_name\": \"Test User\",\n      \"email\": \"test@example.com\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/booking",
+              "host": ["{{base_url}}"],
+              "path": ["booking"]
+            }
+          }
+        },
+        {
+          "name": "Past Date Error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"hotel\",\n  \"booking_items\": [\n    {\n      \"package_id\": \"package_123\",\n      \"start_date\": \"2020-01-01T00:00:00.000Z\",\n      \"end_date\": \"2020-01-05T00:00:00.000Z\",\n      \"quantity\": 1\n    }\n  ],\n  \"booking_travellers\": [\n    {\n      \"type\": \"adult\",\n      \"full_name\": \"Test User\",\n      \"email\": \"test@example.com\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/booking",
+              "host": ["{{base_url}}"],
+              "path": ["booking"]
+            }
+          }
+        },
+        {
+          "name": "Missing Required Fields",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"hotel\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/booking",
+              "host": ["{{base_url}}"],
+              "path": ["booking"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+} 

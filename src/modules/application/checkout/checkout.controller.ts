@@ -1,41 +1,35 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Param,
-  Req,
-  UseGuards,
-  Patch,
-  Delete,
+import { 
+  Controller, 
+  Post, 
+  Body, 
+  UseGuards, 
+  Req, 
+  Param, 
+  Get, 
+  Delete
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Request } from 'express';
 import { CheckoutService } from './checkout.service';
-import { CreateCheckoutDto } from './dto/create-checkout.dto';
-import { JwtAuthGuard } from '../../../modules/auth/guards/jwt-auth.guard';
-import { UpdateCheckoutDto } from './dto/update-checkout.dto';
+import { InitiateCheckoutDto } from './dto/initiate-checkout.dto';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { Request } from 'express';
 
 @ApiTags('Checkout')
-@Controller('checkout')
+@Controller('application/checkout')
 export class CheckoutController {
   constructor(private readonly checkoutService: CheckoutService) {}
 
-  @ApiOperation({ summary: 'Create a new checkout' })
+  @ApiOperation({ summary: 'Initiate checkout session' })
+  @Post('initiate')
   @UseGuards(JwtAuthGuard)
-  @Post()
-  async create(
+  async initiateCheckout(
     @Req() req: Request,
-    @Body() createCheckoutDto: CreateCheckoutDto,
+    @Body() initiateCheckoutDto: InitiateCheckoutDto
   ) {
     try {
-      const user_id = req.user.userId;
-      const checkout = await this.checkoutService.create(
-        user_id,
-        createCheckoutDto,
-      );
-
-      return checkout;
+      const userId = req.user.userId;
+      const result = await this.checkoutService.initiateCheckout(userId, initiateCheckoutDto);
+      return result;
     } catch (error) {
       return {
         success: false,
@@ -44,23 +38,17 @@ export class CheckoutController {
     }
   }
 
-  @ApiOperation({ summary: 'Update checkout' })
+  @ApiOperation({ summary: 'Get checkout session details' })
+  @Get(':checkoutId')
   @UseGuards(JwtAuthGuard)
-  @Patch(':id')
-  async update(
+  async getCheckoutSession(
     @Req() req: Request,
-    @Param('id') id: string,
-    @Body() updateCheckoutDto: UpdateCheckoutDto,
+    @Param('checkoutId') checkoutId: string
   ) {
     try {
-      const user_id = req.user.userId;
-      const checkout = await this.checkoutService.update(
-        id,
-        user_id,
-        updateCheckoutDto,
-      );
-
-      return checkout;
+      const userId = req.user.userId;
+      const result = await this.checkoutService.getCheckoutSession(checkoutId, userId);
+      return result;
     } catch (error) {
       return {
         success: false,
@@ -69,65 +57,22 @@ export class CheckoutController {
     }
   }
 
-  @ApiOperation({ summary: 'Apply coupon' })
+  @ApiOperation({ summary: 'Cancel checkout session' })
+  @Delete(':checkoutId')
   @UseGuards(JwtAuthGuard)
-  @Post(':id/coupon')
-  async applyCoupon(
+  async cancelCheckoutSession(
     @Req() req: Request,
-    @Param('id') id: string,
-    // @Body() body: { coupons: ICoupon[] },
-    @Body() body: { code: string },
+    @Param('checkoutId') checkoutId: string
   ) {
     try {
-      const user_id = req.user.userId;
-      const checkout = await this.checkoutService.applyCoupon({
-        user_id: user_id,
-        checkout_id: id,
-        code: body.code,
-      });
-      return checkout;
+      const userId = req.user.userId;
+      const result = await this.checkoutService.cancelCheckoutSession(checkoutId, userId);
+      return result;
     } catch (error) {
       return {
         success: false,
         message: error.message,
       };
-    }
-  }
-
-  @ApiOperation({ summary: 'Remove coupon' })
-  @UseGuards(JwtAuthGuard)
-  @Delete(':id/coupon/:coupon_id')
-  async removeCoupon(
-    @Req() req: Request,
-    @Param() params: { id: string; coupon_id: string },
-  ) {
-    try {
-      const user_id = req.user.userId;
-      const coupon_id = params.coupon_id;
-      const checkout_id = params.id;
-
-      const checkout = await this.checkoutService.removeCoupon({
-        coupon_id: coupon_id,
-        user_id: user_id,
-        checkout_id: checkout_id,
-      });
-      return checkout;
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  @ApiOperation({ summary: 'Get checkout details' })
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
-    try {
-      const checkout = await this.checkoutService.findOne(id);
-      return checkout;
-    } catch (error) {
-      throw new Error(error.message);
     }
   }
 }

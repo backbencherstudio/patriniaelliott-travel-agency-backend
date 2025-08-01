@@ -6,6 +6,7 @@ import { CreateReviewDto } from './dto/create-review.dto';
 import { MessageGateway } from '../../../modules/chat/message/message.gateway';
 import { NotificationRepository } from '../../../common/repository/notification/notification.repository';
 import { UpdateReviewDto } from './dto/update-review.dto';
+import { SearchPackagesDto } from '../../admin/vendor-package/dto/search-packages.dto';
 
 @Injectable()
 export class PackageService {
@@ -13,6 +14,217 @@ export class PackageService {
     private prisma: PrismaService,
     private readonly messageGateway: MessageGateway,
   ) {}
+
+  async searchPackages(searchDto: SearchPackagesDto) {
+    const {
+      search,
+      destination_id,
+      category_id,
+      start_date,
+      end_date,
+      adults = 1,
+      children = 0,
+      infants = 0,
+      rooms = 1,
+      min_price,
+      max_price,
+      traveller_types,
+      tags,
+      page = 1,
+      limit = 10,
+      sort_by = 'created_at_desc'
+    } = searchDto;
+
+    // Calculate total guests
+    const totalGuests = adults + children + infants;
+
+    // Build where conditions
+    const where: any = {
+      deleted_at: null,
+      is_available: true,
+      status: 1, // Active packages
+    };
+
+    // Search term
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Destination filter
+    if (destination_id) {
+      where.package_destinations = {
+        some: {
+          destination_id: destination_id,
+        },
+      };
+    }
+
+    // Category filter
+    if (category_id) {
+      where.package_categories = {
+        some: {
+          category_id: category_id,
+        },
+      };
+    }
+
+    // Price range filter
+    if (min_price || max_price) {
+      where.price = {};
+      if (min_price) where.price.gte = min_price;
+      if (max_price) where.price.lte = max_price;
+    }
+
+    // Date availability check
+    if (start_date && end_date) {
+      where.package_availabilities = {
+        some: {
+          date: {
+            gte: start_date,
+            lte: end_date,
+          },
+        },
+      };
+    }
+
+    // Guest capacity check
+    where.package_room_types = {
+      some: {
+        max_guests: {
+          gte: totalGuests,
+        },
+      },
+    };
+
+    // Build sort order
+    let orderBy: any = {};
+    switch (sort_by) {
+      case 'price_asc':
+        orderBy.price = 'asc';
+        break;
+      case 'price_desc':
+        orderBy.price = 'desc';
+        break;
+      case 'rating_desc':
+        orderBy.average_rating = 'desc';
+        break;
+      default:
+        orderBy.created_at = 'desc';
+    }
+
+    // Calculate pagination
+    const skip = (page - 1) * limit;
+
+    // Execute query
+    const [packages, total] = await Promise.all([
+      this.prisma.package.findMany({
+        where,
+        include: {
+          package_destinations: {
+            include: {
+              destination: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  country: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          package_categories: {
+            include: {
+              category: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          package_room_types: {
+            where: {
+              max_guests: {
+                gte: totalGuests,
+              },
+            },
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              price: true,
+              max_guests: true,
+            },
+          },
+          package_availabilities: start_date && end_date ? {
+            where: {
+              date: {
+                gte: start_date,
+                lte: end_date,
+              },
+            },
+            select: {
+              date: true,
+            },
+          } : false,
+          package_files: {
+            select: {
+              id: true,
+              file: true,
+              type: true,
+              file_alt: true,
+              sort_order: true,
+              is_featured: true,
+            },
+          },
+          _count: {
+            select: {
+              reviews: true,
+            },
+          },
+        },
+        orderBy,
+        skip,
+        take: limit,
+      }),
+      this.prisma.package.count({ where }),
+    ]);
+
+    // Calculate pagination info
+    const totalPages = Math.ceil(total / limit);
+    const hasNextPage = page < totalPages;
+    const hasPrevPage = page > 1;
+
+    return {
+      success: true,
+      data: {
+        packages,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNextPage,
+          hasPrevPage,
+        },
+      },
+    };
+  }
 
   async findAll({
     filters: {

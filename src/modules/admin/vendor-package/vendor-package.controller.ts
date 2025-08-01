@@ -24,9 +24,10 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Express, Request } from 'express';
 import { diskStorage } from 'multer';
 import appConfig from '../../../config/app.config';
+import { SearchPackagesDto } from './dto/search-packages.dto';
 
 @ApiTags('VendorPackage')
-@Controller('application/vendor-package')
+@Controller('admin/vendor-package')
 export class VendorPackageController {
   constructor(private readonly vendorPackageService: VendorPackageService) {}
 
@@ -34,10 +35,20 @@ export class VendorPackageController {
   @Get()
   @UseGuards(JwtAuthGuard) 
   async getVendorPackage(@Query() query: GetVendorPackageDto, @Req() req: any) {
-    const page = parseInt(query.page || '1', 10);
-    const limit = parseInt(query.limit || '10', 10);
+    const page = parseInt(query.page?.toString() || '1', 10);
+    const limit = parseInt(query.limit?.toString() || '10', 10);
     const user_id = req.user.userId; 
-    return this.vendorPackageService.getVendorPackage(page, limit, user_id);
+    return this.vendorPackageService.getVendorPackage(
+      page, 
+      limit, 
+      user_id, 
+      { 
+        searchQuery: query.q, 
+        status: query.status, 
+        categoryId: query.category_id, 
+        destinationId: query.destination_id 
+      }
+    );
   }
 
   @ApiOperation({ summary: 'get vendor package by id' })
@@ -185,4 +196,6 @@ export class VendorPackageController {
     const user_id = req.user.userId;
     return this.vendorPackageService.deleteVendorPackage(packageId, user_id);
   }
+
+  
 }

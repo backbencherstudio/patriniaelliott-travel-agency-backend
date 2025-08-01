@@ -3,22 +3,65 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateVendorPackageDto } from './dto/create-vendor-package.dto';
 import { Express } from 'express';
 import appConfig from '../../../config/app.config';
+import { SearchPackagesDto } from './dto/search-packages.dto';
+
 
 @Injectable()
 export class VendorPackageService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getVendorPackage(page: number, limit: number, user_id: string) {
+  async getVendorPackage(
+    page: number, 
+    limit: number, 
+    user_id: string, 
+    searchParams?: {
+      searchQuery?: string;
+      status?: number;
+      categoryId?: string;
+      destinationId?: string;
+    }
+  ) {
     const skip = (page - 1) * limit;
+    
+    // Build where conditions
+    const where: any = {
+      user_id: user_id,
+      deleted_at: null
+    };
+
+    // Add search functionality
+    if (searchParams?.searchQuery) {
+      where.OR = [
+        { name: { contains: searchParams.searchQuery, mode: 'insensitive' } },
+        { description: { contains: searchParams.searchQuery, mode: 'insensitive' } },
+      ];
+    }
+
+    // Add status filter
+    if (searchParams?.status !== undefined) {
+      where.status = Number(searchParams.status);
+    }
+
+    // Add category filter
+    if (searchParams?.categoryId) {
+      where.category_id = searchParams.categoryId;
+    }
+
+    // Add destination filter
+    if (searchParams?.destinationId) {
+      where.package_destinations = {
+        some: {
+          destination_id: searchParams.destinationId
+        }
+      };
+    }
   
     const [data, total] = await Promise.all([
       this.prisma.package.findMany({
         skip,
         take: limit,
         orderBy: { created_at: 'desc' },
-        where: {
-          user_id: user_id 
-        },
+        where,
         include: {
           user: {
             select: {
@@ -38,13 +81,26 @@ export class VendorPackageService {
             orderBy: {
               sort_order: 'asc'
             }
+          },
+          // Include package room types
+          package_room_types: {
+            where: {
+              deleted_at: null
+            },
+            orderBy: {
+              created_at: 'asc'
+            }
+          },
+          // Include package availabilities
+          package_availabilities: {
+            orderBy: {
+              date: 'asc'
+            }
           }
         },
       }),
       this.prisma.package.count({
-        where: {
-          user_id: user_id
-        }
+        where
       }),
     ]);
   
@@ -84,6 +140,21 @@ export class VendorPackageService {
             sort_order: 'asc'
           }
         },
+        // Include package room types
+        package_room_types: {
+          where: {
+            deleted_at: null
+          },
+          orderBy: {
+            created_at: 'asc'
+          }
+        },
+        // Include package availabilities
+        package_availabilities: {
+          orderBy: {
+            date: 'asc'
+          }
+        },
         user: {
           select: {
             id: true,
@@ -119,10 +190,9 @@ export class VendorPackageService {
       throw new Error('User not found');
     }
 
-    // Remove user_id from DTO before passing to Prisma
-    const { user_id, ...rest } = createVendorPackageDto;
-    const data:any={
-        ...rest,
+    // Create package data
+    const data: any = {
+        ...createVendorPackageDto,
         user: { connect: { id: userId } },
     }
 
@@ -211,34 +281,73 @@ export class VendorPackageService {
       const package_files = files.package_files?.map(file => file.filename) || [];
       const trip_plans_images = files.trip_plans_images?.map(file => file.filename) || [];
 
-      // Create package with file data
+      // Extract nested data from DTO
+      const { package_room_types, package_availabilities, ...packageData } = createVendorPackageDto;
+
+      // Build the data object for Prisma
+      const data: any = {
+        ...packageData,
+        user: { connect: { id: user_id } },
+        // Create package files
+        package_files: {
+          create: [
+            ...package_files.map(filename => ({
+              file: filename,
+              type: 'package_file',
+              file_alt: `Package file: ${filename}`,
+              sort_order: 0,
+              is_featured: false
+            })),
+            ...trip_plans_images.map(filename => ({
+              file: filename,
+              type: 'trip_plan',
+              file_alt: `Trip plan: ${filename}`,
+              sort_order: 0,
+              is_featured: false
+            }))
+          ]
+        }
+      };
+
+      // Add package room types if provided
+      if (package_room_types && package_room_types.length > 0) {
+        data.package_room_types = {
+          create: package_room_types.map((roomType: any) => ({
+            name: roomType.name,
+            description: roomType.description,
+            bedrooms: roomType.bedrooms,
+            bathrooms: roomType.bathrooms,
+            max_guests: roomType.max_guests,
+            size_sqm: roomType.size_sqm,
+            beds: roomType.beds,
+            price: roomType.price,
+            currency: roomType.currency || 'USD',
+            is_default: roomType.is_default || false,
+            is_available: roomType.is_available !== false,
+            room_photos: roomType.room_photos
+          }))
+        };
+      }
+
+      // Add package availabilities if provided
+      if (package_availabilities && package_availabilities.length > 0) {
+        data.package_availabilities = {
+          create: package_availabilities.map((availability: any) => ({
+            date: new Date(availability.date),
+            status: availability.status,
+            rates: availability.rates,
+            restrictions: availability.restrictions
+          }))
+        };
+      }
+
+      // Create package with nested data
       const result = await this.prisma.package.create({
-        data: {
-          name: createVendorPackageDto.name,
-          description: createVendorPackageDto.description,
-          price: createVendorPackageDto.price,
-          user: { connect: { id: user_id } },
-          package_files: {
-            create: [
-              ...package_files.map(filename => ({
-                file: filename,
-                type: 'package_file',
-                file_alt: `Package file: ${filename}`,
-                sort_order: 0,
-                is_featured: false
-              })),
-              ...trip_plans_images.map(filename => ({
-                file: filename,
-                type: 'trip_plan',
-                file_alt: `Trip plan: ${filename}`,
-                sort_order: 0,
-                is_featured: false
-              }))
-            ]
-          }
-        },
+        data,
         include: {
           package_files: true,
+          package_room_types: true,
+          package_availabilities: true,
           user: true
         }
       });
@@ -246,7 +355,7 @@ export class VendorPackageService {
       return {
         success: true,
         data: result,
-        message: 'Package created successfully with files',
+        message: 'Package created successfully with files, room types, and availabilities',
       };
     } catch (error) {
       throw new Error(`Failed to create package: ${error.message}`);
@@ -280,34 +389,76 @@ export class VendorPackageService {
       const package_files = files.package_files?.map(file => file.filename) || [];
       const trip_plans_images = files.trip_plans_images?.map(file => file.filename) || [];
 
-      // Update package with file data
+      // Extract nested data from DTO
+      const { package_room_types, package_availabilities, ...packageData } = updateVendorPackageDto;
+
+      // Build the data object for Prisma
+      const data: any = {
+        ...packageData,
+        // Update package files
+        package_files: {
+          deleteMany: {}, // Delete existing files
+          create: [
+            ...package_files.map(filename => ({
+              file: filename,
+              type: 'package_file',
+              file_alt: `Package file: ${filename}`,
+              sort_order: 0,
+              is_featured: false
+            })),
+            ...trip_plans_images.map(filename => ({
+              file: filename,
+              type: 'trip_plan',
+              file_alt: `Trip plan: ${filename}`,
+              sort_order: 0,
+              is_featured: false
+            }))
+          ]
+        }
+      };
+
+      // Update package room types if provided
+      if (package_room_types && package_room_types.length > 0) {
+        data.package_room_types = {
+          deleteMany: {}, // Delete existing room types
+          create: package_room_types.map((roomType: any) => ({
+            name: roomType.name,
+            description: roomType.description,
+            bedrooms: roomType.bedrooms,
+            bathrooms: roomType.bathrooms,
+            max_guests: roomType.max_guests,
+            size_sqm: roomType.size_sqm,
+            beds: roomType.beds,
+            price: roomType.price,
+            currency: roomType.currency || 'USD',
+            is_default: roomType.is_default || false,
+            is_available: roomType.is_available !== false,
+            room_photos: roomType.room_photos
+          }))
+        };
+      }
+
+      // Update package availabilities if provided
+      if (package_availabilities && package_availabilities.length > 0) {
+        data.package_availabilities = {
+          deleteMany: {}, // Delete existing availabilities
+          create: package_availabilities.map((availability: any) => ({
+            date: new Date(availability.date),
+            status: availability.status,
+            rates: availability.rates,
+            restrictions: availability.restrictions
+          }))
+        };
+      }
+
+      // Update package with nested data
       const result = await this.prisma.package.update({
         where: { id: packageId },
-        data: {
-          ...updateVendorPackageDto,
-          // Update package files
-          package_files: {
-            deleteMany: {}, // Delete existing files
-            create: [
-              ...package_files.map(filename => ({
-                file: filename,
-                type: 'package_file',
-                file_alt: `Package file: ${filename}`,
-                sort_order: 0,
-                is_featured: false
-              })),
-              ...trip_plans_images.map(filename => ({
-                file: filename,
-                type: 'trip_plan',
-                file_alt: `Trip plan: ${filename}`,
-                sort_order: 0,
-                is_featured: false
-              }))
-            ]
-          }
-        },
+        data,
         include: {
           package_files: true,
+          package_room_types: true,
+          package_availabilities: true,
           user: true
         }
       });
@@ -315,10 +466,11 @@ export class VendorPackageService {
       return {
         success: true,
         data: result,
-        message: 'Package updated successfully with files',
+        message: 'Package updated successfully with files, room types, and availabilities',
       };
     } catch (error) {
       throw new Error(`Failed to update package: ${error.message}`);
     }
   }
+  
 }

@@ -17,11 +17,25 @@ import { CreateReviewDto } from './dto/create-review.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { QueryPackageDto } from './dto/query-package.dto';
 import { UpdateReviewDto } from 'src/modules/admin/reviews/dto/update-review.dto';
+import { SearchPackagesDto } from '../../admin/vendor-package/dto/search-packages.dto';
 
 @ApiTags('Package')
-@Controller('package')
+@Controller('application/packages')
 export class PackageController {
   constructor(private readonly packageService: PackageService) {}
+
+  @ApiOperation({ summary: 'Search and discover packages' })
+  @Get('search')
+  async searchPackages(@Query() searchDto: SearchPackagesDto) {
+    try {
+      return await this.packageService.searchPackages(searchDto);
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
 
   @ApiOperation({ summary: 'Get all packages' })
   @Get()

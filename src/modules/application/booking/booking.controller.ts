@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Post,
+  Put,
+  Delete,
   Body,
   Param,
   UseGuards,
@@ -13,6 +15,8 @@ import { Request } from 'express';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { BookingService } from './booking.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
+import { CreateFeedbackDto } from './dto/create-feedback.dto';
+import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 
 @ApiBearerAuth()
 @ApiTags('Booking')
@@ -21,18 +25,16 @@ import { CreateBookingDto } from './dto/create-booking.dto';
 export class BookingController {
   constructor(private readonly bookingService: BookingService) {}
 
-  @ApiOperation({ summary: 'Create booking' })
-  @Post(':checkout_id')
+  @ApiOperation({ summary: 'Create booking with dynamic ID processing' })
+  @Post()
   async create(
     @Req() req: Request,
-    @Param('checkout_id') checkout_id: string,
     @Body() createBookingDto: CreateBookingDto,
   ) {
     try {
       const user_id = req.user.userId;
-      const booking = await this.bookingService.create(
+      const booking = await this.bookingService.createBooking(
         user_id,
-        checkout_id,
         createBookingDto,
       );
       return booking;
@@ -52,15 +54,7 @@ export class BookingController {
   ) {
     try {
       const user_id = req.user.userId;
-      const q = query.q;
-      const status = query.status;
-      const approve = query.approve;
-      const bookings = await this.bookingService.findAll({
-        user_id,
-        q,
-        status,
-        approve,
-      });
+      const bookings = await this.bookingService.findAll(user_id, query);
 
       return bookings;
     } catch (error) {
@@ -79,6 +73,92 @@ export class BookingController {
       const booking = await this.bookingService.findOne(id, user_id);
 
       return booking;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+
+  @ApiOperation({ summary: 'Create feedback for a booking' })
+  @Post('feedback')
+  async createFeedback(@Req() req: Request, @Body() createFeedbackDto: CreateFeedbackDto) {
+    try {
+      console.log(createFeedbackDto);
+      const user_id = req.user.userId;
+      const feedback = await this.bookingService.createFeedback(user_id, createFeedbackDto);
+
+      return feedback;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Get feedback for a specific booking' })
+  @Get(':booking_id/feedback')
+  async getFeedback(@Req() req: Request, @Param('booking_id') booking_id: string) {
+    try {
+      const user_id = req.user.userId;
+      const feedback = await this.bookingService.getFeedback(booking_id, user_id);
+
+      return feedback;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Update feedback for a booking' })
+  @Put(':booking_id/feedback')
+  async updateFeedback(
+    @Req() req: Request,
+    @Param('booking_id') booking_id: string,
+    @Body() updateFeedbackDto: UpdateFeedbackDto,
+  ) {
+    try {
+      const user_id = req.user.userId;
+      const feedback = await this.bookingService.updateFeedback(user_id, booking_id, updateFeedbackDto);
+
+      return feedback;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Delete feedback for a booking' })
+  @Delete(':booking_id/feedback')
+  async deleteFeedback(@Req() req: Request, @Param('booking_id') booking_id: string) {
+    try {
+      const user_id = req.user.userId;
+      const result = await this.bookingService.deleteFeedback(user_id, booking_id);
+
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Get all feedback for the current user' })
+  @Get('feedback/all')
+  async getUserFeedback(@Req() req: Request) {
+    try {
+      const user_id = req.user.userId;
+      const feedbacks = await this.bookingService.getUserFeedback(user_id);
+
+      return feedbacks;
     } catch (error) {
       return {
         success: false,
