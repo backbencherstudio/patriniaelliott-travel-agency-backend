@@ -17,6 +17,7 @@ import { BookingService } from './booking.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
+import { CreatePaymentDto } from './dto/create-payment.dto';
 
 @ApiBearerAuth()
 @ApiTags('Booking')
@@ -159,6 +160,79 @@ export class BookingController {
       const feedbacks = await this.bookingService.getUserFeedback(user_id);
 
       return feedbacks;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Create payment intent for booking' })
+  @Post('payment/create-intent')
+  async createPaymentIntent(
+    @Req() req: Request,
+    @Body() createPaymentDto: CreatePaymentDto,
+  ) {
+    try {
+      const user_id = req.user.userId;
+      const paymentIntent = await this.bookingService.createPaymentIntent(
+        user_id,
+        createPaymentDto,
+      );
+      return {
+        success: true,
+        data: paymentIntent,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Confirm payment for booking' })
+  @Post('payment/confirm/:payment_intent_id')
+  async confirmPayment(
+    @Req() req: Request,
+    @Param('payment_intent_id') payment_intent_id: string,
+  ) {
+    try {
+      console.log(payment_intent_id);
+      const user_id = req.user.userId;
+      const result = await this.bookingService.confirmPayment(
+        user_id,
+        payment_intent_id,
+      );
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Get payment status for booking' })
+  @Get(':booking_id/payment-status')
+  async getPaymentStatus(
+    @Req() req: Request,
+    @Param('booking_id') booking_id: string,
+  ) {
+    try {
+      const user_id = req.user.userId;
+      const paymentStatus = await this.bookingService.getPaymentStatus(
+        user_id,
+        booking_id,
+      );
+      return {
+        success: true,
+        data: paymentStatus,
+      };
     } catch (error) {
       return {
         success: false,

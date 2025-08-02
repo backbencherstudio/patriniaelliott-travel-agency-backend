@@ -145,6 +145,15 @@ export class StripePayment {
   }
 
   /**
+   * Retrieve payment intent by ID
+   * @param payment_intent_id
+   * @returns
+   */
+  static async retrievePaymentIntent(payment_intent_id: string): Promise<stripe.PaymentIntent> {
+    return Stripe.paymentIntents.retrieve(payment_intent_id);
+  }
+
+  /**
    * Create stripe hosted checkout session
    * @param customer
    * @param price

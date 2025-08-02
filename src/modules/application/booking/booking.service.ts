@@ -3,18 +3,14 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateBookingDto, BookingItemDto, BookingTravellerDto, BookingExtraServiceDto } from './dto/create-booking.dto';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
+import { StripePayment } from '../../../common/lib/Payment/stripe/StripePayment';
+import { CreatePaymentDto, PaymentIntentResponseDto } from './dto/create-payment.dto';
 
 @Injectable()
 export class BookingService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Create a booking with dynamic ID processing
-   * This method automatically resolves:
-   * - user_id from JWT authentication
-   * - vendor_id from package relationships
-   * - package_id from request body
-   */
+ 
   async createBooking(
     user_id: string,
     createBookingDto: CreateBookingDto,
@@ -163,9 +159,6 @@ export class BookingService {
     }
   }
 
-  /**
-   * Process and validate booking items
-   */
   private async processBookingItems(prisma: any, items: BookingItemDto[]) {
     if (!items || items.length === 0) {
       throw new BadRequestException('Booking items are required');
@@ -238,9 +231,7 @@ export class BookingService {
     return processedItems;
   }
 
-  /**
-   * Validate booking dates
-   */
+ 
   private validateBookingDates(start_date: Date, end_date: Date) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -254,9 +245,7 @@ export class BookingService {
     }
   }
 
-  /**
-   * Calculate total amount for the booking
-   */
+
   private calculateTotalAmount(items: any[], extraServices?: BookingExtraServiceDto[]): number {
     let total = 0;
 
@@ -276,9 +265,6 @@ export class BookingService {
     return total;
   }
 
-  /**
-   * Generate unique invoice number
-   */
   private async generateInvoiceNumber(prisma: any): Promise<string> {
     const date = new Date();
     const year = date.getFullYear();
@@ -302,9 +288,7 @@ export class BookingService {
     return `INV-${year}${month}${day}-${sequence}`;
   }
 
-  /**
-   * Create booking items
-   */
+ 
   private async createBookingItems(prisma: any, booking_id: string, items: any[]) {
     const bookingItems = [];
 
@@ -343,9 +327,7 @@ export class BookingService {
     return bookingItems;
   }
 
-  /**
-   * Create booking travellers
-   */
+
   private async createBookingTravellers(prisma: any, booking_id: string, travellers: BookingTravellerDto[]) {
     const bookingTravellers = [];
 
@@ -375,9 +357,7 @@ export class BookingService {
     return bookingTravellers;
   }
 
-  /**
-   * Create booking extra services
-   */
+ 
   private async createBookingExtraServices(prisma: any, booking_id: string, extraServices?: BookingExtraServiceDto[]) {
     if (!extraServices || extraServices.length === 0) {
       return [];
@@ -418,9 +398,225 @@ export class BookingService {
     return bookingExtraServices;
   }
 
-  /**
-   * Get all bookings for a user
-   */
+ 
+  async createPaymentIntent(
+    user_id: string,
+    createPaymentDto: CreatePaymentDto,
+  ): Promise<PaymentIntentResponseDto> {
+    try {
+      // Validate booking exists and belongs to user
+      const booking = await this.prisma.booking.findFirst({
+        where: {
+          id: createPaymentDto.booking_id,
+          user_id: user_id,
+        },
+        include: {
+          user: true,
+          vendor: true,
+        },
+      });
+
+      if (!booking) {
+        throw new NotFoundException('Booking not found or unauthorized');
+      }
+
+      if (booking.payment_status === 'paid') {
+        throw new BadRequestException('Booking is already paid');
+      }
+
+      // Create or get Stripe customer
+      let stripeCustomer;
+      try {
+        stripeCustomer = await StripePayment.createCustomer({
+          user_id: booking.user.id,
+          name: booking.user.name || `${booking.first_name} ${booking.last_name}`,
+          email: booking.user.email || createPaymentDto.customer_email,
+        });
+      } catch (error) {
+        // If customer already exists, try to retrieve
+        console.log('Customer creation failed, might already exist:', error.message);
+      }
+
+      // Create payment intent
+      const paymentIntent = await StripePayment.createPaymentIntent({
+        amount: createPaymentDto.amount,
+        currency: createPaymentDto.currency,
+        customer_id: stripeCustomer?.id,
+        metadata: {
+          booking_id: booking.id,
+          user_id: booking.user_id,
+          vendor_id: booking.vendor_id,
+          invoice_number: booking.invoice_number,
+        },
+      });
+
+      // Create payment transaction record
+      await this.prisma.paymentTransaction.create({
+        data: {
+          user_id: booking.user_id,
+          booking_id: booking.id,
+          order_id: booking.invoice_number,
+          type: 'booking',
+          provider: 'stripe',
+          reference_number: paymentIntent.id,
+          status: 'pending',
+          raw_status: paymentIntent.status,
+          amount: createPaymentDto.amount / 100, // Convert from cents
+          currency: createPaymentDto.currency,
+          paid_amount: 0,
+          paid_currency: createPaymentDto.currency,
+        },
+      });
+
+      return {
+        client_secret: paymentIntent.client_secret,
+        payment_intent_id: paymentIntent.id,
+        status: paymentIntent.status,
+      };
+    } catch (error) {
+      throw new BadRequestException(`Payment intent creation failed: ${error.message}`);
+    }
+  }
+
+
+  async confirmPayment(
+    user_id: string,
+    payment_intent_id: string,
+  ) {
+    try {
+      // Find the payment transaction
+      const transaction = await this.prisma.paymentTransaction.findFirst({
+        where: {
+          reference_number: payment_intent_id,
+          user_id: user_id,
+        },
+        include: {
+          booking: true,
+        },
+      });
+      console.log(transaction);
+
+      if (!transaction) {
+        throw new NotFoundException('Payment transaction not found');
+      }
+
+      // Verify payment intent with Stripe
+      const paymentIntent = await StripePayment.retrievePaymentIntent(payment_intent_id);
+
+      if (paymentIntent.status === 'succeeded') {
+        // Update transaction status
+        await this.prisma.paymentTransaction.update({
+          where: { id: transaction.id },
+          data: {
+            status: 'succeeded',
+            paid_amount: paymentIntent.amount / 100,
+            paid_currency: paymentIntent.currency,
+            raw_status: paymentIntent.status,
+          },
+        });
+
+        // Update booking payment status
+        await this.prisma.booking.update({
+          where: { id: transaction.booking_id },
+          data: {
+            payment_status: 'paid',
+            paid_amount: paymentIntent.amount / 100,
+            paid_currency: paymentIntent.currency,
+            payment_provider: 'stripe',
+            payment_reference_number: payment_intent_id,
+          },
+        });
+
+        // Update vendor wallet (commission calculation)
+        await this.updateVendorWallet(transaction.booking_id);
+
+        return {
+          success: true,
+          message: 'Payment confirmed successfully',
+          booking_id: transaction.booking_id,
+          amount_paid: paymentIntent.amount / 100,
+        };
+      } else {
+        throw new BadRequestException(`Payment not successful. Status: ${paymentIntent.status}`);
+      }
+    } catch (error) {
+      throw new BadRequestException(`Payment confirmation failed: ${error.message}`);
+    }
+  }
+
+  private async updateVendorWallet(booking_id: string) {
+    try {
+      const booking = await this.prisma.booking.findUnique({
+        where: { id: booking_id },
+        include: {
+          vendor: true,
+        },
+      });
+
+      if (!booking || !booking.paid_amount) return;
+
+      // Calculate vendor earnings (after commission)
+      const commission_rate = 15; // 15% commission
+      const commission_amount = (Number(booking.paid_amount) * commission_rate) / 100;
+      const vendor_earnings = Number(booking.paid_amount) - commission_amount;
+
+      // Update or create vendor wallet
+      await this.prisma.vendorWallet.upsert({
+        where: { user_id: booking.vendor_id },
+        update: {
+          balance: {
+            increment: vendor_earnings,
+          },
+          total_earnings: {
+            increment: vendor_earnings,
+          },
+        },
+        create: {
+          user_id: booking.vendor_id,
+          balance: vendor_earnings,
+          total_earnings: vendor_earnings,
+          currency: booking.paid_currency || 'USD',
+        },
+      });
+    } catch (error) {
+      console.error('Failed to update vendor wallet:', error);
+    }
+  }
+
+
+  async getPaymentStatus(user_id: string, booking_id: string) {
+    try {
+      const booking = await this.prisma.booking.findFirst({
+        where: {
+          id: booking_id,
+          user_id: user_id,
+        },
+        include: {
+          payment_transactions: {
+            orderBy: { created_at: 'desc' },
+            take: 1,
+          },
+        },
+      });
+
+      if (!booking) {
+        throw new NotFoundException('Booking not found');
+      }
+
+      return {
+        booking_id: booking.id,
+        payment_status: booking.payment_status,
+        total_amount: booking.total_amount,
+        paid_amount: booking.paid_amount,
+        paid_currency: booking.paid_currency,
+        latest_transaction: booking.payment_transactions[0] || null,
+      };
+    } catch (error) {
+      throw new BadRequestException(`Failed to get payment status: ${error.message}`);
+    }
+  }
+
+
   async findAll(user_id: string, query: { q?: string; status?: number; approve?: string }) {
     try {
       const where: any = {
@@ -489,9 +685,7 @@ export class BookingService {
     }
   }
 
-  /**
-   * Get a specific booking
-   */
+
   async findOne(id: string, user_id: string) {
     try {
       const booking = await this.prisma.booking.findFirst({
@@ -555,9 +749,7 @@ export class BookingService {
     }
   }
 
-  /**
-   * Create feedback for a booking
-   */
+  
   async createFeedback(user_id: string, createFeedbackDto: CreateFeedbackDto) {
     try {
       // Verify booking exists and belongs to user
@@ -645,9 +837,7 @@ export class BookingService {
     }
   }
 
-  /**
-   * Get feedback for a specific booking
-   */
+ 
   async getFeedback(booking_id: string, user_id: string) {
     try {
       // Verify booking exists and belongs to user
@@ -697,9 +887,7 @@ export class BookingService {
     }
   }
 
-  /**
-   * Update feedback for a booking
-   */
+ 
   async updateFeedback(user_id: string, booking_id: string, updateFeedbackDto: UpdateFeedbackDto) {
     try {
       // Verify booking exists and belongs to user
@@ -773,9 +961,7 @@ export class BookingService {
     }
   }
 
-  /**
-   * Delete feedback for a booking
-   */
+
   async deleteFeedback(user_id: string, booking_id: string) {
     try {
       // Verify booking exists and belongs to user
@@ -824,9 +1010,7 @@ export class BookingService {
     }
   }
 
-  /**
-   * Get all feedback for a user
-   */
+ 
   async getUserFeedback(user_id: string) {
     try {
       const feedbacks = await this.prisma.review.findMany({
