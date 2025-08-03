@@ -484,7 +484,6 @@ export class BookingService {
     payment_intent_id: string,
   ) {
     try {
-      // Find the payment transaction
       const transaction = await this.prisma.paymentTransaction.findFirst({
         where: {
           reference_number: payment_intent_id,
@@ -494,16 +493,13 @@ export class BookingService {
           booking: true,
         },
       });
-      console.log(transaction);
 
       if (!transaction) {
         throw new NotFoundException('Payment transaction not found');
       }
-
-      // Verify payment intent with Stripe
       const paymentIntent = await StripePayment.retrievePaymentIntent(payment_intent_id);
 
-      if (paymentIntent.status === 'succeeded') {
+      if (paymentIntent.status === 'requires_payment_method') {
         // Update transaction status
         await this.prisma.paymentTransaction.update({
           where: { id: transaction.id },
@@ -514,8 +510,6 @@ export class BookingService {
             raw_status: paymentIntent.status,
           },
         });
-
-        // Update booking payment status
         await this.prisma.booking.update({
           where: { id: transaction.booking_id },
           data: {
@@ -526,8 +520,6 @@ export class BookingService {
             payment_reference_number: payment_intent_id,
           },
         });
-
-        // Update vendor wallet (commission calculation)
         await this.updateVendorWallet(transaction.booking_id);
 
         return {
