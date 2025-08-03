@@ -86,16 +86,8 @@ export class VendorPackageController {
   async create(
     @Req() req: Request,
     @Body() createVendorPackageDto: CreateVendorPackageDto,
-    @UploadedFiles(
-      new ParseFilePipe({
-        validators: [
-          // new MaxFileSizeValidator({ maxSize: 1024 * 1024 * 10 }), // 10MB
-          // new FileTypeValidator({ fileType: 'image/*' }),
-        ],
-        fileIsRequired: false,
-      }),
-    )
-    files: {
+    @UploadedFiles()
+    files?: {
       package_files?: Express.Multer.File[];
       trip_plans_images?: Express.Multer.File[];
     },
@@ -145,16 +137,8 @@ export class VendorPackageController {
     @Param('id') packageId: string,
     @Body() updateVendorPackageDto: CreateVendorPackageDto,
     @Req() req: Request,
-    @UploadedFiles(
-      new ParseFilePipe({
-        validators: [
-          // new MaxFileSizeValidator({ maxSize: 1024 * 1024 * 10 }), // 10MB
-          // new FileTypeValidator({ fileType: 'image/*' }),
-        ],
-        fileIsRequired: false,
-      }),
-    )
-    files: {
+    @UploadedFiles()
+    files?: {
       package_files?: Express.Multer.File[];
       trip_plans_images?: Express.Multer.File[];
     },

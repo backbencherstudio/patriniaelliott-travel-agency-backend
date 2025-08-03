@@ -4,11 +4,24 @@ import { CreateVendorPackageDto } from './dto/create-vendor-package.dto';
 import { Express } from 'express';
 import appConfig from '../../../config/app.config';
 import { SearchPackagesDto } from './dto/search-packages.dto';
+import * as fs from 'fs';
+import * as path from 'path';
 
 
 @Injectable()
 export class VendorPackageService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private ensureStorageDirectory() {
+    const storagePath = path.join(
+      appConfig().storageUrl.rootUrl,
+      appConfig().storageUrl.package
+    );
+    
+    if (!fs.existsSync(storagePath)) {
+      fs.mkdirSync(storagePath, { recursive: true });
+    }
+  }
 
   async getVendorPackage(
     page: number, 
@@ -271,15 +284,20 @@ export class VendorPackageService {
   async createWithFiles(
     createVendorPackageDto: CreateVendorPackageDto, 
     user_id: string,
-    files: {
+    files?: {
       package_files?: Express.Multer.File[];
       trip_plans_images?: Express.Multer.File[];
     }
   ) {
     try {
-      // Process file URLs
-      const package_files = files.package_files?.map(file => file.filename) || [];
-      const trip_plans_images = files.trip_plans_images?.map(file => file.filename) || [];
+      // Ensure storage directory exists
+      this.ensureStorageDirectory();
+      
+      // Process file URLs with null checks
+      const package_files = files?.package_files?.map(file => file.filename) || [];
+      const trip_plans_images = files?.trip_plans_images?.map(file => file.filename) || [];
+      
+      console.log('Files received:', { package_files, trip_plans_images });
 
       // Extract nested data from DTO
       const { package_room_types, package_availabilities, ...packageData } = createVendorPackageDto;
@@ -367,12 +385,15 @@ export class VendorPackageService {
     packageId: string,
     user_id: string,
     updateVendorPackageDto: CreateVendorPackageDto,
-    files: {
+    files?: {
       package_files?: Express.Multer.File[];
       trip_plans_images?: Express.Multer.File[];
     }
   ) {
     try {
+      // Ensure storage directory exists
+      this.ensureStorageDirectory();
+      
       // Check if package exists and belongs to user
       const existingPackage = await this.prisma.package.findFirst({
         where: {
@@ -385,9 +406,9 @@ export class VendorPackageService {
         throw new Error('Package not found or access denied');
       }
 
-      // Process file URLs
-      const package_files = files.package_files?.map(file => file.filename) || [];
-      const trip_plans_images = files.trip_plans_images?.map(file => file.filename) || [];
+      // Process file URLs with null checks
+      const package_files = files?.package_files?.map(file => file.filename) || [];
+      const trip_plans_images = files?.trip_plans_images?.map(file => file.filename) || [];
 
       // Extract nested data from DTO
       const { package_room_types, package_availabilities, ...packageData } = updateVendorPackageDto;
