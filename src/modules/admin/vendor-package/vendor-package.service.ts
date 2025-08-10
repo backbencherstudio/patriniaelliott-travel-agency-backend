@@ -197,23 +197,39 @@ export class VendorPackageService {
   }
 
   async create(createVendorPackageDto: CreateVendorPackageDto, userId: string) {
-    // Check if user exists
+    // Check user and vendor verification status
     const userData = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!userData) {
       throw new Error('User not found');
     }
 
-    // Create package data
+    const vendorVerification = await this.prisma.vendorVerification.findUnique({
+      where: { user_id: userId },
+    });
+
+    const isVendorType = (userData.type || '').toLowerCase() === 'vendor';
+    const isVendorVerified = !!vendorVerification && vendorVerification.status === 'approved';
+
+    // Always require admin approval for vendor-created packages
+    // approved_at remains null so it appears in admin dashboard pending approval
     const data: any = {
-        ...createVendorPackageDto,
-        user: { connect: { id: userId } },
-    }
+      ...createVendorPackageDto,
+      user: { connect: { id: userId } },
+      approved_at: null,
+    };
 
     const vendorPackage = await this.prisma.package.create({ data });
 
     return {
       success: true,
       data: vendorPackage,
+      meta: {
+        requiresVendorVerification: !isVendorType || !isVendorVerified,
+        requiresAdminApproval: true,
+        notes: !isVendorType || !isVendorVerified
+          ? 'Please complete vendor verification. Your property is created and will be visible to you, and will be listed for admin review after verification.'
+          : 'Your property is created and pending admin approval before it becomes publicly visible.'
+      }
     };
   }
 
@@ -359,6 +375,17 @@ export class VendorPackageService {
         };
       }
 
+      // Vendor verification status
+      const userData = await this.prisma.user.findUnique({ where: { id: user_id } });
+      const vendorVerification = await this.prisma.vendorVerification.findUnique({
+        where: { user_id },
+      });
+      const isVendorType = (userData?.type || '').toLowerCase() === 'vendor';
+      const isVendorVerified = !!vendorVerification && vendorVerification.status === 'approved';
+
+      // Always require admin approval for vendor-created packages
+      data.approved_at = null;
+
       // Create package with nested data
       const result = await this.prisma.package.create({
         data,
@@ -366,14 +393,21 @@ export class VendorPackageService {
           package_files: true,
           package_room_types: true,
           package_availabilities: true,
-          user: true
-        }
+          user: true,
+        },
       });
 
       return {
         success: true,
         data: result,
         message: 'Package created successfully with files, room types, and availabilities',
+        meta: {
+          requiresVendorVerification: !isVendorType || !isVendorVerified,
+          requiresAdminApproval: true,
+          notes: !isVendorType || !isVendorVerified
+            ? 'Please complete vendor verification. Your property is created and visible only to you until verification and admin approval.'
+            : 'Your property is created and pending admin approval before it becomes publicly visible.'
+        }
       };
     } catch (error) {
       throw new Error(`Failed to create package: ${error.message}`);

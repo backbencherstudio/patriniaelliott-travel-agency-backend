@@ -21,7 +21,7 @@ import { BookingModule } from './booking/booking.module';
 import { NotificationModule } from './notification/notification.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import {VendorPackageModule} from './vendor-package/vendor-package.module';
-
+import { VendorUserVerificationAdminModule } from './vendor-user-verification/vendor-user-verification.module';
 @Module({
   imports: [
     FaqModule,
@@ -46,6 +46,7 @@ import {VendorPackageModule} from './vendor-package/vendor-package.module';
     NotificationModule,
     DashboardModule,
     VendorPackageModule,
+    VendorUserVerificationAdminModule,
   ],
 })
 export class AdminModule {}

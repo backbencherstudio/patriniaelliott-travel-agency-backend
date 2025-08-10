@@ -11,6 +11,7 @@ import { CancellationPolicyModule } from './cancellation-policy/cancellation-pol
 import { LanguageModule } from './language/language.module';
 import { PageModule } from './page/page.module';
 import { VendorVerificationModule } from './vendor-verification/vendor-verification.module';
+import { VendorUserVerificationModule } from './vendor_user_verification/vendor_user_verification.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { VendorVerificationModule } from './vendor-verification/vendor-verificat
     LanguageModule,
     PageModule,
     VendorVerificationModule,
+    VendorUserVerificationModule,
   ],
 })
 export class ApplicationModule {}

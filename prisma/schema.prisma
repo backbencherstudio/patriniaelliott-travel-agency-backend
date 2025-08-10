@@ -98,8 +98,26 @@ model User {
   user_settings                 UserSetting[]
   vendor_wallet                 VendorWallet?
   withdrawals                   Withdrawal[]
+  user_documents                UserDocument[]
 
   @@map("users")
+}
+
+model UserDocument {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  status    String? // pending, approved, rejected
+  user_id   String?
+  type      String?
+  file_type String?
+  file_path String?
+  file_name String?
+  user      User?   @relation(fields: [user_id], references: [id])
+
+  @@map("user_documents")
 }
 
 model Ucode {
