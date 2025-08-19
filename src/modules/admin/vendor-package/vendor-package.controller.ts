@@ -33,11 +33,10 @@ export class VendorPackageController {
 
   @ApiOperation({ summary: 'get vendor package' })
   @Get()
-  @UseGuards(JwtAuthGuard) 
   async getVendorPackage(@Query() query: GetVendorPackageDto, @Req() req: any) {
     const page = parseInt(query.page?.toString() || '1', 10);
     const limit = parseInt(query.limit?.toString() || '10', 10);
-    const user_id = req.user.userId; 
+    const user_id = req.user?.userId || null; // Make user_id optional
     return this.vendorPackageService.getVendorPackage(
       page, 
       limit, 
@@ -46,15 +45,22 @@ export class VendorPackageController {
         searchQuery: query.q, 
         status: query.status, 
         categoryId: query.category_id, 
-        destinationId: query.destination_id 
+        destinationId: query.destination_id,
+        type: query.type,
+        freeCancellation: query.free_cancellation,
+        languages: query.languages,
+        ratings: query.ratings,
+        budgetEnd: query.budget_end,
+        budgetStart: query.budget_start,
+        durationEnd: query.duration_end,
+        durationStart: query.duration_start
       }
     );
   }
 
   @ApiOperation({ summary: 'get vendor package by id' })
   @Get(':id')
-  @UseGuards(JwtAuthGuard) 
-  async getVendorPackageIdWise(@Param('id') id: string) {  
+  async getVendorIdWise(@Param('id') id: string) {  
     const user_id = id;
     return this.vendorPackageService.getVendorIdWise(user_id);
   }

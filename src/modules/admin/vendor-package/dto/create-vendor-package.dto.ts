@@ -1,6 +1,115 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsOptional, IsString, IsNumber, IsBoolean, IsDate, IsDecimal, IsArray, ValidateNested, IsObject } from 'class-validator';
 import { Type } from 'class-transformer';
+import { array } from 'zod';
+
+// DTO for Amenities
+export class AmenitiesDto {
+  @ApiProperty({ required: false, type: Object })
+  @IsOptional()
+  @IsObject()
+  general?: any;
+
+  @ApiProperty({ required: false, type: Object })
+  @IsOptional()
+  @IsObject()
+  cooking_cleaning?: any;
+
+  @ApiProperty({ required: false, type: Object })
+  @IsOptional()
+  @IsObject()
+  entertainment?: any;
+
+  @ApiProperty({ required: false, type: Object })
+  @IsOptional()
+  @IsObject()
+  outside_view?: any;
+}
+
+// DTO for Parking
+export class ParkingDto {
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  available?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  type?: string;
+
+  @ApiProperty({ required: false, type: Object })
+  @IsOptional()
+  @IsObject()
+  reserve_parking_spot?: any;
+
+  @ApiProperty({ required: false, type: Object })
+  @IsOptional()
+  @IsObject()
+  parking_located?: any;
+
+  @ApiProperty({ required: false, type: Object })
+  @IsOptional()
+  @IsObject()
+  parking_type?: any;
+}
+
+// DTO for House Rules
+export class HouseRulesDto {
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  no_smoking?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  parties_allowed?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  no_pets?: boolean;
+}
+
+// DTO for Check In
+export class CheckInDto {
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  time?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  instructions?: string;
+}
+
+// DTO for Rate Plans
+export class RatePlanDto {
+  @ApiProperty({ required: false })
+  @IsOptional()
+  price?: any;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  description?: string;
+}
+
+export class RatePlansDto {
+  @ApiProperty({ required: false, type: RatePlanDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RatePlanDto)
+  standard?: RatePlanDto;
+
+  @ApiProperty({ required: false, type: RatePlanDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RatePlanDto)
+  peak?: RatePlanDto;
+}
 
 // DTO for Package Room Type
 export class PackageRoomTypeDto {
@@ -33,7 +142,7 @@ export class PackageRoomTypeDto {
   @IsNumber()
   size_sqm?: number;
 
-  @ApiProperty({ required: false, type: Object })
+  @ApiProperty({ required: false, type: array })
   @IsOptional()
   @IsObject()
   beds?: any;
@@ -84,18 +193,21 @@ export class PackageAvailabilityDto {
   restrictions?: any;
 }
 
-// Clean DTO with only Package model fields
+// Enhanced DTO with proper nested structures
 export class CreateVendorPackageDto {
   @ApiProperty({ required: true })
+  @IsOptional()
   @IsString()
-  name: string;
+  name?: string;
 
   @ApiProperty({ required: true })
+  @IsOptional()
   @IsString()
-  description: string;
+  description?: string;
 
   @ApiProperty({ required: true })
-  price: any; // Use string or Decimal type
+  @IsOptional()
+  price?: any; // Use string or Decimal type
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -186,26 +298,34 @@ export class CreateVendorPackageDto {
   @IsOptional()
   beds?: any;
 
-  @ApiProperty({ required: false, type: Object })
+  @ApiProperty({ required: false, type: AmenitiesDto })
   @IsOptional()
-  amenities?: any;
+  @ValidateNested()
+  @Type(() => AmenitiesDto)
+  amenities?: AmenitiesDto;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()
   breakfast_available?: boolean;
 
-  @ApiProperty({ required: false, type: Object })
+  @ApiProperty({ required: false, type: ParkingDto })
   @IsOptional()
-  parking?: any;
+  @ValidateNested()
+  @Type(() => ParkingDto)
+  parking?: ParkingDto;
 
-  @ApiProperty({ required: false, type: Object })
+  @ApiProperty({ required: false, type: HouseRulesDto })
   @IsOptional()
-  house_rules?: any;
+  @ValidateNested()
+  @Type(() => HouseRulesDto)
+  house_rules?: HouseRulesDto;
 
-  @ApiProperty({ required: false, type: Object })
+  @ApiProperty({ required: false, type: CheckInDto })
   @IsOptional()
-  check_in?: any;
+  @ValidateNested()
+  @Type(() => CheckInDto)
+  check_in?: CheckInDto;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -225,9 +345,11 @@ export class CreateVendorPackageDto {
   @IsOptional()
   host_earnings?: any;
 
-  @ApiProperty({ required: false, type: Object })
+  @ApiProperty({ required: false, type: RatePlansDto })
   @IsOptional()
-  rate_plans?: any;
+  @ValidateNested()
+  @Type(() => RatePlansDto)
+  rate_plans?: RatePlansDto;
 
   // Nested DTOs for room types and availabilities
   @ApiProperty({ required: false, type: [PackageRoomTypeDto] })

@@ -4,6 +4,7 @@ import { CreateVendorPackageDto } from './dto/create-vendor-package.dto';
 import { Express } from 'express';
 import appConfig from '../../../config/app.config';
 import { SearchPackagesDto } from './dto/search-packages.dto';
+import { SojebStorage } from '../../../common/lib/Disk/SojebStorage';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -23,24 +24,42 @@ export class VendorPackageService {
     }
   }
 
+  private generateFileUrl(filePath: string, type: 'package' | 'avatar' = 'package'): string {
+    const baseUrl = process.env.APP_URL || 'http://localhost:4000';
+    const storagePath = type === 'package' ? 'package' : 'avatar';
+    return `${baseUrl}/public/storage/${storagePath}/${filePath}`;
+  }
+
   async getVendorPackage(
     page: number, 
     limit: number, 
-    user_id: string, 
+    user_id?: string | null, 
     searchParams?: {
       searchQuery?: string;
       status?: number;
       categoryId?: string;
       destinationId?: string;
+      type?: string;
+      freeCancellation?: boolean;
+      languages?: string[];
+      ratings?: number;
+      budgetEnd?: number;
+      budgetStart?: number;
+      durationEnd?: number;
+      durationStart?: number;
     }
   ) {
     const skip = (page - 1) * limit;
     
     // Build where conditions
     const where: any = {
-      user_id: user_id,
       deleted_at: null
     };
+
+    // Add user_id filter only if provided
+    if (user_id) {
+      where.user_id = user_id;
+    }
 
     // Add search functionality
     if (searchParams?.searchQuery) {
@@ -67,6 +86,67 @@ export class VendorPackageService {
           destination_id: searchParams.destinationId
         }
       };
+    }
+
+    // Add type filter
+    if (searchParams?.type) {
+      where.type = searchParams.type;
+    }
+
+    // Add free cancellation filter
+    if (searchParams?.freeCancellation !== undefined) {
+      where.cancellation_policy = {
+        is: {
+          policy: {
+            contains: searchParams.freeCancellation ? 'free' : 'paid',
+            mode: 'insensitive'
+          }
+        }
+      };
+    }
+
+    // Add languages filter
+    if (searchParams?.languages && searchParams.languages.length > 0) {
+      where.package_languages = {
+        some: {
+          language_id: {
+            in: searchParams.languages
+          }
+        }
+      };
+    }
+
+    // Add ratings filter
+    if (searchParams?.ratings !== undefined) {
+      where.reviews = {
+        some: {
+          rating_value: {
+            gte: searchParams.ratings
+          }
+        }
+      };
+    }
+
+    // Add budget range filter
+    if (searchParams?.budgetStart !== undefined || searchParams?.budgetEnd !== undefined) {
+      where.price = {};
+      if (searchParams.budgetStart !== undefined) {
+        where.price.gte = searchParams.budgetStart;
+      }
+      if (searchParams.budgetEnd !== undefined) {
+        where.price.lte = searchParams.budgetEnd;
+      }
+    }
+
+    // Add duration range filter
+    if (searchParams?.durationStart !== undefined || searchParams?.durationEnd !== undefined) {
+      where.duration = {};
+      if (searchParams.durationStart !== undefined) {
+        where.duration.gte = searchParams.durationStart;
+      }
+      if (searchParams.durationEnd !== undefined) {
+        where.duration.lte = searchParams.durationEnd;
+      }
     }
   
     const [data, total] = await Promise.all([
@@ -109,6 +189,38 @@ export class VendorPackageService {
             orderBy: {
               date: 'asc'
             }
+          },
+          // Include cancellation policy for free_cancellation filter
+          cancellation_policy: {
+            select: {
+              id: true,
+              policy: true,
+              description: true
+            }
+          },
+          // Include package languages for languages filter
+          package_languages: {
+            include: {
+              language: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true
+                }
+              }
+            }
+          },
+          // Include reviews for ratings filter
+          reviews: {
+            select: {
+              id: true,
+              rating_value: true,
+              comment: true,
+              created_at: true
+            },
+            orderBy: {
+              created_at: 'desc'
+            }
           }
         },
       }),
@@ -118,13 +230,49 @@ export class VendorPackageService {
     ]);
   
     // Process the data to add full file URLs
-    const processedData = data.map(pkg => ({
-      ...pkg,
-      package_files: pkg.package_files.map(file => ({
-        ...file,
-        file_url: `${appConfig().storageUrl.rootUrl}/${appConfig().storageUrl.package}/${file.file}`
-      }))
-    }));
+    const processedData = data.map(pkg => {
+      console.log('Processing package:', pkg.id, 'with files:', pkg.package_files.length);
+      
+      // Process package files with URLs
+      const processedPackageFiles = pkg.package_files.map(file => {
+        const fileUrl = SojebStorage.url(appConfig().storageUrl.package + file.file);
+        console.log('Generated file URL:', fileUrl);
+        return {
+          ...file,
+          file_url: fileUrl
+        };
+      });
+
+      // Process package room types with room photos URLs
+      const processedRoomTypes = pkg.package_room_types.map(roomType => {
+        let processedRoomPhotos = roomType.room_photos;
+        if (roomType.room_photos && typeof roomType.room_photos === 'object') {
+          // If room_photos is an array of filenames, convert them to URLs
+          if (Array.isArray(roomType.room_photos)) {
+            processedRoomPhotos = roomType.room_photos.map(photo => 
+              typeof photo === 'string' ? SojebStorage.url(appConfig().storageUrl.package + photo) : photo
+            );
+          }
+        }
+        return {
+          ...roomType,
+          room_photos: processedRoomPhotos
+        };
+      });
+
+      // Process user avatar URL if exists
+      const processedUser = pkg.user ? {
+        ...pkg.user,
+        avatar_url: pkg.user.avatar ? SojebStorage.url(appConfig().storageUrl.avatar + pkg.user.avatar) : null
+      } : null;
+
+      return {
+        ...pkg,
+        package_files: processedPackageFiles,
+        package_room_types: processedRoomTypes,
+        user: processedUser
+      };
+    });
 
     return {
       data: processedData,
@@ -185,8 +333,12 @@ export class VendorPackageService {
       ...data,
       package_files: data.package_files.map(file => ({
         ...file,
-        file_url: `${appConfig().storageUrl.rootUrl}/${appConfig().storageUrl.package}/${file.file}`
-      }))
+        file_url: SojebStorage.url(appConfig().storageUrl.package + file.file)
+      })),
+      user: data.user ? {
+        ...data.user,
+        avatar_url: data.user.avatar ? SojebStorage.url(appConfig().storageUrl.avatar + data.user.avatar) : null
+      } : null
     } : null;
 
     console.log('Found packages:', processedData);
@@ -397,17 +549,46 @@ export class VendorPackageService {
         },
       });
 
+      // Post-process to attach public URLs using existing image function
+      const processedResult = {
+        ...result,
+        package_files: (result.package_files || []).map((file) => ({
+          ...file,
+          file_url: SojebStorage.url(appConfig().storageUrl.package + file.file),
+        })),
+        package_room_types: (result.package_room_types || []).map((roomType) => {
+          let processedRoomPhotos = roomType.room_photos;
+          if (Array.isArray(roomType.room_photos)) {
+            processedRoomPhotos = roomType.room_photos.map((photo: any) =>
+              typeof photo === 'string'
+                ? SojebStorage.url(appConfig().storageUrl.package + photo)
+                : photo,
+            );
+          }
+          return { ...roomType, room_photos: processedRoomPhotos };
+        }),
+        user: result.user
+          ? {
+              ...result.user,
+              avatar_url: result.user.avatar
+                ? SojebStorage.url(appConfig().storageUrl.avatar + result.user.avatar)
+                : null,
+            }
+          : null,
+      };
+
       return {
         success: true,
-        data: result,
+        data: processedResult,
         message: 'Package created successfully with files, room types, and availabilities',
         meta: {
           requiresVendorVerification: !isVendorType || !isVendorVerified,
           requiresAdminApproval: true,
-          notes: !isVendorType || !isVendorVerified
-            ? 'Please complete vendor verification. Your property is created and visible only to you until verification and admin approval.'
-            : 'Your property is created and pending admin approval before it becomes publicly visible.'
-        }
+          notes:
+            !isVendorType || !isVendorVerified
+              ? 'Please complete vendor verification. Your property is created and visible only to you until verification and admin approval.'
+              : 'Your property is created and pending admin approval before it becomes publicly visible.',
+        },
       };
     } catch (error) {
       throw new Error(`Failed to create package: ${error.message}`);

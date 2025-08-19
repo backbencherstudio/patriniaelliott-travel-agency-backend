@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, IsNumber, Min, Max } from 'class-validator';
+import { IsOptional, IsString, IsNumber, Min, Max, IsBoolean, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class GetVendorPackageDto {
@@ -38,4 +38,57 @@ export class GetVendorPackageDto {
   @IsOptional()
   @IsString()
   destination_id?: string;
+
+  @ApiProperty({ required: false, description: 'Package type filter (tour, accommodation, etc.)' })
+  @IsOptional()
+  @IsString()
+  type?: string;
+
+  @ApiProperty({ required: false, description: 'Free cancellation filter' })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  free_cancellation?: boolean;
+
+  @ApiProperty({ required: false, description: 'Languages filter (array of language IDs)' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  languages?: string[];
+
+  @ApiProperty({ required: false, description: 'Minimum rating filter' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(5)
+  ratings?: number;
+
+  @ApiProperty({ required: false, description: 'Maximum budget filter' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  budget_end?: number;
+
+  @ApiProperty({ required: false, description: 'Minimum budget filter' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  budget_start?: number;
+
+  @ApiProperty({ required: false, description: 'Maximum duration filter' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  duration_end?: number;
+
+  @ApiProperty({ required: false, description: 'Minimum duration filter' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  duration_start?: number;
 }

@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { BookingService } from './booking.service';
 import { UpdateBookingDto } from './dto/update-booking.dto';
+import { QueryBookingDto } from './dto/query-booking.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from 'src/common/guard/role/role.enum';
 import { Roles } from 'src/common/guard/role/roles.decorator';
@@ -26,22 +27,41 @@ import { Request } from 'express';
 export class BookingController {
   constructor(private readonly bookingService: BookingService) {}
 
-  @ApiOperation({ summary: 'Get all bookings' })
+  @ApiOperation({ 
+    summary: 'Get all bookings with pagination',
+    description: 'Filter bookings by type: "all" (default), "hotel", "apartment", or "tour"'
+  })
   @Get()
   async findAll(
     @Req() req: Request,
-    @Query() query: { q?: string; status?: number; approve?: string },
+    @Query() query: QueryBookingDto,
   ) {
     try {
       const user_id = req.user.userId;
-      const q = query.q;
-      const status = query.status;
-      const approve = query.approve;
+      const {
+        q,
+        status,
+        approve,
+        type,
+        page,
+        limit,
+        sort_by,
+      } = query;
+
+      // Set default values
+      const pageNumber = page || 1;
+      const limitNumber = limit || 10;
+      const sortBy = sort_by || 'created_at_desc';
+
       const bookings = await this.bookingService.findAll({
         user_id,
         q,
         status,
         approve,
+        type,
+        page: pageNumber,
+        limit: limitNumber,
+        sort_by: sortBy,
       });
 
       return bookings;
@@ -67,6 +87,10 @@ export class BookingController {
     }
   }
 
+  @ApiOperation({ 
+    summary: 'Update booking details',
+    description: 'Update booking information. Payment status will be automatically updated based on booking status: canceled/cancelled → payment_status: canceled, approved → payment_status: approved, others → payment_status: pending'
+  })
   @Patch(':id')
   async update(
     @Param('id') id: string,
@@ -84,6 +108,10 @@ export class BookingController {
   }
 
   // update status
+  @ApiOperation({ 
+    summary: 'Update booking status',
+    description: 'Update booking status. Payment status will be automatically updated based on booking status: canceled/cancelled → payment_status: canceled, approved → payment_status: approved, others → payment_status: pending'
+  })
   @Patch(':id/status')
   async updateStatus(
     @Param('id') id: string,
