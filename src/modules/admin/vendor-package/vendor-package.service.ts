@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateVendorPackageDto } from './dto/create-vendor-package.dto';
+import { CreateReviewDto } from './dto/create-review.dto';
+import { UpdateReviewDto } from './dto/update-review.dto';
 import { Express } from 'express';
 import appConfig from '../../../config/app.config';
 import { SearchPackagesDto } from './dto/search-packages.dto';
@@ -149,7 +151,7 @@ export class VendorPackageService {
       }
     }
   
-    const [data, total] = await Promise.all([
+    const [packages, total] = await Promise.all([
       this.prisma.package.findMany({
         skip,
         take: limit,
@@ -163,115 +165,145 @@ export class VendorPackageService {
               email: true,
               display_name: true,
               avatar: true,
-              created_at: true
-            }
+              created_at: true,
+            },
           },
-          // Add this to include package files
           package_files: {
-            where: {
-              deleted_at: null // Only get active files
-            },
-            orderBy: {
-              sort_order: 'asc'
-            }
+            where: { deleted_at: null },
+            orderBy: { sort_order: 'asc' },
+            select: { id: true, file: true, type: true, sort_order: true },
           },
-          // Include package room types
           package_room_types: {
-            where: {
-              deleted_at: null
-            },
-            orderBy: {
-              created_at: 'asc'
-            }
+            where: { deleted_at: null },
+            orderBy: { created_at: 'asc' },
+            select: { id: true, name: true, description: true, price: true, currency: true, room_photos: true },
           },
-          // Include package availabilities
           package_availabilities: {
-            orderBy: {
-              date: 'asc'
-            }
+            orderBy: { date: 'asc' },
+            select: { id: true, date: true, status: true },
           },
-          // Include cancellation policy for free_cancellation filter
           cancellation_policy: {
-            select: {
-              id: true,
-              policy: true,
-              description: true
-            }
+            select: { id: true, policy: true, description: true },
           },
-          // Include package languages for languages filter
           package_languages: {
-            include: {
-              language: {
-                select: {
-                  id: true,
-                  name: true,
-                  code: true
-                }
-              }
-            }
+            include: { language: { select: { id: true, name: true, code: true } } },
           },
-          // Include reviews for ratings filter
-          reviews: {
-            select: {
-              id: true,
-              rating_value: true,
-              comment: true,
-              created_at: true
-            },
-            orderBy: {
-              created_at: 'desc'
-            }
-          }
         },
       }),
-      this.prisma.package.count({
-        where
-      }),
+      this.prisma.package.count({ where }),
     ]);
   
-    // Process the data to add full file URLs
-    const processedData = data.map(pkg => {
-      console.log('Processing package:', pkg.id, 'with files:', pkg.package_files.length);
-      
-      // Process package files with URLs
-      const processedPackageFiles = pkg.package_files.map(file => {
-        const fileUrl = SojebStorage.url(appConfig().storageUrl.package + file.file);
-        console.log('Generated file URL:', fileUrl);
-        return {
-          ...file,
-          file_url: fileUrl
-        };
-      });
+    // Fetch rating aggregates for all returned package IDs in one query
+    const packageIds = packages.map(p => p.id);
+    const ratingAgg = await this.prisma.review.groupBy({
+      by: ['package_id'],
+      where: {
+        package_id: { in: packageIds },
+        deleted_at: null,
+        status: 1,
+      },
+      _avg: { rating_value: true },
+      _count: { rating_value: true },
+    });
 
-      // Process package room types with room photos URLs
+    const packageIdToRating = new Map<string, { averageRating: number; totalReviews: number }>();
+    for (const row of ratingAgg as any[]) {
+      packageIdToRating.set(row.package_id, {
+        averageRating: row._avg?.rating_value ?? 0,
+        totalReviews: row._count?.rating_value ?? 0,
+      });
+    }
+    // Build per-package rating distribution (1..5)
+    const distributionAgg = await this.prisma.review.groupBy({
+      by: ['package_id', 'rating_value'],
+      where: {
+        package_id: { in: packageIds },
+        deleted_at: null,
+        status: 1,
+      },
+      _count: { rating_value: true },
+    });
+
+    const packageIdToDistribution = new Map<string, Record<number, number>>();
+    for (const row of distributionAgg as any[]) {
+      const current = packageIdToDistribution.get(row.package_id) ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      // rating_value may be float; clamp to 1..5 integer bucket
+      const bucket = Math.round(row.rating_value as number) as 1|2|3|4|5;
+      if (bucket >= 1 && bucket <= 5) {
+        current[bucket] = row._count?.rating_value ?? 0;
+      }
+      packageIdToDistribution.set(row.package_id, current);
+    }
+
+    // Confirmed bookings per package (approved bookings only)
+    const confirmedAgg = await this.prisma.bookingItem.groupBy({
+      by: ['package_id'],
+      where: {
+        package_id: { in: packageIds },
+        deleted_at: null,
+        booking: {
+          deleted_at: null,
+          status: 'approved',
+        },
+      },
+      _count: { _all: true },
+      _sum: { quantity: true },
+    });
+
+    const packageIdToConfirmed = new Map<string, { confirmedBookings: number; confirmedQuantity: number }>();
+    for (const row of confirmedAgg as any[]) {
+      packageIdToConfirmed.set(row.package_id, {
+        confirmedBookings: row._count?._all ?? 0,
+        confirmedQuantity: row._sum?.quantity ?? 0,
+      });
+    }
+  
+    // Process the data to add file URLs, avatar URLs, and rating summary
+    const processedData = packages.map(pkg => {
+      const processedPackageFiles = pkg.package_files.map(file => ({
+        ...file,
+        file_url: SojebStorage.url(appConfig().storageUrl.package + file.file),
+      }));
+
       const processedRoomTypes = pkg.package_room_types.map(roomType => {
         let processedRoomPhotos = roomType.room_photos;
-        if (roomType.room_photos && typeof roomType.room_photos === 'object') {
-          // If room_photos is an array of filenames, convert them to URLs
-          if (Array.isArray(roomType.room_photos)) {
-            processedRoomPhotos = roomType.room_photos.map(photo => 
-              typeof photo === 'string' ? SojebStorage.url(appConfig().storageUrl.package + photo) : photo
-            );
-          }
+        if (Array.isArray(roomType.room_photos)) {
+          processedRoomPhotos = roomType.room_photos.map(photo =>
+            typeof photo === 'string' ? SojebStorage.url(appConfig().storageUrl.package + photo) : photo,
+          );
         }
-        return {
-          ...roomType,
-          room_photos: processedRoomPhotos
-        };
+        return { ...roomType, room_photos: processedRoomPhotos };
       });
 
-      // Process user avatar URL if exists
-      const processedUser = pkg.user ? {
-        ...pkg.user,
-        avatar_url: pkg.user.avatar ? SojebStorage.url(appConfig().storageUrl.avatar + pkg.user.avatar) : null
-      } : null;
+      const processedUser = pkg.user
+        ? {
+            ...pkg.user,
+            avatar_url: pkg.user.avatar
+              ? SojebStorage.url(appConfig().storageUrl.avatar + pkg.user.avatar)
+              : null,
+          }
+        : null;
+
+      const rating = packageIdToRating.get(pkg.id) ?? { averageRating: 0, totalReviews: 0 };
+      const ratingDistribution = packageIdToDistribution.get(pkg.id) ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      const confirmed = packageIdToConfirmed.get(pkg.id) ?? { confirmedBookings: 0, confirmedQuantity: 0 };
+      const approvedDate = pkg.approved_at ? pkg.approved_at.toISOString() : null;
 
       return {
         ...pkg,
         package_files: processedPackageFiles,
         package_room_types: processedRoomTypes,
-        user: processedUser
-      };
+        user: processedUser,
+        rating_summary: {
+          averageRating: rating.averageRating,
+          totalReviews: rating.totalReviews,
+          ratingDistribution,
+        },
+        confirmed_bookings: confirmed.confirmedBookings,
+        confirmed_quantity: confirmed.confirmedQuantity,
+        approved_at: pkg.approved_at,
+        approved_date: approvedDate,
+      } as any;
     });
 
     return {
@@ -709,4 +741,357 @@ export class VendorPackageService {
     }
   }
   
+  async createReview(
+    packageId: string,
+    userId: string,
+    createReviewDto: CreateReviewDto,
+  ) {
+    try {
+      // Check if package exists
+      const packageRecord = await this.prisma.package.findFirst({
+        where: { id: packageId },
+      });
+
+      if (!packageRecord) {
+        throw new Error('Package not found');
+      }
+
+      // Check if user has already reviewed this package
+      const existingReview = await this.prisma.review.findFirst({
+        where: { 
+          user_id: userId, 
+          package_id: packageId,
+          deleted_at: null
+        },
+      });
+
+      if (existingReview) {
+        throw new Error('You have already reviewed this package');
+      }
+
+      // Only validate booking_id if it's provided and not empty
+      if (createReviewDto.booking_id && createReviewDto.booking_id.trim() !== '') {
+        const booking = await this.prisma.booking.findFirst({
+          where: { 
+            id: createReviewDto.booking_id,
+            deleted_at: null
+          },
+        });
+
+        if (!booking) {
+          throw new Error(`Booking with ID '${createReviewDto.booking_id}' not found. For simple package reviews, omit the booking_id field.`);
+        }
+
+        // Check if the booking belongs to the user
+        if (booking.user_id !== userId) {
+          throw new Error('You can only review bookings that belong to you');
+        }
+
+        // Check if the booking is for the same package
+        const bookingItem = await this.prisma.bookingItem.findFirst({
+          where: {
+            booking_id: createReviewDto.booking_id,
+            package_id: packageId,
+            deleted_at: null
+          },
+        });
+
+        if (!bookingItem) {
+          throw new Error('This booking is not associated with the specified package');
+        }
+      }
+
+      // Create the review (booking_id will be null for simple package reviews)
+      const review = await this.prisma.review.create({
+        data: {
+          user_id: userId,
+          package_id: packageId,
+          booking_id: createReviewDto.booking_id?.trim() || null,
+          rating_value: createReviewDto.rating_value,
+          comment: createReviewDto.comment,
+          status: 1,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              avatar: true,
+            },
+          },
+        },
+      });
+
+      // Add avatar URL if exists
+      if (review.user && review.user.avatar) {
+        review.user['avatar_url'] = SojebStorage.url(
+          appConfig().storageUrl.avatar + review.user.avatar,
+        );
+      }
+
+      return {
+        success: true,
+        message: 'Review created successfully',
+        data: review,
+      };
+    } catch (error) {
+      console.error('Review creation error:', {
+        packageId,
+        userId,
+        bookingId: createReviewDto.booking_id,
+        error: error.message,
+        stack: error.stack
+      });
+      throw new Error(`Failed to create review: ${error.message}`);
+    }
+  }
+
+  async getPackageReviews(packageId: string, page: number = 1, limit: number = 10) {
+    try {
+      const skip = (page - 1) * limit;
+
+      // Check if package exists
+      const packageRecord = await this.prisma.package.findFirst({
+        where: { id: packageId },
+      });
+
+      if (!packageRecord) {
+        throw new Error('Package not found');
+      }
+
+      // Get reviews with pagination
+      const reviews = await this.prisma.review.findMany({
+        where: {
+          package_id: packageId,
+          deleted_at: null,
+          status: 1,
+        },
+        skip,
+        take: limit,
+        orderBy: { created_at: 'desc' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              avatar: true,
+            },
+          },
+        },
+      });
+
+      // Get total count for pagination
+      const totalReviews = await this.prisma.review.count({
+        where: {
+          package_id: packageId,
+          deleted_at: null,
+          status: 1,
+        },
+      });
+
+      // Calculate average rating
+      const averageRating = await this.prisma.review.aggregate({
+        where: {
+          package_id: packageId,
+          deleted_at: null,
+          status: 1,
+        },
+        _avg: {
+          rating_value: true,
+        },
+        _count: {
+          rating_value: true,
+        },
+      });
+
+      // Add avatar URLs
+      for (const review of reviews) {
+        if (review.user && review.user.avatar) {
+          review.user['avatar_url'] = SojebStorage.url(
+            appConfig().storageUrl.avatar + review.user.avatar,
+          );
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          reviews,
+          pagination: {
+            page,
+            limit,
+            total: totalReviews,
+            totalPages: Math.ceil(totalReviews / limit),
+          },
+          summary: {
+            averageRating: averageRating._avg.rating_value || 0,
+            totalReviews: averageRating._count.rating_value || 0,
+          },
+        },
+      };
+    } catch (error) {
+      throw new Error(`Failed to get package reviews: ${error.message}`);
+    }
+  }
+
+  async updateReview(
+    packageId: string,
+    reviewId: string,
+    userId: string,
+    updateReviewDto: UpdateReviewDto,
+  ) {
+    try {
+      // Check if review exists and belongs to user
+      const existingReview = await this.prisma.review.findFirst({
+        where: {
+          id: reviewId,
+          package_id: packageId,
+          user_id: userId,
+          deleted_at: null,
+        },
+      });
+
+      if (!existingReview) {
+        throw new Error('Review not found or access denied');
+      }
+
+      // Update the review
+      const updatedReview = await this.prisma.review.update({
+        where: { id: reviewId },
+        data: {
+          rating_value: updateReviewDto.rating_value,
+          comment: updateReviewDto.comment,
+          updated_at: new Date(),
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              avatar: true,
+            },
+          },
+        },
+      });
+
+      // Add avatar URL if exists
+      if (updatedReview.user && updatedReview.user.avatar) {
+        updatedReview.user['avatar_url'] = SojebStorage.url(
+          appConfig().storageUrl.avatar + updatedReview.user.avatar,
+        );
+      }
+
+      return {
+        success: true,
+        message: 'Review updated successfully',
+        data: updatedReview,
+      };
+    } catch (error) {
+      throw new Error(`Failed to update review: ${error.message}`);
+    }
+  }
+
+  async deleteReview(packageId: string, reviewId: string, userId: string) {
+    try {
+      // Check if review exists and belongs to user
+      const existingReview = await this.prisma.review.findFirst({
+        where: {
+          id: reviewId,
+          package_id: packageId,
+          user_id: userId,
+          deleted_at: null,
+        },
+      });
+
+      if (!existingReview) {
+        throw new Error('Review not found or access denied');
+      }
+
+      // Soft delete the review
+      await this.prisma.review.update({
+        where: { id: reviewId },
+        data: {
+          deleted_at: new Date(),
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Review deleted successfully',
+      };
+    } catch (error) {
+      throw new Error(`Failed to delete review: ${error.message}`);
+    }
+  }
+
+  async getPackageRatingSummary(packageId: string) {
+    try {
+      // Check if package exists
+      const packageRecord = await this.prisma.package.findFirst({
+        where: { id: packageId },
+      });
+
+      if (!packageRecord) {
+        throw new Error('Package not found');
+      }
+
+      // Get rating statistics
+      const ratingStats = await this.prisma.review.groupBy({
+        by: ['rating_value'],
+        where: {
+          package_id: packageId,
+          deleted_at: null,
+          status: 1,
+        },
+        _count: {
+          rating_value: true,
+        },
+      });
+
+      // Calculate average rating
+      const averageRating = await this.prisma.review.aggregate({
+        where: {
+          package_id: packageId,
+          deleted_at: null,
+          status: 1,
+        },
+        _avg: {
+          rating_value: true,
+        },
+        _count: {
+          rating_value: true,
+        },
+      });
+
+      // Create rating distribution
+      const ratingDistribution = {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 0,
+        5: 0,
+      };
+
+      ratingStats.forEach((stat) => {
+        ratingDistribution[stat.rating_value] = stat._count.rating_value;
+      });
+
+      return {
+        success: true,
+        data: {
+          averageRating: averageRating._avg.rating_value || 0,
+          totalReviews: averageRating._count.rating_value || 0,
+          ratingDistribution,
+        },
+      };
+    } catch (error) {
+      throw new Error(`Failed to get package rating summary: ${error.message}`);
+    }
+  }
 }

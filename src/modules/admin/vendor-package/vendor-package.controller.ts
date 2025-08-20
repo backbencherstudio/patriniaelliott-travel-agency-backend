@@ -17,6 +17,8 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { VendorPackageService } from './vendor-package.service';
 import { CreateVendorPackageDto } from './dto/create-vendor-package.dto';
+import { CreateReviewDto } from './dto/create-review.dto';
+import { UpdateReviewDto } from './dto/update-review.dto';
 import { GetVendorPackageDto } from './dto/get-vendor-package.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 // Import file upload dependencies
@@ -187,5 +189,111 @@ export class VendorPackageController {
     return this.vendorPackageService.deleteVendorPackage(packageId, user_id);
   }
 
-  
+  // Review Endpoints
+  @ApiOperation({ summary: 'Create a review for a package' })
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/reviews')
+  async createReview(
+    @Param('id') packageId: string,
+    @Body() createReviewDto: CreateReviewDto,
+    @Req() req: any,
+  ) {
+    try {
+      const user_id = req.user.userId;
+      return await this.vendorPackageService.createReview(
+        packageId,
+        user_id,
+        createReviewDto,
+      );
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Get all reviews for a package' })
+  @Get(':id/reviews')
+  async getPackageReviews(
+    @Param('id') packageId: string,
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '10',
+  ) {
+    try {
+      const pageNumber = parseInt(page, 10);
+      const limitNumber = parseInt(limit, 10);
+      return await this.vendorPackageService.getPackageReviews(
+        packageId,
+        pageNumber,
+        limitNumber,
+      );
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Get rating summary for a package' })
+  @Get(':id/rating-summary')
+  async getPackageRatingSummary(@Param('id') packageId: string) {
+    try {
+      return await this.vendorPackageService.getPackageRatingSummary(packageId);
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Update a review' })
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/reviews/:reviewId')
+  async updateReview(
+    @Param('id') packageId: string,
+    @Param('reviewId') reviewId: string,
+    @Body() updateReviewDto: UpdateReviewDto,
+    @Req() req: any,
+  ) {
+    try {
+      const user_id = req.user.userId;
+      return await this.vendorPackageService.updateReview(
+        packageId,
+        reviewId,
+        user_id,
+        updateReviewDto,
+      );
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Delete a review' })
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id/reviews/:reviewId')
+  async deleteReview(
+    @Param('id') packageId: string,
+    @Param('reviewId') reviewId: string,
+    @Req() req: any,
+  ) {
+    try {
+      const user_id = req.user.userId;
+      return await this.vendorPackageService.deleteReview(
+        packageId,
+        reviewId,
+        user_id,
+      );
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
 }
