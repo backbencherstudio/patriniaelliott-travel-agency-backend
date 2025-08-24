@@ -296,6 +296,16 @@ export class VendorPackageService {
         return { ...roomType, room_photos: processedRoomPhotos };
       });
 
+      const processedExtraServices = pkg.package_extra_services.map(service => ({
+        id: service.id,
+        extra_service: {
+          id: service.extra_service.id,
+          name: service.extra_service.name,
+          price: service.extra_service.price,
+          description: service.extra_service.description
+        }
+      }));
+
              const processedUser = pkg.user
          ? {
              ...pkg.user,
@@ -317,6 +327,7 @@ export class VendorPackageService {
         ...pkg,
         package_files: processedPackageFiles,
         package_room_types: processedRoomTypes,
+        package_extra_services: processedExtraServices,
         user: processedUser,
         rating_summary: {
           averageRating: rating.averageRating,
@@ -391,6 +402,13 @@ export class VendorPackageService {
         },
         package_languages: {
           include: { language: { select: { id: true, name: true, code: true } } },
+        },
+        package_extra_services: {
+          include: { 
+            extra_service: { 
+              select: { id: true, name: true, price: true, description: true } 
+            } 
+          },
         },
       }
     });
@@ -472,6 +490,15 @@ export class VendorPackageService {
         }
         return { ...roomType, room_photos: processedRoomPhotos };
       }),
+      package_extra_services: data.package_extra_services.map(service => ({
+        id: service.id,
+        extra_service: {
+          id: service.extra_service.id,
+          name: service.extra_service.name,
+          price: service.extra_service.price,
+          description: service.extra_service.description
+        }
+      })),
       user: data.user ? {
         ...data.user,
         avatar_url: data.user.avatar ? this.generateFileUrl(data.user.avatar, 'avatar') : null
