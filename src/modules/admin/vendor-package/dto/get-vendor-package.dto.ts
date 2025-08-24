@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsOptional, IsString, IsNumber, Min, Max, IsBoolean, IsArray, IsDateString } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 export class GetVendorPackageDto {
   @ApiProperty({ required: false, default: 1, description: 'Page number' })
@@ -56,13 +56,19 @@ export class GetVendorPackageDto {
   @IsString({ each: true })
   languages?: string[];
 
-  @ApiProperty({ required: false, description: 'Minimum rating filter' })
+  @ApiProperty({ required: false, description: 'Rating filter (single rating or array of ratings)', example: [4, 5] })
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  @Max(5)
-  ratings?: number;
+  @Transform(({ value }) => {
+    if (Array.isArray(value)) {
+      return value.map(v => Number(v));
+    }
+    return [Number(value)];
+  })
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @Min(0, { each: true })
+  @Max(5, { each: true })
+  ratings?: number[];
 
   @ApiProperty({ required: false, description: 'Maximum budget filter' })
   @IsOptional()

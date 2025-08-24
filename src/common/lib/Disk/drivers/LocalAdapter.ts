@@ -69,6 +69,7 @@ export class LocalAdapter implements IStorage {
     try {
       const filePath = path.join(this._config.connection.rootUrl, key);
       const dirPath = path.dirname(filePath);
+      console.log('dirPath', dirPath);
       await fs.mkdir(dirPath, { recursive: true });
       await fs.writeFile(filePath, value);
     } catch (err) {

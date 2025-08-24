@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsOptional, IsString, IsNumber, IsBoolean, IsDate, IsDecimal, IsArray, ValidateNested, IsObject } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { array } from 'zod';
 
 // DTO for Amenities
@@ -109,6 +109,32 @@ export class RatePlansDto {
   @ValidateNested()
   @Type(() => RatePlanDto)
   peak?: RatePlanDto;
+}
+
+// DTO for Extra Service
+export class ExtraServiceDto {
+  @ApiProperty({ required: true, description: 'Name of the extra service' })
+  @IsString()
+  name: string;
+
+  @ApiProperty({ required: true, description: 'Price of the extra service' })
+  @IsNumber()
+  price: number;
+
+  @ApiProperty({ required: false, description: 'Currency for the service price', default: 'USD' })
+  @IsOptional()
+  @IsString()
+  currency?: string;
+
+  @ApiProperty({ required: false, description: 'Description of the extra service' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiProperty({ required: false, description: 'Whether the service is available', default: true })
+  @IsOptional()
+  @IsBoolean()
+  is_available?: boolean;
 }
 
 // DTO for Package Room Type
@@ -300,6 +326,16 @@ export class CreateVendorPackageDto {
 
   @ApiProperty({ required: false, type: AmenitiesDto })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  })
   @ValidateNested()
   @Type(() => AmenitiesDto)
   amenities?: AmenitiesDto;
@@ -311,18 +347,48 @@ export class CreateVendorPackageDto {
 
   @ApiProperty({ required: false, type: ParkingDto })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  })
   @ValidateNested()
   @Type(() => ParkingDto)
   parking?: ParkingDto;
 
   @ApiProperty({ required: false, type: HouseRulesDto })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  })
   @ValidateNested()
   @Type(() => HouseRulesDto)
   house_rules?: HouseRulesDto;
 
   @ApiProperty({ required: false, type: CheckInDto })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  })
   @ValidateNested()
   @Type(() => CheckInDto)
   check_in?: CheckInDto;
@@ -347,6 +413,16 @@ export class CreateVendorPackageDto {
 
   @ApiProperty({ required: false, type: RatePlansDto })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  })
   @ValidateNested()
   @Type(() => RatePlansDto)
   rate_plans?: RatePlansDto;
@@ -354,6 +430,16 @@ export class CreateVendorPackageDto {
   // Nested DTOs for room types and availabilities
   @ApiProperty({ required: false, type: [PackageRoomTypeDto] })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => PackageRoomTypeDto)
@@ -361,8 +447,36 @@ export class CreateVendorPackageDto {
 
   @ApiProperty({ required: false, type: [PackageAvailabilityDto] })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => PackageAvailabilityDto)
   package_availabilities?: PackageAvailabilityDto[];
+
+  @ApiProperty({ required: false, type: [ExtraServiceDto], description: 'Array of extra services with prices' })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ExtraServiceDto)
+  extra_services?: ExtraServiceDto[];
 }
+

@@ -44,7 +44,7 @@ export class VendorPackageService {
       type?: string;
       freeCancellation?: boolean;
       languages?: string[];
-      ratings?: number;
+      ratings?: number[];
       budgetEnd?: number;
       budgetStart?: number;
       durationEnd?: string;
@@ -119,11 +119,11 @@ export class VendorPackageService {
     }
 
     // Add ratings filter
-    if (searchParams?.ratings !== undefined) {
+    if (searchParams?.ratings && searchParams.ratings.length > 0) {
       where.reviews = {
         some: {
           rating_value: {
-            gte: searchParams.ratings
+            in: searchParams.ratings
           }
         }
       };
@@ -201,6 +201,13 @@ export class VendorPackageService {
           },
           package_languages: {
             include: { language: { select: { id: true, name: true, code: true } } },
+          },
+          package_extra_services: {
+            include: { 
+              extra_service: { 
+                select: { id: true, name: true, price: true, description: true } 
+              } 
+            },
           },
         },
       }),
@@ -303,6 +310,9 @@ export class VendorPackageService {
       const confirmed = packageIdToConfirmed.get(pkg.id) ?? { confirmedBookings: 0, confirmedQuantity: 0 };
       const approvedDate = pkg.approved_at ? pkg.approved_at.toISOString() : null;
 
+      // Extract room photos from processed data
+    const allRoomPhotos = processedRoomTypes.flatMap(roomType => roomType.room_photos || []);
+
       return {
         ...pkg,
         package_files: processedPackageFiles,
@@ -313,12 +323,16 @@ export class VendorPackageService {
           totalReviews: rating.totalReviews,
           ratingDistribution,
         },
+        
+        roomFiles: allRoomPhotos,
         confirmed_bookings: confirmed.confirmedBookings,
         confirmed_quantity: confirmed.confirmedQuantity,
         approved_at: pkg.approved_at,
         approved_date: approvedDate,
       } as any;
     });
+
+    
 
     return {
       data: processedData,
@@ -368,38 +382,119 @@ export class VendorPackageService {
             name: true,
             email: true,
             display_name: true,
-            avatar: true
+            avatar: true,
+            created_at: true,
           }
-        }
+        },
+        cancellation_policy: {
+          select: { id: true, policy: true, description: true },
+        },
+        package_languages: {
+          include: { language: { select: { id: true, name: true, code: true } } },
+        },
       }
     });
-  
-         // Process the data to add full file URLs
-     const processedData = data ? {
-       ...data,
-       package_files: data.package_files.map(file => ({
-         ...file,
-         file_url: this.generateFileUrl(file.file, 'package')
-       })),
-       package_room_types: data.package_room_types.map(roomType => {
-         let processedRoomPhotos = roomType.room_photos;
-         if (Array.isArray(roomType.room_photos)) {
-           processedRoomPhotos = roomType.room_photos.map(photo =>
-             typeof photo === 'string' ? this.generateFileUrl(photo, 'package') : photo,
-           );
-         }
-         return { ...roomType, room_photos: processedRoomPhotos };
-       }),
-       user: data.user ? {
-         ...data.user,
-         avatar_url: data.user.avatar ? this.generateFileUrl(data.user.avatar, 'avatar') : null
-       } : null
-     } : null;
 
-    console.log('Found packages:', processedData);
+    if (!data) {
+      return {
+        success: false,
+        message: 'Package not found',
+        data: null,
+      };
+    }
+
+    // Fetch rating aggregates
+    const ratingAgg = await this.prisma.review.groupBy({
+      by: ['package_id'],
+      where: {
+        package_id: data.id,
+        deleted_at: null,
+        status: 1,
+      },
+      _avg: { rating_value: true },
+      _count: { rating_value: true },
+    });
+
+    const rating = ratingAgg.length > 0 ? {
+      averageRating: ratingAgg[0]._avg?.rating_value ?? 0,
+      totalReviews: ratingAgg[0]._count?.rating_value ?? 0,
+    } : { averageRating: 0, totalReviews: 0 };
+
+    // Build rating distribution
+    const distributionAgg = await this.prisma.review.groupBy({
+      by: ['package_id', 'rating_value'],
+      where: {
+        package_id: data.id,
+        deleted_at: null,
+        status: 1,
+      },
+      _count: { rating_value: true },
+    });
+
+    const ratingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    distributionAgg.forEach((stat) => {
+      ratingDistribution[stat.rating_value] = stat._count?.rating_value ?? 0;
+    });
+
+    // Confirmed bookings
+    const confirmedAgg = await this.prisma.bookingItem.groupBy({
+      by: ['package_id'],
+      where: {
+        package_id: data.id,
+        deleted_at: null,
+        booking: {
+          deleted_at: null,
+          status: 'approved',
+        },
+      },
+      _count: { _all: true },
+      _sum: { quantity: true },
+    });
+
+    const confirmed = confirmedAgg.length > 0 ? {
+      confirmedBookings: confirmedAgg[0]._count?._all ?? 0,
+      confirmedQuantity: confirmedAgg[0]._sum?.quantity ?? 0,
+    } : { confirmedBookings: 0, confirmedQuantity: 0 };
+
+    // Process the data to add full file URLs
+    const processedData = {
+      ...data,
+      package_files: data.package_files.map(file => ({
+        ...file,
+        file_url: this.generateFileUrl(file.file, 'package')
+      })),
+      package_room_types: data.package_room_types.map(roomType => {
+        let processedRoomPhotos = roomType.room_photos;
+        if (Array.isArray(roomType.room_photos)) {
+          processedRoomPhotos = roomType.room_photos.map(photo =>
+            typeof photo === 'string' ? this.generateFileUrl(photo, 'package') : photo,
+          );
+        }
+        return { ...roomType, room_photos: processedRoomPhotos };
+      }),
+      user: data.user ? {
+        ...data.user,
+        avatar_url: data.user.avatar ? this.generateFileUrl(data.user.avatar, 'avatar') : null
+      } : null,
+      rating_summary: {
+        averageRating: rating.averageRating,
+        totalReviews: rating.totalReviews,
+        ratingDistribution,
+      },
+      confirmed_bookings: confirmed.confirmedBookings,
+      confirmed_quantity: confirmed.confirmedQuantity,
+      approved_date: data.approved_at ? data.approved_at.toISOString() : null,
+    };
+
+    const allRoomPhotos = processedData.package_room_types.flatMap(roomType => roomType.room_photos || []);
+
+    console.log('Found package:', processedData);
     return {
       success: true,
-      data: processedData,
+      data: {
+        ...processedData,
+        roomFiles: allRoomPhotos,
+      },
     };
   }
 
@@ -582,7 +677,7 @@ export class VendorPackageService {
       });
 
       // Extract nested data from DTO
-      const { package_room_types, package_availabilities, ...packageData } = createVendorPackageDto;
+      const { package_room_types, package_availabilities, extra_services, ...packageData } = createVendorPackageDto;
       
       console.log('Extracted DTO data:', {
         hasPackageRoomTypes: !!package_room_types,
@@ -680,6 +775,21 @@ export class VendorPackageService {
         };
       }
 
+      // Add extra services if provided
+      if (extra_services && extra_services.length > 0) {
+        data.package_extra_services = {
+          create: extra_services.map((service: any) => ({
+            extra_service: {
+              create: {
+                name: service.name,
+                price: service.price,
+                description: service.description
+              }
+            }
+          }))
+        };
+      }
+
       // Vendor verification status
       const userData = await this.prisma.user.findUnique({ where: { id: user_id } });
       const vendorVerification = await this.prisma.vendorVerification.findUnique({
@@ -704,6 +814,7 @@ export class VendorPackageService {
           package_files: true,
           package_room_types: true,
           package_availabilities: true,
+          package_extra_services: true,
           user: true,
         },
       });
@@ -753,6 +864,7 @@ export class VendorPackageService {
       return {
         success: true,
         data: processedResult,
+        roomPhotos: room_photos,
         message: 'Package created successfully with files, room types, and availabilities',
         meta: {
           requiresVendorVerification: !isVendorType || !isVendorVerified,
