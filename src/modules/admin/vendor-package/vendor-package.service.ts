@@ -26,10 +26,10 @@ export class VendorPackageService {
     }
   }
 
+  // Use SojebStorage.url() for generating file URLs
   private generateFileUrl(filePath: string, type: 'package' | 'avatar' = 'package'): string {
-    const baseUrl = process.env.APP_URL || 'http://localhost:4000';
-    const storagePath = type === 'package' ? 'package' : 'avatar';
-    return `${baseUrl}/public/storage/${storagePath}/${filePath}`;
+    const storagePath = type === 'package' ? appConfig().storageUrl.package : appConfig().storageUrl.avatar;
+    return SojebStorage.url(storagePath + filePath);
   }
 
   async getVendorPackage(
@@ -47,8 +47,8 @@ export class VendorPackageService {
       ratings?: number;
       budgetEnd?: number;
       budgetStart?: number;
-      durationEnd?: number;
-      durationStart?: number;
+      durationEnd?: string;
+      durationStart?: string;
     }
   ) {
     const skip = (page - 1) * limit;
@@ -140,14 +140,28 @@ export class VendorPackageService {
       }
     }
 
-    // Add duration range filter
-    if (searchParams?.durationStart !== undefined || searchParams?.durationEnd !== undefined) {
-      where.duration = {};
-      if (searchParams.durationStart !== undefined) {
-        where.duration.gte = searchParams.durationStart;
+    // Add date range filter for availability
+    if (searchParams?.durationStart || searchParams?.durationEnd) {
+      where.package_availabilities = {
+        some: {
+          AND: []
+        }
+      };
+      
+      if (searchParams.durationStart) {
+        where.package_availabilities.some.AND.push({
+          date: {
+            gte: new Date(searchParams.durationStart)
+          }
+        });
       }
-      if (searchParams.durationEnd !== undefined) {
-        where.duration.lte = searchParams.durationEnd;
+      
+      if (searchParams.durationEnd) {
+        where.package_availabilities.some.AND.push({
+          date: {
+            lte: new Date(searchParams.durationEnd)
+          }
+        });
       }
     }
   
@@ -262,7 +276,7 @@ export class VendorPackageService {
     const processedData = packages.map(pkg => {
       const processedPackageFiles = pkg.package_files.map(file => ({
         ...file,
-        file_url: SojebStorage.url(appConfig().storageUrl.package + file.file),
+        file_url: this.generateFileUrl(file.file, 'package'),
       }));
 
       const processedRoomTypes = pkg.package_room_types.map(roomType => {
@@ -275,14 +289,14 @@ export class VendorPackageService {
         return { ...roomType, room_photos: processedRoomPhotos };
       });
 
-      const processedUser = pkg.user
-        ? {
-            ...pkg.user,
-            avatar_url: pkg.user.avatar
-              ? SojebStorage.url(appConfig().storageUrl.avatar + pkg.user.avatar)
-              : null,
-          }
-        : null;
+             const processedUser = pkg.user
+         ? {
+             ...pkg.user,
+             avatar_url: pkg.user.avatar
+               ? this.generateFileUrl(pkg.user.avatar, 'avatar')
+               : null,
+           }
+         : null;
 
       const rating = packageIdToRating.get(pkg.id) ?? { averageRating: 0, totalReviews: 0 };
       const ratingDistribution = packageIdToDistribution.get(pkg.id) ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -360,18 +374,27 @@ export class VendorPackageService {
       }
     });
   
-    // Process the data to add full file URLs
-    const processedData = data ? {
-      ...data,
-      package_files: data.package_files.map(file => ({
-        ...file,
-        file_url: SojebStorage.url(appConfig().storageUrl.package + file.file)
-      })),
-      user: data.user ? {
-        ...data.user,
-        avatar_url: data.user.avatar ? SojebStorage.url(appConfig().storageUrl.avatar + data.user.avatar) : null
-      } : null
-    } : null;
+         // Process the data to add full file URLs
+     const processedData = data ? {
+       ...data,
+       package_files: data.package_files.map(file => ({
+         ...file,
+         file_url: this.generateFileUrl(file.file, 'package')
+       })),
+       package_room_types: data.package_room_types.map(roomType => {
+         let processedRoomPhotos = roomType.room_photos;
+         if (Array.isArray(roomType.room_photos)) {
+           processedRoomPhotos = roomType.room_photos.map(photo =>
+             typeof photo === 'string' ? this.generateFileUrl(photo, 'package') : photo,
+           );
+         }
+         return { ...roomType, room_photos: processedRoomPhotos };
+       }),
+       user: data.user ? {
+         ...data.user,
+         avatar_url: data.user.avatar ? this.generateFileUrl(data.user.avatar, 'avatar') : null
+       } : null
+     } : null;
 
     console.log('Found packages:', processedData);
     return {
@@ -487,20 +510,86 @@ export class VendorPackageService {
     files?: {
       package_files?: Express.Multer.File[];
       trip_plans_images?: Express.Multer.File[];
+      room_photos?: Express.Multer.File[]; // Add room_photos files
     }
   ) {
     try {
+      // Test URL generation using existing function
+      console.log('=== URL Generation Test ===');
+      console.log('APP_URL:', process.env.APP_URL);
+      const testUrl = this.generateFileUrl('test.jpg', 'package');
+      console.log('Test URL generated:', testUrl);
+      
       // Ensure storage directory exists
       this.ensureStorageDirectory();
       
-      // Process file URLs with null checks
-      const package_files = files?.package_files?.map(file => file.filename) || [];
-      const trip_plans_images = files?.trip_plans_images?.map(file => file.filename) || [];
+      // Upload files using SojebStorage and get filenames
+      const package_files: string[] = [];
+      const trip_plans_images: string[] = [];
+      const room_photos: string[] = [];
       
-      console.log('Files received:', { package_files, trip_plans_images });
+      // Upload package files
+      if (files?.package_files) {
+        for (const file of files.package_files) {
+          const randomName = Array(32)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          const fileName = `${randomName}${file.originalname}`;
+          const filePath = appConfig().storageUrl.package + fileName;
+          await SojebStorage.put(filePath, file.buffer);
+          package_files.push(fileName);
+        }
+      }
+      
+      // Upload trip plans images
+      if (files?.trip_plans_images) {
+        for (const file of files.trip_plans_images) {
+          const randomName = Array(32)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          const fileName = `${randomName}${file.originalname}`;
+          const filePath = appConfig().storageUrl.package + fileName;
+          await SojebStorage.put(filePath, file.buffer);
+          trip_plans_images.push(fileName);
+        }
+      }
+      
+      // Upload room photos
+      if (files?.room_photos) {
+        console.log(`Found ${files.room_photos.length} room_photos files to upload`);
+        for (const file of files.room_photos) {
+          console.log(`Uploading room photo: ${file.originalname} (${file.size} bytes)`);
+          const randomName = Array(32)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          const fileName = `${randomName}${file.originalname}`;
+          const filePath = appConfig().storageUrl.package + fileName;
+          await SojebStorage.put(filePath, file.buffer);
+          room_photos.push(fileName);
+          console.log(`Successfully uploaded room photo: ${fileName}`);
+        }
+      } else {
+        console.log('No room_photos files found in request');
+      }
+      
+      console.log('Files uploaded:', { 
+        package_files, 
+        trip_plans_images, 
+        room_photos 
+      });
 
       // Extract nested data from DTO
       const { package_room_types, package_availabilities, ...packageData } = createVendorPackageDto;
+      
+      console.log('Extracted DTO data:', {
+        hasPackageRoomTypes: !!package_room_types,
+        packageRoomTypesLength: package_room_types?.length || 0,
+        roomPhotosLength: room_photos.length,
+        packageData: Object.keys(packageData)
+      });
 
       // Build the data object for Prisma
       const data: any = {
@@ -530,20 +619,52 @@ export class VendorPackageService {
       // Add package room types if provided
       if (package_room_types && package_room_types.length > 0) {
         data.package_room_types = {
-          create: package_room_types.map((roomType: any) => ({
-            name: roomType.name,
-            description: roomType.description,
-            bedrooms: roomType.bedrooms,
-            bathrooms: roomType.bathrooms,
-            max_guests: roomType.max_guests,
-            size_sqm: roomType.size_sqm,
-            beds: roomType.beds,
-            price: roomType.price,
-            currency: roomType.currency || 'USD',
-            is_default: roomType.is_default || false,
-            is_available: roomType.is_available !== false,
-            room_photos: roomType.room_photos
-          }))
+          create: package_room_types.map((roomType: any, index: number) => {
+            // Handle room_photos assignment
+            let roomPhotos = roomType.room_photos || [];
+            
+            // If room_photos files are uploaded, assign them to room types
+            if (room_photos.length > 0) {
+              // Option 1: Assign all uploaded photos to the first room type
+              if (index === 0) {
+                roomPhotos = room_photos;
+                console.log(`Assigning ${room_photos.length} uploaded room photos to first room type: ${roomType.name}`);
+              }
+              // Option 2: If you want to distribute photos across multiple room types, you can modify this logic
+              // For example: assign first 5 photos to first room type, next 5 to second, etc.
+            }
+            
+            console.log(`Room type ${index + 1} (${roomType.name}) will have ${roomPhotos.length} photos:`, roomPhotos);
+            
+            return {
+              name: roomType.name,
+              description: roomType.description,
+              bedrooms: roomType.bedrooms,
+              bathrooms: roomType.bathrooms,
+              max_guests: roomType.max_guests,
+              size_sqm: roomType.size_sqm,
+              beds: roomType.beds,
+              price: roomType.price,
+              currency: roomType.currency || 'USD',
+              is_default: roomType.is_default || false,
+              is_available: roomType.is_available !== false,
+              room_photos: roomPhotos
+            };
+          })
+        };
+      } else if (room_photos.length > 0) {
+        // If no room types provided but room_photos are uploaded, create a default room type
+        console.log('No room types provided, but room photos uploaded. Creating default room type.');
+        data.package_room_types = {
+          create: [{
+            name: 'Default Room',
+            description: 'Default room type with uploaded photos',
+            price: packageData.price || 0,
+            currency: 'USD',
+            is_default: true,
+            is_available: true,
+            room_photos: room_photos
+          }]
         };
       }
 
@@ -570,6 +691,12 @@ export class VendorPackageService {
       // Always require admin approval for vendor-created packages
       data.approved_at = null;
 
+      console.log('Final data object for Prisma:', {
+        hasPackageRoomTypes: !!data.package_room_types,
+        packageRoomTypesData: data.package_room_types,
+        roomPhotosInData: data.package_room_types?.create?.[0]?.room_photos || []
+      });
+
       // Create package with nested data
       const result = await this.prisma.package.create({
         data,
@@ -586,24 +713,38 @@ export class VendorPackageService {
         ...result,
         package_files: (result.package_files || []).map((file) => ({
           ...file,
-          file_url: SojebStorage.url(appConfig().storageUrl.package + file.file),
+          file_url: this.generateFileUrl(file.file, 'package'),
         })),
         package_room_types: (result.package_room_types || []).map((roomType) => {
+          console.log('Processing room type:', roomType.name);
+          console.log('Original room_photos:', roomType.room_photos);
+          console.log('Environment check:', {
+            APP_URL: process.env.APP_URL,
+            publicUrl: appConfig().storageUrl.rootUrlPublic,
+            packagePath: appConfig().storageUrl.package
+          });
+          
           let processedRoomPhotos = roomType.room_photos;
           if (Array.isArray(roomType.room_photos)) {
-            processedRoomPhotos = roomType.room_photos.map((photo: any) =>
-              typeof photo === 'string'
-                ? SojebStorage.url(appConfig().storageUrl.package + photo)
-                : photo,
-            );
+            processedRoomPhotos = roomType.room_photos.map((photo: any) => {
+              console.log('Processing photo:', photo);
+              if (typeof photo === 'string') {
+                const photoUrl = this.generateFileUrl(photo, 'package');
+                console.log('Generated URL for photo:', photoUrl);
+                return photoUrl;
+              }
+              return photo;
+            });
           }
+          
+          console.log('Processed room_photos:', processedRoomPhotos);
           return { ...roomType, room_photos: processedRoomPhotos };
         }),
         user: result.user
           ? {
               ...result.user,
               avatar_url: result.user.avatar
-                ? SojebStorage.url(appConfig().storageUrl.avatar + result.user.avatar)
+                ? this.generateFileUrl(result.user.avatar, 'avatar')
                 : null,
             }
           : null,
@@ -635,6 +776,7 @@ export class VendorPackageService {
     files?: {
       package_files?: Express.Multer.File[];
       trip_plans_images?: Express.Multer.File[];
+      room_photos?: Express.Multer.File[]; // Add room_photos files
     }
   ) {
     try {
@@ -653,12 +795,73 @@ export class VendorPackageService {
         throw new Error('Package not found or access denied');
       }
 
-      // Process file URLs with null checks
-      const package_files = files?.package_files?.map(file => file.filename) || [];
-      const trip_plans_images = files?.trip_plans_images?.map(file => file.filename) || [];
+      // Upload files using SojebStorage and get filenames
+      const package_files: string[] = [];
+      const trip_plans_images: string[] = [];
+      const room_photos: string[] = [];
+      
+      // Upload package files
+      if (files?.package_files) {
+        for (const file of files.package_files) {
+          const randomName = Array(32)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          const fileName = `${randomName}${file.originalname}`;
+          const filePath = appConfig().storageUrl.package + fileName;
+          await SojebStorage.put(filePath, file.buffer);
+          package_files.push(fileName);
+        }
+      }
+      
+      // Upload trip plans images
+      if (files?.trip_plans_images) {
+        for (const file of files.trip_plans_images) {
+          const randomName = Array(32)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          const fileName = `${randomName}${file.originalname}`;
+          const filePath = appConfig().storageUrl.package + fileName;
+          await SojebStorage.put(filePath, file.buffer);
+          trip_plans_images.push(fileName);
+        }
+      }
+      
+      // Upload room photos
+      if (files?.room_photos) {
+        console.log(`PUT Update - Found ${files.room_photos.length} room_photos files to upload`);
+        for (const file of files.room_photos) {
+          console.log(`PUT Update - Uploading room photo: ${file.originalname} (${file.size} bytes)`);
+          const randomName = Array(32)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          const fileName = `${randomName}${file.originalname}`;
+          const filePath = appConfig().storageUrl.package + fileName;
+          await SojebStorage.put(filePath, file.buffer);
+          room_photos.push(fileName);
+          console.log(`PUT Update - Successfully uploaded room photo: ${fileName}`);
+        }
+      } else {
+        console.log('PUT Update - No room_photos files found in request');
+      }
+
+      console.log('PUT Update - Files uploaded:', { 
+        package_files, 
+        trip_plans_images, 
+        room_photos 
+      });
 
       // Extract nested data from DTO
       const { package_room_types, package_availabilities, ...packageData } = updateVendorPackageDto;
+      
+      console.log('PUT Update - Extracted DTO data:', {
+        hasPackageRoomTypes: !!package_room_types,
+        packageRoomTypesLength: package_room_types?.length || 0,
+        roomPhotosLength: room_photos.length,
+        packageData: Object.keys(packageData)
+      });
 
       // Build the data object for Prisma
       const data: any = {
@@ -689,20 +892,53 @@ export class VendorPackageService {
       if (package_room_types && package_room_types.length > 0) {
         data.package_room_types = {
           deleteMany: {}, // Delete existing room types
-          create: package_room_types.map((roomType: any) => ({
-            name: roomType.name,
-            description: roomType.description,
-            bedrooms: roomType.bedrooms,
-            bathrooms: roomType.bathrooms,
-            max_guests: roomType.max_guests,
-            size_sqm: roomType.size_sqm,
-            beds: roomType.beds,
-            price: roomType.price,
-            currency: roomType.currency || 'USD',
-            is_default: roomType.is_default || false,
-            is_available: roomType.is_available !== false,
-            room_photos: roomType.room_photos
-          }))
+          create: package_room_types.map((roomType: any, index: number) => {
+            // Handle room_photos assignment
+            let roomPhotos = roomType.room_photos || [];
+            
+            // If room_photos files are uploaded, assign them to room types
+            if (room_photos.length > 0) {
+              // Option 1: Assign all uploaded photos to the first room type
+              if (index === 0) {
+                roomPhotos = room_photos;
+                console.log(`PUT Update - Assigning ${room_photos.length} uploaded room photos to first room type: ${roomType.name}`);
+              }
+              // Option 2: If you want to distribute photos across multiple room types, you can modify this logic
+              // For example: assign first 5 photos to first room type, next 5 to second, etc.
+            }
+            
+            console.log(`PUT Update - Room type ${index + 1} (${roomType.name}) will have ${roomPhotos.length} photos:`, roomPhotos);
+            
+            return {
+              name: roomType.name,
+              description: roomType.description,
+              bedrooms: roomType.bedrooms,
+              bathrooms: roomType.bathrooms,
+              max_guests: roomType.max_guests,
+              size_sqm: roomType.size_sqm,
+              beds: roomType.beds,
+              price: roomType.price,
+              currency: roomType.currency || 'USD',
+              is_default: roomType.is_default || false,
+              is_available: roomType.is_available !== false,
+              room_photos: roomPhotos
+            };
+          })
+        };
+      } else if (room_photos.length > 0) {
+        // If no room types provided but room_photos are uploaded, create a default room type
+        console.log('PUT Update - No room types provided, but room photos uploaded. Creating default room type.');
+        data.package_room_types = {
+          deleteMany: {}, // Delete existing room types
+          create: [{
+            name: 'Default Room',
+            description: 'Default room type with uploaded photos',
+            price: packageData.price || 0,
+            currency: 'USD',
+            is_default: true,
+            is_available: true,
+            room_photos: room_photos
+          }]
         };
       }
 
@@ -731,9 +967,46 @@ export class VendorPackageService {
         }
       });
 
+      // Post-process to attach public URLs using existing image function
+      const processedResult = {
+        ...result,
+        package_files: (result.package_files || []).map((file) => ({
+          ...file,
+          file_url: this.generateFileUrl(file.file, 'package'),
+        })),
+        package_room_types: (result.package_room_types || []).map((roomType) => {
+          console.log('PUT Update - Processing room type:', roomType.name);
+          console.log('PUT Update - Original room_photos:', roomType.room_photos);
+          
+          let processedRoomPhotos = roomType.room_photos;
+          if (Array.isArray(roomType.room_photos)) {
+            processedRoomPhotos = roomType.room_photos.map((photo: any) => {
+              console.log('PUT Update - Processing photo:', photo);
+              if (typeof photo === 'string') {
+                const photoUrl = this.generateFileUrl(photo, 'package');
+                console.log('PUT Update - Generated URL for photo:', photoUrl);
+                return photoUrl;
+              }
+              return photo;
+            });
+          }
+          
+          console.log('PUT Update - Processed room_photos:', processedRoomPhotos);
+          return { ...roomType, room_photos: processedRoomPhotos };
+        }),
+        user: result.user
+          ? {
+              ...result.user,
+              avatar_url: result.user.avatar
+                ? this.generateFileUrl(result.user.avatar, 'avatar')
+                : null,
+            }
+          : null,
+      };
+
       return {
         success: true,
-        data: result,
+        data: processedResult,
         message: 'Package updated successfully with files, room types, and availabilities',
       };
     } catch (error) {
@@ -824,12 +1097,10 @@ export class VendorPackageService {
         },
       });
 
-      // Add avatar URL if exists
-      if (review.user && review.user.avatar) {
-        review.user['avatar_url'] = SojebStorage.url(
-          appConfig().storageUrl.avatar + review.user.avatar,
-        );
-      }
+             // Add avatar URL if exists
+       if (review.user && review.user.avatar) {
+         review.user['avatar_url'] = this.generateFileUrl(review.user.avatar, 'avatar');
+       }
 
       return {
         success: true,
@@ -908,14 +1179,12 @@ export class VendorPackageService {
         },
       });
 
-      // Add avatar URLs
-      for (const review of reviews) {
-        if (review.user && review.user.avatar) {
-          review.user['avatar_url'] = SojebStorage.url(
-            appConfig().storageUrl.avatar + review.user.avatar,
-          );
-        }
-      }
+             // Add avatar URLs
+       for (const review of reviews) {
+         if (review.user && review.user.avatar) {
+           review.user['avatar_url'] = this.generateFileUrl(review.user.avatar, 'avatar');
+         }
+       }
 
       return {
         success: true,
@@ -980,12 +1249,10 @@ export class VendorPackageService {
         },
       });
 
-      // Add avatar URL if exists
-      if (updatedReview.user && updatedReview.user.avatar) {
-        updatedReview.user['avatar_url'] = SojebStorage.url(
-          appConfig().storageUrl.avatar + updatedReview.user.avatar,
-        );
-      }
+             // Add avatar URL if exists
+       if (updatedReview.user && updatedReview.user.avatar) {
+         updatedReview.user['avatar_url'] = this.generateFileUrl(updatedReview.user.avatar, 'avatar');
+       }
 
       return {
         success: true,

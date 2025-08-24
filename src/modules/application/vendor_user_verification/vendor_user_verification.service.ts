@@ -266,10 +266,14 @@ export class VendorUserVerificationService {
 
       console.log('Vendor verification updated successfully for user ID:', userId);
 
+      // Fetch latest user to expose email in response
+      const updatedUser = await this.prisma.user.findUnique({ where: { id: userId } });
+
       return {
         success: true,
         message: 'Vendor verification updated successfully.',
         data: vendorVerification,
+        email: updatedUser?.email ?? null,
       };
     } catch (error) {
       console.error('Error updating vendor verification for user ID:', userId, error);
@@ -319,6 +323,7 @@ export class VendorUserVerificationService {
       return {
         success: true,
         data: user,
+        email: user.email ?? null,
       };
     } catch (error) {
       throw new Error(`Failed to get vendor verification: ${error.message}`);

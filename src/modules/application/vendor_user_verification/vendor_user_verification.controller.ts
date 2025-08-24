@@ -8,6 +8,7 @@ import {
   Body,
   UploadedFile,
   UseInterceptors,
+  Param,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -74,6 +75,20 @@ export class VendorUserVerificationController {
     }
   }
 
+  @ApiOperation({ summary: 'Get vendor verification by user id' })
+  @UseGuards(JwtAuthGuard)
+  @Get('vendor/:userId')
+  async getVendorVerificationByUserId(@Param('userId') userId: string) {
+    try {
+      return await this.vendorUserVerificationService.getVendorVerification(userId);
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
   @ApiOperation({ summary: 'Update vendor verification details' })
   @UseGuards(JwtAuthGuard)
   @Patch()
@@ -107,6 +122,41 @@ export class VendorUserVerificationController {
       return result;
     } catch (error) {
       throw new Error(error.message);
+    }
+  }
+
+  // Update vendor verification by user id (application scope)
+  @ApiOperation({ summary: 'Update vendor verification by user id' })
+  @UseGuards(JwtAuthGuard)
+  @Patch('vendor/:userId')
+  @UseInterceptors(FileInterceptor('document'))
+  async updateVendorByUserId(
+    @Param('userId') userId: string,
+    @Body() vendorData: Partial<VendorVerificationDto>,
+    @UploadedFile() document?: Express.Multer.File,
+  ) {
+    try {
+      const result = await this.vendorUserVerificationService.updateVendorVerification(userId, vendorData);
+
+      if (document) {
+        await this.vendorUserVerificationService.create(
+          {
+            type: 'vendor_verification',
+            file_name: document.originalname,
+            file_path: document.filename,
+            file_type: document.mimetype,
+          },
+          userId,
+          document,
+        );
+      }
+
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
     }
   }
 }

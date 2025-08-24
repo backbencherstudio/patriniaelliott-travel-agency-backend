@@ -140,4 +140,45 @@ export class VendorUserVerificationAdminService {
       success: true, 
       message: 'Vendor verification rejected' };
   }
+
+  // Update vendor verification by user ID (admin)
+  async updateVendorByUserId(userId: string, data: Partial<{
+    first_name: string;
+    phone_number: string;
+    business_website: string;
+    vendor_type: string;
+    TIN: string;
+    property_name: string;
+    address: string;
+    unit_number: string;
+    postal_code: string;
+    city: string;
+    country: string;
+    owner_type: string;
+    owner_first_name: string;
+    owner_last_name: string;
+    owner_phone_numbers: string;
+    owner_alt_names: string;
+    manager_name: string;
+    is_govt_representation: boolean;
+    payment_method: string;
+    payment_email: string;
+    payment_account_name: string;
+    payment_TIN: string;
+    billing_address: string;
+    status: string;
+  }>) {
+    const verification = await this.prisma.vendorVerification.findUnique({ where: { user_id: userId } });
+    if (!verification) throw new NotFoundException('Vendor verification record not found');
+
+    const updated = await this.prisma.vendorVerification.update({
+      where: { user_id: userId },
+      data: {
+        ...data,
+        updated_at: new Date(),
+      },
+    });
+
+    return { success: true, message: 'Vendor verification updated', data: updated };
+  }
 }

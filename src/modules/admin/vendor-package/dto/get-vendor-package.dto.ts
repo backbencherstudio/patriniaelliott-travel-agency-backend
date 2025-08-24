@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, IsNumber, Min, Max, IsBoolean, IsArray } from 'class-validator';
+import { IsOptional, IsString, IsNumber, Min, Max, IsBoolean, IsArray, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class GetVendorPackageDto {
@@ -78,17 +78,13 @@ export class GetVendorPackageDto {
   @Min(0)
   budget_start?: number;
 
-  @ApiProperty({ required: false, description: 'Maximum duration filter' })
+  @ApiProperty({ required: false, description: 'Start date for availability filter (YYYY-MM-DD)' })
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  duration_end?: number;
+  @IsDateString()
+  duration_start?: string;
 
-  @ApiProperty({ required: false, description: 'Minimum duration filter' })
+  @ApiProperty({ required: false, description: 'End date for availability filter (YYYY-MM-DD)' })
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  duration_start?: number;
+  @IsDateString()
+  duration_end?: string;
 }

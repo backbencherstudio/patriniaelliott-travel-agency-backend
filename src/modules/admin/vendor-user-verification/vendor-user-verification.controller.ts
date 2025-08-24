@@ -9,7 +9,7 @@ import { Role } from '../../../common/guard/role/role.enum';
 @ApiTags('Admin Vendor User Verification')
 @Controller('admin/vendor-user-verification')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN)
+@Roles(Role.ADMIN, Role.VENDOR)
 export class VendorUserVerificationAdminController {
   constructor(private readonly service: VendorUserVerificationAdminService) {}
 
@@ -46,5 +46,11 @@ export class VendorUserVerificationAdminController {
   @Patch('vendor/:userId/reject')
   async rejectVendor(@Param('userId') userId: string, @Body() body: { reason?: string }) {
     return this.service.rejectVendor(userId, body?.reason);
+  }
+
+  @ApiOperation({ summary: 'Update vendor verification by user id' })
+  @Patch('vendor/:userId')
+  async updateVendorByUserId(@Param('userId') userId: string, @Body() body: any) {
+    return this.service.updateVendorByUserId(userId, body);
   }
 }

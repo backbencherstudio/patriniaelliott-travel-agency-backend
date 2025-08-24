@@ -27,6 +27,7 @@ import { Express, Request } from 'express';
 import { diskStorage } from 'multer';
 import appConfig from '../../../config/app.config';
 import { SearchPackagesDto } from './dto/search-packages.dto';
+import { memoryStorage } from 'multer';
 
 @ApiTags('VendorPackage')
 @Controller('admin/vendor-package')
@@ -73,21 +74,25 @@ export class VendorPackageController {
   @Post()
   @UseInterceptors(
     FileFieldsInterceptor(
-      [{ name: 'package_files' }, { name: 'trip_plans_images' }],
+      [
+        { name: 'package_files' }, 
+        { name: 'trip_plans_images' },
+        { name: 'room_photos', maxCount: 10 } // Add room_photos for gallery images
+      ],
       {
-        storage: diskStorage({
-          destination:
-            appConfig().storageUrl.rootUrl +
-            '/' +
-            appConfig().storageUrl.package,
-          filename: (req, file, cb) => {
-            const randomName = Array(32)
-              .fill(null)
-              .map(() => Math.round(Math.random() * 16).toString(16))
-              .join('');
-            return cb(null, `${randomName}${file.originalname}`);
-          },
-        }),
+        storage: memoryStorage(), // Use memory storage to get file buffer
+        limits: {
+          fileSize: 10 * 1024 * 1024, // 10MB limit
+          files: 20 // Total files limit
+        },
+        fileFilter: (req, file, cb) => {
+          // Allow only image files
+          if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+          } else {
+            cb(new Error('Only image files are allowed'), false);
+          }
+        }
       },
     ),
   )
@@ -98,11 +103,18 @@ export class VendorPackageController {
     files?: {
       package_files?: Express.Multer.File[];
       trip_plans_images?: Express.Multer.File[];
+      room_photos?: Express.Multer.File[]; // Add room_photos files
     },
   ) {
     try {
       const user_id = req.user.userId;
-      console.log(user_id);
+      console.log('User ID:', user_id);
+      console.log('Files received:', {
+        package_files: files?.package_files?.length || 0,
+        trip_plans_images: files?.trip_plans_images?.length || 0,
+        room_photos: files?.room_photos?.length || 0
+      });
+      
       const result = await this.vendorPackageService.createWithFiles(
         createVendorPackageDto, 
         user_id, 
@@ -110,6 +122,7 @@ export class VendorPackageController {
       );
       return result;
     } catch (error) {
+      console.error('Create package error:', error);
       return {
         success: false,
         message: error.message,
@@ -123,21 +136,25 @@ export class VendorPackageController {
   @Patch(':id')
   @UseInterceptors(
     FileFieldsInterceptor(
-      [{ name: 'package_files' }, { name: 'trip_plans_images' }],
+      [
+        { name: 'package_files' }, 
+        { name: 'trip_plans_images' },
+        { name: 'room_photos', maxCount: 10 } // Add room_photos for gallery images
+      ],
       {
-        storage: diskStorage({
-          destination:
-            appConfig().storageUrl.rootUrl +
-            '/' +
-            appConfig().storageUrl.package,
-          filename: (req, file, cb) => {
-            const randomName = Array(32)
-              .fill(null)
-              .map(() => Math.round(Math.random() * 16).toString(16))
-              .join('');
-            return cb(null, `${randomName}${randomName}${file.originalname}`);
-          },
-        }),
+        storage: memoryStorage(), // Use memory storage to get file buffer
+        limits: {
+          fileSize: 10 * 1024 * 1024, // 10MB limit
+          files: 20 // Total files limit
+        },
+        fileFilter: (req, file, cb) => {
+          // Allow only image files
+          if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+          } else {
+            cb(new Error('Only image files are allowed'), false);
+          }
+        }
       },
     ),
   )
@@ -149,6 +166,7 @@ export class VendorPackageController {
     files?: {
       package_files?: Express.Multer.File[];
       trip_plans_images?: Express.Multer.File[];
+      room_photos?: Express.Multer.File[]; // Add room_photos files
     },
   ) {
     try {
