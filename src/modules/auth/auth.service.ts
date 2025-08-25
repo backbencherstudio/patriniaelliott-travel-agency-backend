@@ -26,19 +26,7 @@ export class AuthService {
       const user = await this.prisma.user.findFirst({
         where: {
           id: userId,
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          avatar: true,
-          address: true,
-          phone_number: true,
-          type: true,
-          gender: true,
-          date_of_birth: true,
-          created_at: true,
-        },
+        }
       });
 
       if (!user) {
@@ -53,11 +41,11 @@ export class AuthService {
           appConfig().storageUrl.avatar + user.avatar,
         );
       }
-
+      const {password:_, ...result} = user;
       if (user) {
         return {
           success: true,
-          data: user,
+          data: result,
         };
       } else {
         return {
