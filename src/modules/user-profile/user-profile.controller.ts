@@ -5,6 +5,7 @@ import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Request } from 'express';
 import { ApiOperation } from '@nestjs/swagger';
+import { CreateUserCardDto } from './dto/create-user-card.dto';
 
 @Controller('user-profile')
 @UseGuards(JwtAuthGuard)
@@ -28,8 +29,49 @@ export class UserProfileController {
     }
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.userProfileService.remove(+id);
+  @Delete('/delete')
+  async remove(@Req() req: Request) {
+    try {
+      const user_id = req.user.userId;
+      return this.userProfileService.remove(user_id);
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to delete user profile',
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Add user card details' })
+  @Post('/card')
+  async addCard(
+    @Req() req: Request,
+    @Body() createUserCardDto: CreateUserCardDto,
+  ) {
+    try {
+      const user_id = req.user.userId;
+      return this.userProfileService.addCard(user_id, createUserCardDto);
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to save card',
+      };
+    }
+  }
+
+  @Delete('/card/:cardId')
+  async deleteCard(
+    @Req() req: Request,
+    @Param('cardId') cardId: string,
+  ) {
+    try {
+      const user_id = req.user.userId;
+      return this.userProfileService.deleteCard(user_id, cardId);
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to delete card',
+      };
+    }
   }
 }

@@ -72,6 +72,11 @@ export class DashboardService {
           type: 'vendor',
         },
       });
+      const totalAdmins = await this.prisma.user.count({
+        where: {
+          type: 'admin',
+        },
+      });
       const totalRevenue = await this.prisma.booking.aggregate({
         where: {
           ...where_condition,
@@ -141,6 +146,7 @@ export class DashboardService {
           total_bookings: totalBookings,
           total_users: totalUsers,
           total_vendors: totalVendors,
+          total_admins: totalAdmins,
           total_revenue: totalRevenue._sum.total_amount,
           revenue_per_month: revenuePerMonthMap,
           confirmed_bookings: confirmedBookings,
