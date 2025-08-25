@@ -36,9 +36,9 @@ export class VendorVerificationService {
 
     // Automatically convert user to vendor if status is approved
     // (step-based conversion happens in updateVerification when step reaches 5)
-    if (verification.status === 'approved') {
-      await UserRepository.convertTo(userId, 'vendor');
-    }
+    // if (verification.status === 'approved') {
+    //   await UserRepository.convertTo(userId, 'vendor');
+    // }
 
     return {
       success: true,

@@ -39,7 +39,7 @@ export class VendorVerificationController {
   async getRefundDetails(@Req() req: Request, @Param('id') id: string) {
     const userId = req.user.userId;
     return this.vendorVerificationService.getRefundDetails(userId, id);
-  }
+  }        
 
   @Get('bookings')
   @ApiOperation({ summary: 'Get vendor bookings' })
