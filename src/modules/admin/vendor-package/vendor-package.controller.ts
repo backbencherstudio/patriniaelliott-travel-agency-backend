@@ -28,18 +28,35 @@ import { diskStorage } from 'multer';
 import appConfig from '../../../config/app.config';
 import { SearchPackagesDto } from './dto/search-packages.dto';
 import { memoryStorage } from 'multer';
+import { 
+  CalendarQueryDto,
+  SingleDateUpdateDto,
+  BulkDateRangeUpdateDto,
+  CalendarInitDto
+} from './dto/calendar-availability.dto';
 
 @ApiTags('VendorPackage')
 @Controller('admin/vendor-package')
 export class VendorPackageController {
   constructor(private readonly vendorPackageService: VendorPackageService) {}
 
-  @ApiOperation({ summary: 'get vendor package' })
+  // Enhanced getVendorPackage with calendar support
+  @ApiOperation({ summary: 'Get vendor packages with optional calendar data' })
   @Get()
-  async getVendorPackage(@Query() query: GetVendorPackageDto, @Req() req: any) {
+  async getVendorPackage(
+    @Query() query: GetVendorPackageDto & CalendarQueryDto, 
+    @Req() req: any
+  ) {
     const page = parseInt(query.page?.toString() || '1', 10);
     const limit = parseInt(query.limit?.toString() || '10', 10);
-    const user_id = req.user?.userId || null; // Make user_id optional
+    const user_id = req.user?.userId || null;
+    
+    // Handle multiple type parameters
+    const types = Array.isArray(query.type) ? query.type : 
+                  (typeof query.type === 'string' && query.type.includes(',')) ? 
+                  query.type.split(',').map(t => t.trim()) : 
+                  query.type ? [query.type] : undefined;
+    
     return this.vendorPackageService.getVendorPackage(
       page, 
       limit, 
@@ -49,7 +66,7 @@ export class VendorPackageController {
         status: query.status, 
         categoryId: query.category_id, 
         destinationId: query.destination_id,
-        type: query.type,
+        type: types,
         freeCancellation: query.free_cancellation,
         languages: query.languages,
         ratings: query.ratings,
@@ -61,11 +78,14 @@ export class VendorPackageController {
     );
   }
 
-  @ApiOperation({ summary: 'get vendor package by id' })
+  // Enhanced get by ID with calendar data
+  @ApiOperation({ summary: 'Get vendor package by ID with calendar data' })
   @Get(':id')
-  async getVendorIdWise(@Param('id') id: string) {  
-    const user_id = id;
-    return this.vendorPackageService.getVendorIdWise(user_id);
+  async getVendorIdWise(
+    @Param('id') id: string,
+    @Query() calendarQuery: CalendarQueryDto
+  ) {  
+    return this.vendorPackageService.getVendorIdWise(id);
   }
 
   // Create with file upload (from PackageController)
@@ -306,6 +326,128 @@ export class VendorPackageController {
         packageId,
         reviewId,
         user_id,
+      );
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  // ===== PROPERTY CALENDAR ENDPOINTS =====
+
+  @ApiOperation({ summary: 'Initialize calendar for a package' })
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/calendar/init')
+  async initializeCalendar(
+    @Param('id') packageId: string,
+    @Body() calendarInitDto: CalendarInitDto,
+    @Req() req: any
+  ) {
+    try {
+      const user_id = req.user.userId;
+      return await this.vendorPackageService.initializePropertyCalendar(
+        packageId,
+        user_id,
+        calendarInitDto
+      );
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Get calendar data for a specific package' })
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/calendar')
+  async getPackageCalendar(
+    @Param('id') packageId: string,
+    @Query() query: CalendarQueryDto,
+    @Req() req: any
+  ) {
+    try {
+      const user_id = req.user.userId;
+      return await this.vendorPackageService.getPropertyCalendarData(
+        packageId,
+        user_id,
+        query.calendar_month,
+        query.room_type_id
+      );
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Update single date in calendar' })
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/calendar/date')
+  async updateSingleDate(
+    @Param('id') packageId: string,
+    @Body() updateDto: SingleDateUpdateDto,
+    @Req() req: any
+  ) {
+    try {
+      const user_id = req.user.userId;
+      return await this.vendorPackageService.updatePropertyCalendarDate(
+        packageId,
+        user_id,
+        updateDto
+      );
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Update calendar for date range (bulk operation)' })
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/calendar/bulk')
+  async updateBulkCalendar(
+    @Param('id') packageId: string,
+    @Body() bulkUpdateDto: BulkDateRangeUpdateDto,
+    @Req() req: any
+  ) {
+    try {
+      const user_id = req.user.userId;
+      return await this.vendorPackageService.updatePropertyCalendarBulk(
+        packageId,
+        user_id,
+        bulkUpdateDto
+      );
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Get calendar summary for a package' })
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/calendar/summary')
+  async getCalendarSummary(
+    @Param('id') packageId: string,
+    @Query('start_date') startDate: string,
+    @Query('end_date') endDate: string,
+    @Req() req: any,
+    @Query('room_type_id') roomTypeId?: string
+  ) {
+    try {
+      const user_id = req.user.userId;
+      return await this.vendorPackageService.getPropertyCalendarSummary(
+        packageId,
+        user_id,
+        new Date(startDate),
+        new Date(endDate),
+        roomTypeId
       );
     } catch (error) {
       return {

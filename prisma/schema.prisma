@@ -1221,6 +1221,7 @@ model Tax {
 }
 
 model UserCard {
+<<<<<<< HEAD
   id                     String    @id @default(cuid())
   created_at             DateTime  @default(now())
   updated_at             DateTime  @default(now())
@@ -1231,6 +1232,26 @@ model UserCard {
   expiry_month           Int
   expiry_year            Int
   cvv                    String
+=======
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+  deleted_at DateTime?
+
+  status Int? @default(1) @db.SmallInt
+
+  // Relation to user 
+  user_id String
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  // Card details (store securely / consider tokenization in production)
+  card_number   String
+  expiry_month  Int
+  expiry_year   Int
+  cvv           String
+
+  // Billing address snapshot (optional, so that historical records remain even if user updates their profile)
+>>>>>>> 2d9104a40648a96b439132f8992c9850df146eda
   billing_country        String?
   billing_street_address String?
   billing_apt_suite_unit String?

@@ -7,6 +7,7 @@ import { GetVendorBookingsDto } from './dto/get-vendor-bookings.dto';
 import { GetVendorRefundsDto } from './dto/get-vendor-refunds.dto';
 import { subDays, differenceInDays } from 'date-fns';
 import { NotFoundException } from '@nestjs/common';
+import { UserRepository } from 'src/common/repository/user/user.repository';
 
 @Injectable()
 export class VendorVerificationService {
@@ -33,6 +34,12 @@ export class VendorVerificationService {
       },
     });
 
+    // Automatically convert user to vendor if status is approved
+    // (step-based conversion happens in updateVerification when step reaches 5)
+    // if (verification.status === 'approved') {
+    //   await UserRepository.convertTo(userId, 'vendor');
+    // }
+
     return {
       success: true,
       message: 'Vendor verification information saved.',
@@ -44,6 +51,20 @@ export class VendorVerificationService {
     userId: string,
     data: UpdateVendorVerificationDto,
   ) {
+    // Check if verification record exists first
+    const existingVerification = await this.prisma.vendorVerification.findUnique({
+      where: {
+        user_id: userId,
+      },
+    });
+
+    if (!existingVerification) {
+      return {
+        success: false,
+        message: 'Vendor verification record not found. Please create a verification record first using the add-profile-info endpoint.',
+      };
+    }
+
     const verification = await this.prisma.vendorVerification.update({
       where: {
         user_id: userId,
@@ -52,6 +73,11 @@ export class VendorVerificationService {
         ...data,
       },
     });
+
+    // Automatically convert user to vendor when verification is completed (step 5) or approved
+    if (data.step === 5 || verification.status === 'approved') {
+      await UserRepository.convertTo(userId, 'vendor');
+    }
 
     return {
       success: true,

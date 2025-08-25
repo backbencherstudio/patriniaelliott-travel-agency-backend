@@ -9,6 +9,13 @@ import { SearchPackagesDto } from './dto/search-packages.dto';
 import { SojebStorage } from '../../../common/lib/Disk/SojebStorage';
 import * as fs from 'fs';
 import * as path from 'path';
+import { 
+  CalendarQueryDto,
+  SingleDateUpdateDto,
+  BulkDateRangeUpdateDto,
+  CalendarInitDto,
+  CalendarStatus
+} from './dto/calendar-availability.dto';
 
 
 @Injectable()
@@ -41,7 +48,7 @@ export class VendorPackageService {
       status?: number;
       categoryId?: string;
       destinationId?: string;
-      type?: string;
+      type?: string | string[]; // Allow both string and array
       freeCancellation?: boolean;
       languages?: string[];
       ratings?: number[];
@@ -92,7 +99,7 @@ export class VendorPackageService {
 
     // Add type filter
     if (searchParams?.type) {
-      where.type = searchParams.type;
+      where.type = Array.isArray(searchParams.type) ? searchParams.type[0] : searchParams.type;
     }
 
     // Add free cancellation filter
@@ -202,13 +209,13 @@ export class VendorPackageService {
           package_languages: {
             include: { language: { select: { id: true, name: true, code: true } } },
           },
-          package_extra_services: {
-            include: { 
-              extra_service: { 
-                select: { id: true, name: true, price: true, description: true } 
-              } 
-            },
+                  package_extra_services: {
+          include: { 
+            extra_service: { 
+              select: { id: true, name: true, price: true, description: true } 
+            } 
           },
+        },
         },
       }),
       this.prisma.package.count({ where }),
@@ -331,6 +338,14 @@ export class VendorPackageService {
         approved_date: approvedDate,
       } as any;
     });
+
+    // Add calendar configuration to each package
+    for (const pkg of processedData) {
+      const calendarConfig = await this.getCalendarConfiguration(pkg.id);
+      if (calendarConfig) {
+        (pkg as any).calendar_configuration = calendarConfig;
+      }
+    }
 
     
 
@@ -487,6 +502,12 @@ export class VendorPackageService {
     };
 
     const allRoomPhotos = processedData.package_room_types.flatMap(roomType => roomType.room_photos || []);
+
+    // Add calendar configuration
+    const calendarConfig = await this.getCalendarConfiguration(processedData.id);
+    if (calendarConfig) {
+      (processedData as any).calendar_configuration = calendarConfig;
+    }
 
     console.log('Found package:', processedData);
     return {
@@ -677,7 +698,17 @@ export class VendorPackageService {
       });
 
       // Extract nested data from DTO
-      const { package_room_types, package_availabilities, extra_services, ...packageData } = createVendorPackageDto;
+      const { 
+        package_room_types, 
+        package_availabilities, 
+        extra_services, 
+        initialize_calendar,
+        calendar_start_date,
+        calendar_end_date,
+        close_dates,
+        close_date_ranges,
+        ...packageData 
+      } = createVendorPackageDto;
       
       console.log('Extracted DTO data:', {
         hasPackageRoomTypes: !!package_room_types,
@@ -819,6 +850,40 @@ export class VendorPackageService {
         },
       });
 
+      // Store calendar configuration
+      await this.storeCalendarConfiguration(
+        result.id,
+        createVendorPackageDto.calendar_start_date,
+        createVendorPackageDto.calendar_end_date,
+        createVendorPackageDto.close_dates,
+        createVendorPackageDto.close_date_ranges
+      );
+
+      // Initialize PropertyCalendar with close dates if requested
+      if (createVendorPackageDto.initialize_calendar !== false) {
+        await this.initializePropertyCalendarWithCloseDates(
+          result.id, 
+          user_id, 
+          createVendorPackageDto.calendar_start_date, 
+          createVendorPackageDto.calendar_end_date,
+          createVendorPackageDto.close_dates,
+          createVendorPackageDto.close_date_ranges
+        );
+        
+        // Verify calendar creation by fetching some records
+        const calendarRecords = await this.prisma.propertyCalendar.findMany({
+          where: { package_id: result.id },
+          take: 5,
+          orderBy: { date: 'asc' }
+        });
+        console.log('=== Calendar Verification ===');
+        console.log('Calendar records created:', calendarRecords.length);
+        console.log('Sample calendar records:', calendarRecords);
+      }
+
+      // Get calendar configuration
+      const calendarConfig = await this.getCalendarConfiguration(result.id);
+
       // Post-process to attach public URLs using existing image function
       const processedResult = {
         ...result,
@@ -859,6 +924,8 @@ export class VendorPackageService {
                 : null,
             }
           : null,
+        // Add calendar configuration
+        calendar_configuration: calendarConfig,
       };
 
       return {
@@ -1471,6 +1538,664 @@ export class VendorPackageService {
       };
     } catch (error) {
       throw new Error(`Failed to get package rating summary: ${error.message}`);
+    }
+  }
+
+  // Enhanced create with PropertyCalendar initialization
+  async createWithCalendar(
+    createVendorPackageDto: CreateVendorPackageDto, 
+    userId: string, 
+    files?: any
+  ) {
+    try {
+      // First create the package using existing logic
+      const packageResult = await this.createWithFiles(createVendorPackageDto, userId, files);
+      
+      if (!packageResult.success) {
+        return packageResult;
+      }
+
+      const packageId = packageResult.data.id;
+
+      // Initialize PropertyCalendar with default availability for next 12 months
+      await this.initializePropertyCalendarDefault(packageId, userId);
+
+      return {
+        ...packageResult,
+        message: 'Package created successfully with PropertyCalendar initialized'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  // Initialize PropertyCalendar with default settings
+  private async initializePropertyCalendarDefault(packageId: string, userId: string) {
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setMonth(endDate.getMonth() + 12); // 12 months ahead
+
+    const dates = this.generateDateRange(startDate, endDate);
+    
+    const calendarData = dates.map(date => ({
+      package_id: packageId,
+      date: date,
+      status: 'available',
+      reason: null,
+      room_type_id: null
+    }));
+
+    // Batch insert PropertyCalendar records
+    await this.prisma.propertyCalendar.createMany({
+      data: calendarData
+    });
+  }
+
+  // Initialize PropertyCalendar with custom date range
+  async initializePropertyCalendar(
+    packageId: string,
+    userId: string,
+    calendarInitDto: CalendarInitDto
+  ) {
+    try {
+      // Verify package ownership
+      const packageData = await this.prisma.package.findFirst({
+        where: {
+          id: packageId,
+          user_id: userId,
+          deleted_at: null
+        }
+      });
+
+      if (!packageData) {
+        throw new Error('Package not found or access denied');
+      }
+
+      // Validate date range
+      if (calendarInitDto.end_date <= calendarInitDto.start_date) {
+        throw new Error('End date must be after start date');
+      }
+
+      const dates = this.generateDateRange(calendarInitDto.start_date, calendarInitDto.end_date);
+      
+      const calendarData = dates.map(date => ({
+        package_id: packageId,
+        date: date,
+        status: 'available',
+        reason: null,
+        room_type_id: calendarInitDto.room_type_id || null
+      }));
+
+      // Batch insert PropertyCalendar records
+      await this.prisma.propertyCalendar.createMany({
+        data: calendarData
+      });
+
+      return {
+        success: true,
+        data: {
+          packageId,
+          dateRange: {
+            start: calendarInitDto.start_date,
+            end: calendarInitDto.end_date
+          },
+          totalDates: dates.length
+        },
+        message: `Calendar initialized for ${dates.length} dates`
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  // Get PropertyCalendar data for a package
+  async getPropertyCalendarData(
+    packageId: string, 
+    userId: string, 
+    month: string, 
+    roomTypeId?: string
+  ) {
+    try {
+      // Verify package ownership
+      const packageData = await this.prisma.package.findFirst({
+        where: {
+          id: packageId,
+          user_id: userId,
+          deleted_at: null
+        }
+      });
+
+      if (!packageData) {
+        throw new Error('Package not found or access denied');
+      }
+
+      return await this.getCalendarDataForPackage(packageId, month, roomTypeId);
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  // Helper method to get calendar data for a package
+  private async getCalendarDataForPackage(
+    packageId: string,
+    month: string,
+    roomTypeId?: string
+  ) {
+    // Parse month (YYYY-MM format)
+    const [year, monthNum] = month.split('-').map(Number);
+    const startDate = new Date(year, monthNum - 1, 1);
+    const endDate = new Date(year, monthNum, 0); // Last day of month
+
+    // Build where condition
+    const where: any = {
+      package_id: packageId,
+      date: {
+        gte: startDate,
+        lte: endDate
+      }
+    };
+
+    if (roomTypeId) {
+      where.room_type_id = roomTypeId;
+    }
+
+    // Get PropertyCalendar data for the month
+    const calendarData = await this.prisma.propertyCalendar.findMany({
+      where,
+      orderBy: {
+        date: 'asc'
+      },
+      include: {
+        room_type: {
+          select: {
+            id: true,
+            name: true,
+            price: true
+          }
+        }
+      }
+    });
+
+    // Get room types if specified
+    const roomTypes = roomTypeId ? 
+      await this.prisma.packageRoomType.findMany({
+        where: {
+          package_id: packageId,
+          id: roomTypeId
+        }
+      }) :
+      await this.prisma.packageRoomType.findMany({
+        where: {
+          package_id: packageId
+        }
+      });
+
+    // Format calendar data
+    return {
+      success: true,
+      data: {
+        month: month,
+        year: year,
+        monthNumber: monthNum,
+        totalDays: endDate.getDate(),
+        startDate: startDate,
+        endDate: endDate,
+        calendar: calendarData.map(entry => ({
+          date: entry.date,
+          status: entry.status,
+          reason: entry.reason,
+          room_type: entry.room_type,
+          room_type_id: entry.room_type_id
+        })),
+        roomTypes: roomTypes
+      }
+    };
+  }
+
+  // Update single date in PropertyCalendar
+  async updatePropertyCalendarDate(
+    packageId: string,
+    userId: string,
+    updateDto: SingleDateUpdateDto
+  ) {
+    try {
+      // Verify package ownership
+      const packageData = await this.prisma.package.findFirst({
+        where: {
+          id: packageId,
+          user_id: userId,
+          deleted_at: null
+        }
+      });
+
+      if (!packageData) {
+        throw new Error('Package not found or access denied');
+      }
+
+      // Check if PropertyCalendar record exists
+      let calendarEntry = await this.prisma.propertyCalendar.findFirst({
+        where: {
+          package_id: packageId,
+          date: updateDto.date,
+          room_type_id: updateDto.room_type_id || null
+        }
+      });
+
+      if (calendarEntry) {
+        // Update existing record
+        calendarEntry = await this.prisma.propertyCalendar.update({
+          where: { id: calendarEntry.id },
+          data: {
+            status: updateDto.status,
+            reason: updateDto.reason
+          }
+        });
+      } else {
+        // Create new record
+        calendarEntry = await this.prisma.propertyCalendar.create({
+          data: {
+            package_id: packageId,
+            date: updateDto.date,
+            status: updateDto.status,
+            reason: updateDto.reason,
+            room_type_id: updateDto.room_type_id || null
+          }
+        });
+      }
+
+      return {
+        success: true,
+        data: calendarEntry,
+        message: 'Calendar date updated successfully'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  // Update PropertyCalendar for date range (bulk operation)
+  async updatePropertyCalendarBulk(
+    packageId: string,
+    userId: string,
+    bulkUpdateDto: BulkDateRangeUpdateDto
+  ) {
+    try {
+      // Verify package ownership
+      const packageData = await this.prisma.package.findFirst({
+        where: {
+          id: packageId,
+          user_id: userId,
+          deleted_at: null
+        }
+      });
+
+      if (!packageData) {
+        throw new Error('Package not found or access denied');
+      }
+
+      // Validate date range
+      if (bulkUpdateDto.end_date <= bulkUpdateDto.start_date) {
+        throw new Error('End date must be after start date');
+      }
+
+      // Generate date range
+      const dates = this.generateDateRange(
+        bulkUpdateDto.start_date,
+        bulkUpdateDto.end_date
+      );
+
+      // Prepare data for bulk operations
+      const calendarData = dates.map(date => ({
+        package_id: packageId,
+        date: date,
+        status: bulkUpdateDto.status,
+        reason: bulkUpdateDto.reason,
+        room_type_id: bulkUpdateDto.room_type_id || null
+      }));
+
+      // Use upsert to handle both insert and update
+      const results = await Promise.all(
+        calendarData.map(async (data) => {
+          const existingEntry = await this.prisma.propertyCalendar.findFirst({
+            where: {
+              package_id: data.package_id,
+              date: data.date,
+              room_type_id: data.room_type_id
+            }
+          });
+
+          if (existingEntry) {
+            return this.prisma.propertyCalendar.update({
+              where: { id: existingEntry.id },
+              data: {
+                status: data.status,
+                reason: data.reason
+              }
+            });
+          } else {
+            return this.prisma.propertyCalendar.create({
+              data
+            });
+          }
+        })
+      );
+
+      return {
+        success: true,
+        data: {
+          updatedDates: results.length,
+          dateRange: {
+            start: bulkUpdateDto.start_date,
+            end: bulkUpdateDto.end_date
+          },
+          status: bulkUpdateDto.status
+        },
+        message: `Successfully updated ${results.length} calendar dates`
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  // Get PropertyCalendar summary
+  async getPropertyCalendarSummary(
+    packageId: string,
+    userId: string,
+    startDate: Date,
+    endDate: Date,
+    roomTypeId?: string
+  ) {
+    try {
+      // Verify package ownership
+      const packageData = await this.prisma.package.findFirst({
+        where: {
+          id: packageId,
+          user_id: userId,
+          deleted_at: null
+        }
+      });
+
+      if (!packageData) {
+        throw new Error('Package not found or access denied');
+      }
+
+      // Build where condition
+      const where: any = {
+        package_id: packageId,
+        date: {
+          gte: startDate,
+          lte: endDate
+        }
+      };
+
+      if (roomTypeId) {
+        where.room_type_id = roomTypeId;
+      }
+
+      // Get PropertyCalendar data for the date range
+      const calendarData = await this.prisma.propertyCalendar.findMany({
+        where,
+        orderBy: {
+          date: 'asc'
+        }
+      });
+
+      // Calculate summary statistics
+      const totalDays = calendarData.length;
+      const availableDays = calendarData.filter(entry => entry.status === 'available').length;
+      const bookedDays = calendarData.filter(entry => entry.status === 'booked').length;
+      const closedDays = calendarData.filter(entry => entry.status === 'closed').length;
+      const maintenanceDays = calendarData.filter(entry => entry.status === 'maintenance').length;
+
+      return {
+        success: true,
+        data: {
+          dateRange: {
+            start: startDate,
+            end: endDate
+          },
+          summary: {
+            totalDays,
+            availableDays,
+            bookedDays,
+            closedDays,
+            maintenanceDays,
+            availabilityPercentage: (availableDays / totalDays) * 100
+          },
+          calendar: calendarData.map(entry => ({
+            date: entry.date,
+            status: entry.status,
+            reason: entry.reason,
+            room_type_id: entry.room_type_id
+          }))
+        }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  // Helper method to generate date range
+  private generateDateRange(startDate: Date, endDate: Date): Date[] {
+    const dates: Date[] = [];
+    const currentDate = new Date(startDate);
+    
+    while (currentDate <= endDate) {
+      dates.push(new Date(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    return dates;
+  }
+
+  // Method to get PropertyCalendar data for a package
+  async getPropertyCalendarForPackage(packageId: string) {
+    try {
+      const calendarData = await this.prisma.propertyCalendar.findMany({
+        where: { package_id: packageId },
+        orderBy: { date: 'asc' },
+        include: {
+          room_type: {
+            select: {
+              id: true,
+              name: true,
+              price: true
+            }
+          }
+        }
+      });
+
+      return {
+        success: true,
+        data: {
+          packageId,
+          totalDates: calendarData.length,
+          calendar: calendarData.map(entry => ({
+            id: entry.id,
+            date: entry.date,
+            status: entry.status,
+            reason: entry.reason,
+            room_type: entry.room_type,
+            room_type_id: entry.room_type_id
+          }))
+        }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  // Store calendar configuration in PropertyCalendar table
+  private async storeCalendarConfiguration(
+    packageId: string,
+    startDate?: Date,
+    endDate?: Date,
+    closeDates?: Date[],
+    closeDateRanges?: Array<{start_date: Date; end_date: Date; reason?: string}>
+  ) {
+    try {
+      // Create a special PropertyCalendar record to store configuration
+      const configRecord = await this.prisma.propertyCalendar.create({
+        data: {
+          package_id: packageId,
+          date: new Date('1900-01-01'), // Special date to identify config record
+          status: 'config',
+          reason: JSON.stringify({
+            calendar_start_date: startDate,
+            calendar_end_date: endDate,
+            close_dates: closeDates,
+            close_date_ranges: closeDateRanges
+          }),
+          room_type_id: null
+        }
+      });
+      
+      console.log('Calendar configuration stored:', configRecord);
+      return configRecord;
+    } catch (error) {
+      console.error('Failed to store calendar configuration:', error);
+    }
+  }
+
+  // Retrieve calendar configuration from PropertyCalendar table
+  private async getCalendarConfiguration(packageId: string) {
+    try {
+      const configRecord = await this.prisma.propertyCalendar.findFirst({
+        where: {
+          package_id: packageId,
+          date: new Date('1900-01-01'),
+          status: 'config'
+        }
+      });
+
+      if (configRecord && configRecord.reason) {
+        return JSON.parse(configRecord.reason);
+      }
+      return null;
+    } catch (error) {
+      console.error('Failed to get calendar configuration:', error);
+      return null;
+    }
+  }
+
+  private async initializePropertyCalendarWithCloseDates(
+    packageId: string, 
+    userId: string, 
+    startDate?: Date, 
+    endDate?: Date,
+    closeDates?: Date[],
+    closeDateRanges?: Array<{start_date: Date; end_date: Date; reason?: string}>
+  ) {
+    try {
+      console.log('=== Calendar Initialization Debug ===');
+      console.log('Package ID:', packageId);
+      console.log('Start Date:', startDate);
+      console.log('End Date:', endDate);
+      console.log('Close Dates:', closeDates);
+      console.log('Close Date Ranges:', closeDateRanges);
+
+      // Use provided dates or default to next 12 months
+      const calendarStart = startDate || new Date();
+      const calendarEnd = endDate || (() => {
+        const end = new Date();
+        end.setMonth(end.getMonth() + 12);
+        return end;
+      })();
+
+      console.log('Calendar Start:', calendarStart);
+      console.log('Calendar End:', calendarEnd);
+
+      const dates = this.generateDateRange(calendarStart, calendarEnd);
+      console.log('Generated dates count:', dates.length);
+      
+      // Create calendar data with close dates
+      const calendarData = dates.map(date => {
+        let status = 'available';
+        let reason = null;
+
+        // Check if date is in close_dates
+        if (closeDates && closeDates.length > 0) {
+          const isCloseDate = closeDates.some(closeDate => {
+            const closeDateStr = new Date(closeDate).toDateString();
+            const currentDateStr = date.toDateString();
+            return closeDateStr === currentDateStr;
+          });
+          
+          if (isCloseDate) {
+            status = 'closed';
+            reason = 'Closed date';
+          }
+        }
+
+        // Check if date is in close_date_ranges
+        if (closeDateRanges && closeDateRanges.length > 0) {
+          for (const range of closeDateRanges) {
+            const rangeStart = new Date(range.start_date);
+            const rangeEnd = new Date(range.end_date);
+            
+            if (date >= rangeStart && date <= rangeEnd) {
+              status = 'closed';
+              reason = range.reason || 'Closed for maintenance';
+              break;
+            }
+          }
+        }
+
+        return {
+          package_id: packageId,
+          date: date,
+          status: status,
+          reason: reason,
+          room_type_id: null
+        };
+      });
+
+      console.log('Calendar data prepared:', calendarData.length, 'records');
+      console.log('Sample calendar data:', calendarData.slice(0, 3));
+
+      // Batch insert PropertyCalendar records
+      const result = await this.prisma.propertyCalendar.createMany({
+        data: calendarData
+      });
+
+      console.log('PropertyCalendar createMany result:', result);
+      console.log(`Calendar initialized for package ${packageId} with ${dates.length} dates`);
+      
+      if (closeDates && closeDates.length > 0) {
+        console.log(`Closed ${closeDates.length} specific dates`);
+      }
+      if (closeDateRanges && closeDateRanges.length > 0) {
+        console.log(`Closed ${closeDateRanges.length} date ranges`);
+      }
+    } catch (error) {
+      console.error('Failed to initialize calendar:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        code: error.code
+      });
+      // Don't throw error to avoid breaking package creation
     }
   }
 }

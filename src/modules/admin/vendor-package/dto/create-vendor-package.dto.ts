@@ -478,5 +478,37 @@ export class CreateVendorPackageDto {
   @ValidateNested({ each: true })
   @Type(() => ExtraServiceDto)
   extra_services?: ExtraServiceDto[];
+
+  @ApiProperty({ required: false, description: 'Calendar start date' })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  calendar_start_date?: Date;
+
+  @ApiProperty({ required: false, description: 'Calendar end date' })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  calendar_end_date?: Date;
+
+  @ApiProperty({ required: false, description: 'Initialize calendar automatically', default: true })
+  @IsOptional()
+  @IsBoolean()
+  initialize_calendar?: boolean = true;
+
+  @ApiProperty({ required: false, description: 'Close specific dates', type: [Date] })
+  @IsOptional()
+  @IsArray()
+  @Type(() => Date)
+  close_dates?: Date[];
+
+  @ApiProperty({ required: false, description: 'Close date ranges', type: [Object] })
+  @IsOptional()
+  @IsArray()
+  close_date_ranges?: Array<{
+    start_date: Date;
+    end_date: Date;
+    reason?: string;
+  }>;
 }
 
