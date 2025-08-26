@@ -258,6 +258,12 @@ export class CreateVendorPackageDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.toLowerCase();
+    }
+    return value;
+  })
   type?: string;
 
   @ApiProperty({ required: false })

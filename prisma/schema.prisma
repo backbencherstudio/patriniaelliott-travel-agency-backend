@@ -368,7 +368,7 @@ model Package {
   booking_method          String?                    @default("instant")
   breakfast_available     Boolean?                   @default(false)
   check_in                Json?
-  check_out               String?
+  check_out               Json?
   city                    String?
   commission_rate         Decimal?                   @default(15.0)
   country                 String?
@@ -382,6 +382,8 @@ model Package {
   rate_plans              Json?
   size_sqm                Float?
   unit_number             String?
+  non_refundable_days     Json?
+  
   package_availabilities  PackageAvailability[]
   booking_items           BookingItem[]
   checkout_extraServices  CheckoutExtraService[]
@@ -1221,18 +1223,6 @@ model Tax {
 }
 
 model UserCard {
-<<<<<<< HEAD
-  id                     String    @id @default(cuid())
-  created_at             DateTime  @default(now())
-  updated_at             DateTime  @default(now())
-  deleted_at             DateTime?
-  status                 Int?      @default(1) @db.SmallInt
-  user_id                String
-  card_number            String
-  expiry_month           Int
-  expiry_year            Int
-  cvv                    String
-=======
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
   updated_at DateTime @default(now())
@@ -1251,14 +1241,12 @@ model UserCard {
   cvv           String
 
   // Billing address snapshot (optional, so that historical records remain even if user updates their profile)
->>>>>>> 2d9104a40648a96b439132f8992c9850df146eda
   billing_country        String?
   billing_street_address String?
   billing_apt_suite_unit String?
   billing_state          String?
   billing_city           String?
   billing_zip_code       String?
-  user                   User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("user_cards")
 }

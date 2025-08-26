@@ -737,16 +737,35 @@ export class VendorPackageService {
         ...packageData 
       } = createVendorPackageDto;
       
+      // Extract room_photos separately to avoid including it in package data
+      let roomPhotosFromDto = (createVendorPackageDto as any).room_photos;
+      
+      // If room_photos is a string, try to parse it as JSON
+      if (typeof roomPhotosFromDto === 'string') {
+        try {
+          roomPhotosFromDto = JSON.parse(roomPhotosFromDto);
+        } catch (error) {
+          console.log('Failed to parse room_photos string:', error);
+          roomPhotosFromDto = [];
+        }
+      }
+      
+      // Filter out room_photos from packageData to prevent it from being included in the main package
+      const { room_photos: _, ...cleanPackageData } = packageData as any
+      if (cleanPackageData.type) {
+        cleanPackageData.type = cleanPackageData.type.toLowerCase();
+      }
+      
       console.log('Extracted DTO data:', {
         hasPackageRoomTypes: !!package_room_types,
         packageRoomTypesLength: package_room_types?.length || 0,
         roomPhotosLength: room_photos.length,
-        packageData: Object.keys(packageData)
+        packageData: Object.keys(cleanPackageData)
       });
 
       // Build the data object for Prisma
       const data: any = {
-        ...packageData,
+        ...cleanPackageData,
         user: { connect: { id: user_id } },
         // Create package files
         package_files: {
@@ -805,18 +824,38 @@ export class VendorPackageService {
             };
           })
         };
-      } else if (room_photos.length > 0) {
-        // If no room types provided but room_photos are uploaded, create a default room type
-        console.log('No room types provided, but room photos uploaded. Creating default room type.');
+      } else if (room_photos.length > 0 || roomPhotosFromDto) {
+        // If no room types provided but room_photos are uploaded or provided in DTO, create a default room type
+        console.log('No room types provided, but room photos available. Creating default room type.');
+        
+        let photosToUse;
+        if (room_photos.length > 0) {
+          photosToUse = room_photos;
+        } else if (roomPhotosFromDto) {
+          // If roomPhotosFromDto is an array of objects with file paths, extract the paths
+          if (Array.isArray(roomPhotosFromDto)) {
+            photosToUse = roomPhotosFromDto.map((photo: any) => {
+              if (typeof photo === 'string') {
+                return photo;
+              } else if (photo && typeof photo === 'object' && photo.path) {
+                return photo.path;
+              }
+              return photo;
+            });
+          } else {
+            photosToUse = roomPhotosFromDto;
+          }
+        }
+        
         data.package_room_types = {
           create: [{
             name: 'Default Room',
             description: 'Default room type with uploaded photos',
-            price: packageData.price || 0,
+            price: cleanPackageData.price || 0,
             currency: 'USD',
             is_default: true,
             is_available: true,
-            room_photos: room_photos
+            room_photos: photosToUse
           }]
         };
       }
@@ -1061,6 +1100,12 @@ export class VendorPackageService {
 
       // Extract nested data from DTO
       const { package_room_types, package_availabilities, ...packageData } = updateVendorPackageDto;
+      
+      // Normalize the type field to ensure consistent formatting
+      if (packageData.type) {
+        // Convert to lowercase for consistency
+        packageData.type = packageData.type.toLowerCase();
+      }
       
       console.log('PUT Update - Extracted DTO data:', {
         hasPackageRoomTypes: !!package_room_types,
