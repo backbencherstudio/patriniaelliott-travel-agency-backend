@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { QueryPackageDto } from './dto/query-package.dto';
 import { UpdateReviewDto } from 'src/modules/admin/reviews/dto/update-review.dto';
 import { SearchPackagesDto } from '../../admin/vendor-package/dto/search-packages.dto';
+import { EnhancedSearchDto } from './dto/enhanced-search.dto';
 
 @ApiTags('Package')
 @Controller('application/packages')
@@ -29,6 +30,52 @@ export class PackageController {
   async searchPackages(@Query() searchDto: SearchPackagesDto) {
     try {
       return await this.packageService.searchPackages(searchDto);
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Enhanced search with advanced filters (location, name, budget, ratings, etc.)' })
+  @Get('enhanced-search')
+  async enhancedSearch(@Query() searchDto: EnhancedSearchDto) {
+    try {
+      console.log('Enhanced search request:', searchDto);
+      const result = await this.packageService.enhancedSearch(searchDto);
+      console.log('Enhanced search result count:', result.data?.packages?.length || 0);
+      return result;
+    } catch (error) {
+      console.error('Enhanced search error:', error);
+      return {
+        success: false,
+        message: error.message,
+        error: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Debug cancellation policies' })
+  @Get('debug-cancellation')
+  async debugCancellationPolicies() {
+    try {
+      return await this.packageService.debugCancellationPolicies();
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Debug budget filtering' })
+  @Get('debug-budget')
+  async debugBudgetFiltering(@Query('budget_start') budget_start?: string, @Query('budget_end') budget_end?: string) {
+    try {
+      const budgetStart = budget_start ? Number(budget_start) : undefined;
+      const budgetEnd = budget_end ? Number(budget_end) : undefined;
+      return await this.packageService.debugBudgetFiltering(budgetStart, budgetEnd);
     } catch (error) {
       return {
         success: false,
@@ -77,7 +124,7 @@ export class PackageController {
 
   // @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get package by id' })
-  @Get(':id')
+  @Get('package/:id')
   async findOne(@Param('id') id: string) {
     try {
       const record = await this.packageService.findOne(id);

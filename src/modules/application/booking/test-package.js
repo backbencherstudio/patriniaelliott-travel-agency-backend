@@ -12,7 +12,7 @@ async function testPackage(packageId) {
     console.log(`🔍 Testing package ID: ${packageId}\n`);
 
     // Check if package exists
-    const package = await prisma.package.findFirst({
+    const packageData = await prisma.package.findFirst({
       where: {
         id: packageId,
         status: 1, // Approved packages only
@@ -42,7 +42,7 @@ async function testPackage(packageId) {
       },
     });
 
-    if (!package) {
+    if (!packageData) {
       console.log('❌ Package not found or not available');
       console.log('💡 Possible reasons:');
       console.log('   - Package ID is incorrect');
@@ -52,16 +52,16 @@ async function testPackage(packageId) {
     }
 
     console.log('✅ Package found!');
-    console.log(`   Name: ${package.name}`);
-    console.log(`   Type: ${package.type}`);
-    console.log(`   Price: $${package.price}`);
-    console.log(`   Status: ${package.status}`);
-    console.log(`   Vendor: ${package.user?.name || 'Unknown'} (${package.user?.id})`);
-    console.log(`   Vendor Status: ${package.user?.status}`);
+    console.log(`   Name: ${packageData.name}`);
+    console.log(`   Type: ${packageData.type}`);
+    console.log(`   Price: $${packageData.price}`);
+    console.log(`   Status: ${packageData.status}`);
+    console.log(`   Vendor: ${packageData.user?.name || 'Unknown'} (${packageData.user?.id})`);
+    console.log(`   Vendor Status: ${packageData.user?.status}`);
 
-    if (package.package_room_types.length > 0) {
+    if (packageData.package_room_types.length > 0) {
       console.log(`   Room Types:`);
-      package.package_room_types.forEach(room => {
+      packageData.package_room_types.forEach(room => {
         console.log(`     - ${room.name} (ID: ${room.id}) - $${room.price} - Max ${room.max_guests} guests`);
       });
     } else {
@@ -69,7 +69,7 @@ async function testPackage(packageId) {
     }
 
     // Check if vendor is active
-    if (package.user?.status !== 1) {
+    if (packageData.user?.status !== 1) {
       console.log('⚠️  Warning: Vendor account is not active');
       return false;
     }
