@@ -879,7 +879,7 @@ export class PackageService {
       console.log('4. No packages match the budget criteria');
     }
 
-    // Transform data for frontend
+    // Transform data for frontend - Return ALL package properties
     const transformedPackages = packages.map(pkg => {
       // Calculate average rating from reviews
       const validReviews = pkg.reviews.filter(review => review.rating_value !== null);
@@ -887,34 +887,47 @@ export class PackageService {
         ? validReviews.reduce((sum, review) => sum + review.rating_value, 0) / validReviews.length 
         : 0;
 
+      // Return ALL package properties plus calculated fields
       return {
-        id: pkg.id,
-        name: pkg.name,
-        description: pkg.description,
-        price: Number(pkg.price),
-        type: pkg.type,
-        city: pkg.city,
-        country: pkg.country,
-        address: pkg.address,
+        // All original package properties
+        ...pkg,
+        
+        // Additional calculated fields
         average_rating: Math.round(averageRating * 10) / 10, // Round to 1 decimal place
         total_reviews: pkg._count.reviews,
         free_cancellation: pkg.cancellation_policy?.policy?.toLowerCase().includes('free') || false,
-        featured_image: pkg.package_files[0]?.file || null,
+        
+        // Ensure price is a number
+        price: Number(pkg.price),
+        
+        // Add file URLs for images
+        package_files: pkg.package_files.map(file => ({
+          ...file,
+          file_url: `${process.env.APP_URL || 'http://localhost:4000'}/storage/package/${file.file}`
+        })),
+        
+        // Add vendor info
         vendor: {
           id: pkg.user.id,
           name: pkg.user.display_name || pkg.user.name,
           email: pkg.user.email,
           avatar: pkg.user.avatar,
         },
+        
+        // Add destination info
         destinations: pkg.package_destinations.map(pd => ({
           id: pd.destination.id,
           name: pd.destination.name,
           country: pd.destination.country?.name,
         })),
+        
+        // Add category info
         categories: pkg.package_categories.map(pc => ({
           id: pc.category.id,
           name: pc.category.name,
         })),
+        
+        // Add room type info
         room_types: pkg.package_room_types.map(rt => ({
           id: rt.id,
           name: rt.name,
@@ -922,9 +935,9 @@ export class PackageService {
           max_guests: rt.max_guests,
           is_available: rt.is_available,
         })),
+        
+        // Add availability info
         availability: pkg.package_availabilities || [],
-        created_at: pkg.created_at,
-        updated_at: pkg.updated_at,
       };
     });
 
