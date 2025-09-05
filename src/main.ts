@@ -23,14 +23,66 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   app.enableCors();
   app.use(helmet());
+  // Serve static files from public directory
   app.useStaticAssets(join(__dirname, '..', 'public'), {
     index: false,
     prefix: '/public',
   });
+  
+  // Serve storage files with proper configuration
   app.useStaticAssets(join(__dirname, '..', 'public/storage'), {
     index: false,
     prefix: '/storage',
+    setHeaders: (res, path) => {
+      // Set proper headers for images
+      if (path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.png') || path.endsWith('.gif') || path.endsWith('.webp')) {
+        res.setHeader('Content-Type', 'image/' + path.split('.').pop());
+        res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+      }
+    },
+    // Add fallback for missing files
+    fallthrough: true,
   });
+  
+  // Add specific route for package images to ensure they're served
+  app.use('/storage/package/:filename', (req, res, next) => {
+    const filename = req.params.filename;
+    const filePath = join(__dirname, '..', 'public/storage/package', filename);
+    
+    console.log(`🔍 Package image requested: ${filename}`);
+    console.log(`📁 Full path: ${filePath}`);
+    
+    // Check if file exists
+    if (require('fs').existsSync(filePath)) {
+      console.log('✅ File exists, serving...');
+      return res.sendFile(filePath);
+    } else {
+      console.log('❌ File not found, checking for similar files...');
+      
+      // List all files in the directory to debug
+      const fs = require('fs');
+      const files = fs.readdirSync(join(__dirname, '..', 'public/storage/package'));
+      console.log('📁 Available files:', files);
+      
+      // Check if there's a file that starts with this name
+      const similarFiles = files.filter(f => f.startsWith(filename));
+      if (similarFiles.length > 0) {
+        console.log('🔍 Found similar files:', similarFiles);
+        // Redirect to the first similar file
+        return res.redirect(`/storage/package/${encodeURIComponent(similarFiles[0])}`);
+      }
+      
+      return res.status(404).json({
+        success: false,
+        message: 'Image not found',
+        filename: filename,
+        path: filePath,
+        availableFiles: files.slice(0, 10) // Show first 10 files for debugging
+      });
+    }
+  });
+  
+
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,

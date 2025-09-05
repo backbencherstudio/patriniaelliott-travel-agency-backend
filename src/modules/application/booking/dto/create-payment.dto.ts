@@ -14,7 +14,7 @@ export class CreatePaymentDto {
     description: 'Payment method ID from Stripe',
     example: 'pm_1234567890abcdef'
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
   payment_method_id: string;
 
