@@ -19,6 +19,8 @@ import { QueryPackageDto } from './dto/query-package.dto';
 import { UpdateReviewDto } from 'src/modules/admin/reviews/dto/update-review.dto';
 import { SearchPackagesDto } from '../../admin/vendor-package/dto/search-packages.dto';
 import { EnhancedSearchDto } from './dto/enhanced-search.dto';
+import { GetVendorPackageDto } from '../../admin/vendor-package/dto/get-vendor-package.dto';
+import { CalendarQueryDto } from '../../admin/vendor-package/dto/calendar-availability.dto';
 
 @ApiTags('Package')
 @Controller('application/packages')
@@ -84,42 +86,79 @@ export class PackageController {
     }
   }
 
-  @ApiOperation({ summary: 'Get all packages' })
-  @Get()
-  async findAll(@Query() query: QueryPackageDto) {
-    try {
-      const q = query.q;
-      const type = query.type;
-      const duration_start = query.duration_start;
-      const duration_end = query.duration_end;
-      const budget_start = query.budget_start;
-      const budget_end = query.budget_end;
-      const ratings = query.ratings;
-      const free_cancellation = query.free_cancellation;
-      const destinations = query.destinations;
-      const languages = query.languages;
+  // @ApiOperation({ summary: 'Get all packages' })
+  // @Get()
+  // async findAll(@Query() query: QueryPackageDto) {
+  //   try {
+  //     const q = query.q;
+  //     const type = query.type;
+  //     const duration_start = query.duration_start;
+  //     const duration_end = query.duration_end;
+  //     const budget_start = query.budget_start;
+  //     const budget_end = query.budget_end;
+  //     const ratings = query.ratings;
+  //     const free_cancellation = query.free_cancellation;
+  //     const destinations = query.destinations;
+  //     const languages = query.languages;
 
-      const packages = await this.packageService.findAll({
-        filters: {
-          q: q,
-          type: type,
-          duration_start: duration_start,
-          duration_end: duration_end,
-          budget_start: budget_start,
-          budget_end: budget_end,
-          ratings: ratings,
-          free_cancellation: free_cancellation,
-          destinations: destinations,
-          languages: languages,
-        },
-      });
-      return packages;
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
+  //     const packages = await this.packageService.findAll({
+  //       filters: {
+  //         q: q,
+  //         type: type,
+  //         duration_start: duration_start,
+  //         duration_end: duration_end,
+  //         budget_start: budget_start,
+  //         budget_end: budget_end,
+  //         ratings: ratings,
+  //         free_cancellation: free_cancellation,
+  //         destinations: destinations,
+  //         languages: languages,
+  //       },
+  //     });
+  //     return packages;
+  //   } catch (error) {
+  //     return {
+  //       success: false,
+  //       message: error.message,
+  //     };
+  //   }
+  // }
+
+  @ApiOperation({ summary: 'Get vendor packages with optional calendar data' })
+  @Get()
+  async getVendorPackage(
+    @Query() query: GetVendorPackageDto & CalendarQueryDto, 
+    @Req() req: any
+  ) {
+    const page = parseInt(query.page?.toString() || '1', 10);
+    const limit = parseInt(query.limit?.toString() || '10', 10);
+    const user_id = req.user?.userId || null;
+    
+    // Handle multiple type parameters
+    const types = Array.isArray(query.type) ? query.type : 
+                  (typeof query.type === 'string' && query.type.includes(',')) ? 
+                  query.type.split(',').map(t => t.trim()) : 
+                  query.type ? [query.type] : undefined;
+    
+    return this.packageService.getVendorPackage(
+      page, 
+      limit, 
+      user_id, 
+      { 
+        searchQuery: query.q, 
+        status: query.status, 
+        categoryId: query.category_id, 
+        destinationId: query.destination_id,
+        type: types,
+        freeCancellation: query.free_cancellation,
+        languages: query.languages,
+        ratings: query.ratings,
+        budgetEnd: query.budget_end,
+        budgetStart: query.budget_start,
+        durationEnd: query.duration_end,
+        durationStart: query.duration_start
+      }
+    );
   }
 
   // @UseGuards(JwtAuthGuard)
