@@ -1495,6 +1495,8 @@ export class PackageService {
     user_id?: string | null, 
     searchParams?: {
       searchQuery?: string;
+      country?: string;
+      location?: string;
       status?: number;
       categoryId?: string;
       destinationId?: string;
@@ -1521,11 +1523,50 @@ export class PackageService {
     }
 
     // Add search functionality
-    if (searchParams?.searchQuery) {
-      where.OR = [
-        { name: { contains: searchParams.searchQuery, mode: 'insensitive' } },
-        { description: { contains: searchParams.searchQuery, mode: 'insensitive' } },
-      ];
+    if (searchParams?.searchQuery || searchParams?.country || searchParams?.location) {
+      where.OR = [];
+      
+      // Search by package name and description
+      if (searchParams?.searchQuery) {
+        where.OR.push(
+          { name: { contains: searchParams.searchQuery, mode: 'insensitive' } },
+          { description: { contains: searchParams.searchQuery, mode: 'insensitive' } }
+        );
+      }
+      
+      // Search by country
+      if (searchParams?.country) {
+        where.OR.push({
+          package_destinations: {
+            some: {
+              destination: {
+                country: {
+                  name: { contains: searchParams.country, mode: 'insensitive' }
+                }
+              }
+            }
+          }
+        });
+      }
+      
+      // Search by location (city)
+      if (searchParams?.location) {
+        where.OR.push(
+          // Search in package's direct location fields
+          { city: { contains: searchParams.location, mode: 'insensitive' } },
+          { country: { contains: searchParams.location, mode: 'insensitive' } },
+          // Search in destination names
+          {
+            package_destinations: {
+              some: {
+                destination: {
+                  name: { contains: searchParams.location, mode: 'insensitive' }
+                }
+              }
+            }
+          }
+        );
+      }
     }
 
     // Add status filter
@@ -1659,13 +1700,32 @@ export class PackageService {
           package_languages: {
             include: { language: { select: { id: true, name: true, code: true } } },
           },
-                  package_extra_services: {
-          include: { 
-            extra_service: { 
-              select: { id: true, name: true, price: true, description: true } 
-            } 
+          package_destinations: {
+            include: {
+              destination: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  country: {
+                    select: {
+                      id: true,
+                      name: true,
+                      country_code: true,
+                      flag: true
+                    }
+                  }
+                }
+              }
+            }
           },
-        },
+          package_extra_services: {
+            include: { 
+              extra_service: { 
+                select: { id: true, name: true, price: true, description: true } 
+              } 
+            },
+          },
         },
       }),
       this.prisma.package.count({ where }),

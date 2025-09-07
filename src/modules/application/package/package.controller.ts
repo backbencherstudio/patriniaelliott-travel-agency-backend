@@ -124,7 +124,10 @@ export class PackageController {
   //   }
   // }
 
-  @ApiOperation({ summary: 'Get vendor packages with optional calendar data' })
+  @ApiOperation({ 
+    summary: 'Get vendor packages with enhanced search capabilities',
+    description: 'Search packages by name, description, country, location, destination, and other filters. Supports pagination and calendar data.'
+  })
   @Get()
   async getVendorPackage(
     @Query() query: GetVendorPackageDto & CalendarQueryDto, 
@@ -145,7 +148,9 @@ export class PackageController {
       limit, 
       user_id, 
       { 
-        searchQuery: query.q, 
+        searchQuery: query.q,
+        country: (query as any).country,
+        location: (query as any).location,
         status: query.status, 
         categoryId: query.category_id, 
         destinationId: query.destination_id,

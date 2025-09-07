@@ -23,6 +23,16 @@ export class GetVendorPackageDto {
   @IsString()
   q?: string;
 
+  @ApiProperty({ required: false, description: 'Search by country name' })
+  @IsOptional()
+  @IsString()
+  country?: string;
+
+  @ApiProperty({ required: false, description: 'Search by location/city name' })
+  @IsOptional()
+  @IsString()
+  location?: string;
+
   @ApiProperty({ required: false, description: 'Package status filter' })
   @IsOptional()
   @Type(() => Number)
