@@ -43,29 +43,12 @@ async function testPackage(packageId) {
     });
 
     if (!packageData) {
-      console.log('❌ Package not found or not available');
-      console.log('💡 Possible reasons:');
-      console.log('   - Package ID is incorrect');
-      console.log('   - Package is not approved (status !== 1)');
-      console.log('   - Package is deleted');
-      return false;
-    }
 
-    console.log('✅ Package found!');
-    console.log(`   Name: ${packageData.name}`);
-    console.log(`   Type: ${packageData.type}`);
-    console.log(`   Price: $${packageData.price}`);
-    console.log(`   Status: ${packageData.status}`);
-    console.log(`   Vendor: ${packageData.user?.name || 'Unknown'} (${packageData.user?.id})`);
-    console.log(`   Vendor Status: ${packageData.user?.status}`);
-
-    if (packageData.package_room_types.length > 0) {
-      console.log(`   Room Types:`);
       packageData.package_room_types.forEach(room => {
         console.log(`     - ${room.name} (ID: ${room.id}) - $${room.price} - Max ${room.max_guests} guests`);
       });
     } else {
-      console.log(`   Room Types: None available`);
+      // console.log(`   Room Types: None available`);
     }
 
     // Check if vendor is active
