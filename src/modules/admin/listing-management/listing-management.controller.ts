@@ -74,8 +74,16 @@ export class ListingManagementController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateListingManagementDto: UpdateListingManagementDto) {
-    return this.listingManagementService.update(id, updateListingManagementDto);
+  async update(@Param('id') id: string, @Body() updateListingManagementDto: UpdateListingManagementDto) {
+    try {
+      const result = await this.listingManagementService.update(id, updateListingManagementDto);
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
   }
 
   @Delete(':id')

@@ -377,7 +377,65 @@ export class ListingManagementService {
   }
 
   async update(id: string, updateListingManagementDto: UpdateListingManagementDto) {
-    return `This action updates a #${id} listingManagement`;
+    try {
+      // Check if package exists
+      const existingPackage = await this.prisma.package.findUnique({
+        where: { id: id },
+      });
+
+      if (!existingPackage) {
+        return {
+          success: false,
+          message: 'Package not found',
+        };
+      }
+
+      // Filter out undefined values to avoid overwriting with null
+      const updateData = Object.fromEntries(
+        Object.entries(updateListingManagementDto).filter(([_, value]) => value !== undefined)
+      );
+
+      // Update the package
+      const updatedPackage = await this.prisma.package.update({
+        where: { id: id },
+        data: {
+          ...updateData,
+          updated_at: new Date(),
+        },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          type: true,
+          price: true,
+          city: true,
+          country: true,
+          address: true,
+          status: true,
+          approved_at: true,
+          created_at: true,
+          updated_at: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Package updated successfully',
+        data: updatedPackage,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
   }
 
   async remove(id: string) {
