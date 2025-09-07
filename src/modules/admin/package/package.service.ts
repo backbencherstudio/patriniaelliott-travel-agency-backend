@@ -417,23 +417,28 @@ export class PackageService {
             select: {
               id: true,
               file: true,
+              file_alt: true,
+              type: true,
+            },
+          },
+          package_trip_plans: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              package_trip_plan_images: {
+                select: {
+                  id: true,
+                  image: true,
+                  image_alt: true,
+                },
+              },
             },
           },
         },
       });
 
-      // add file url package_files
-      if (packages && packages.length > 0) {
-        for (const record of packages) {
-          if (record.package_files) {
-            for (const file of record.package_files) {
-              file['file_url'] = SojebStorage.url(
-                appConfig().storageUrl.package + file.file,
-              );
-            }
-          }
-        }
-      }
+      // Note: Image URLs are now generated in the controller using addImageUrls method
       return {
         success: true,
         data: packages,

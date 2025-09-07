@@ -9,22 +9,27 @@ import {
   UseGuards,
   UseInterceptors,
   Req,
+  Res,
   ParseFilePipe,
   UploadedFiles,
   Query,
+  BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { PackageService } from './package.service';
 import { CreatePackageDto } from './dto/create-package.dto';
 import { UpdatePackageDto } from './dto/update-package.dto';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guard/role/roles.guard';
 import { Roles } from '../../../common/guard/role/roles.decorator';
 import { Role } from '../../../common/guard/role/role.enum';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { Express, Request } from 'express';
+import { Express, Request, Response } from 'express';
 import { diskStorage } from 'multer';
 import appConfig from '../../../config/app.config';
+import * as fs from 'fs';
+import * as path from 'path';
 @ApiBearerAuth()
 @ApiTags('Package')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -32,26 +37,183 @@ import appConfig from '../../../config/app.config';
 export class PackageController {
   constructor(private readonly packageService: PackageService) {}
 
+  /**
+   * Ensure storage directories exist
+   */
+  private ensureStorageDirectories() {
+    try {
+      const storagePath = path.join(process.cwd(), 'public', 'storage', 'package');
+      if (!fs.existsSync(storagePath)) {
+        fs.mkdirSync(storagePath, { recursive: true });
+        console.log('Created storage directory:', storagePath);
+      }
+    } catch (error) {
+      console.error('Failed to create storage directories:', error);
+      throw new InternalServerErrorException('Failed to initialize storage system');
+    }
+  }
+
+  /**
+   * Clean up uploaded files on error
+   */
+  private cleanupUploadedFiles(files: {
+    package_files?: Express.Multer.File[];
+    trip_plans_images?: Express.Multer.File[];
+  }) {
+    try {
+      const storagePath = path.join(process.cwd(), 'public', 'storage', 'package');
+      
+      if (files.package_files) {
+        for (const file of files.package_files) {
+          const filePath = path.join(storagePath, file.filename);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log('Cleaned up package file:', file.filename);
+          }
+        }
+      }
+      
+      if (files.trip_plans_images) {
+        for (const file of files.trip_plans_images) {
+          const filePath = path.join(storagePath, file.filename);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log('Cleaned up trip plan image:', file.filename);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to cleanup uploaded files:', error);
+    }
+  }
+
+  /**
+   * Add full URLs to package images
+   */
+  private addImageUrls(packageData: any) {
+    try {
+      const baseUrl = process.env.APP_URL || 'http://localhost:4000';
+      
+      console.log('🔍 Adding image URLs to package data...');
+      console.log('📦 Package files:', packageData.package_files?.length || 0);
+      console.log('📋 Trip plans:', packageData.package_trip_plans?.length || 0);
+      
+      // Add URLs to package files
+      if (packageData.package_files && packageData.package_files.length > 0) {
+        packageData.package_files.forEach((file, index) => {
+          if (file.file) {
+            console.log(`📄 File ${index + 1}:`, {
+              id: file.id,
+              filename: file.file,
+              filenameLength: file.file.length,
+              originalName: file.file_alt,
+              type: file.type
+            });
+            
+            // Check if filename is truncated
+            if (file.file.length < 10) {
+              console.log(`⚠️  WARNING: Filename seems too short: "${file.file}"`);
+            }
+            
+            // Encode the filename to handle special characters and spaces
+            const encodedFilename = encodeURIComponent(file.file);
+            file.file_url = `${baseUrl}/storage/package/${encodedFilename}`;
+            console.log(`🖼️  Generated URL for package file: ${file.file} -> ${file.file_url}`);
+            console.log(`🔗 Full URL length: ${file.file_url.length}`);
+          } else {
+            console.log(`⚠️  File ${index + 1} missing file property:`, file);
+          }
+        });
+      }
+      
+      // Add URLs to trip plan images
+      if (packageData.package_trip_plans && packageData.package_trip_plans.length > 0) {
+        packageData.package_trip_plans.forEach((tripPlan, tripIndex) => {
+          if (tripPlan.package_trip_plan_images && tripPlan.package_trip_plan_images.length > 0) {
+            tripPlan.package_trip_plan_images.forEach((image, imgIndex) => {
+              if (image.image) {
+                console.log(`📸 Trip plan ${tripIndex + 1} image ${imgIndex + 1}:`, {
+                  id: image.id,
+                  filename: image.image,
+                  tripPlanTitle: tripPlan.title
+                });
+                
+                // Encode the filename to handle special characters and spaces
+                const encodedFilename = encodeURIComponent(image.image);
+                image.image_url = `${baseUrl}/storage/package/${encodedFilename}`;
+                console.log(`🖼️  Generated URL for trip plan image: ${image.image} -> ${image.image_url}`);
+              } else {
+                console.log(`⚠️  Trip plan ${tripIndex + 1} image ${imgIndex + 1} missing image property:`, image);
+              }
+            });
+          }
+        });
+      }
+      
+      return packageData;
+    } catch (error) {
+      console.error('Failed to add image URLs:', error);
+      return packageData;
+    }
+  }
+
   @Roles(Role.ADMIN, Role.VENDOR)
   @ApiOperation({ summary: 'Create package' })
   @Post()
+  @ApiConsumes('multipart/form-data')
   @UseInterceptors(
     FileFieldsInterceptor(
       [{ name: 'package_files' }, { name: 'trip_plans_images' }],
       {
         storage: diskStorage({
-          destination:
-            appConfig().storageUrl.rootUrl +
-            '/' +
-            appConfig().storageUrl.package,
+          destination: (req, file, cb) => {
+            // Ensure storage directories exist
+            const storagePath = path.join(process.cwd(), 'public', 'storage', 'package');
+            if (!fs.existsSync(storagePath)) {
+              fs.mkdirSync(storagePath, { recursive: true });
+            }
+            cb(null, storagePath);
+          },
           filename: (req, file, cb) => {
-            const randomName = Array(32)
+            // Generate unique filename with timestamp and clean name
+            const timestamp = Date.now();
+            const randomName = Array(16)
               .fill(null)
               .map(() => Math.round(Math.random() * 16).toString(16))
               .join('');
-            return cb(null, `${randomName}${file.originalname}`);
+            const extension = path.extname(file.originalname);
+            
+            // Clean the original filename to remove special characters and spaces
+            const cleanOriginalName = file.originalname
+              .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
+              .replace(/_+/g, '_') // Replace multiple underscores with single
+              .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+            
+            const filename = `${timestamp}_${randomName}_${cleanOriginalName}`;
+            console.log(`📁 Generated filename: ${filename} from original: ${file.originalname}`);
+            cb(null, filename);
           },
         }),
+        fileFilter: (req, file, cb) => {
+          // Validate file types
+          const allowedMimeTypes = [
+            'image/jpeg',
+            'image/jpg',
+            'image/png',
+            'image/gif',
+            'image/webp'
+          ];
+          
+          if (allowedMimeTypes.includes(file.mimetype)) {
+            cb(null, true);
+          } else {
+            cb(new BadRequestException(`Invalid file type: ${file.mimetype}. Only images are allowed.`), false);
+          }
+        },
+        limits: {
+          fileSize: 10 * 1024 * 1024, // 10MB limit
+          files: 10 // Maximum 10 files
+        }
       },
     ),
   )
@@ -60,12 +222,9 @@ export class PackageController {
     @Body() createPackageDto: CreatePackageDto,
     @UploadedFiles(
       new ParseFilePipe({
-        validators: [
-          // new MaxFileSizeValidator({ maxSize: 1024 * 1024 * 10 }), // 10MB
-          // support all image types
-          // new FileTypeValidator({ fileType: 'image/*' }),
-        ],
+        validators: [],
         fileIsRequired: false,
+        errorHttpStatusCode: 400,
       }),
     )
     files: {
@@ -74,6 +233,26 @@ export class PackageController {
     },
   ) {
     try {
+      // Ensure storage directories exist
+      this.ensureStorageDirectories();
+      
+      // Validate uploaded files
+      if (files.package_files) {
+        for (const file of files.package_files) {
+          if (!file.mimetype.startsWith('image/')) {
+            throw new BadRequestException(`Invalid file type: ${file.originalname}. Only images are allowed.`);
+          }
+        }
+      }
+      
+      if (files.trip_plans_images) {
+        for (const file of files.trip_plans_images) {
+          if (!file.mimetype.startsWith('image/')) {
+            throw new BadRequestException(`Invalid file type: ${file.originalname}. Only images are allowed.`);
+          }
+        }
+      }
+
       const user_id = req.user.userId;
       const record = await this.packageService.create(
         user_id,
@@ -82,9 +261,20 @@ export class PackageController {
       );
       return record;
     } catch (error) {
+      console.error('Package creation error:', error);
+      
+      // Clean up uploaded files on error
+      if (files.package_files || files.trip_plans_images) {
+        this.cleanupUploadedFiles(files);
+      }
+      
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      
       return {
         success: false,
-        message: error.message,
+        message: error.message || 'Failed to create package',
       };
     }
   }
@@ -102,6 +292,12 @@ export class PackageController {
 
       const packages = await this.packageService.findAll(user_id, vendor_id);
 
+      // Add full URLs to images for all packages
+      if (packages.success && packages.data && Array.isArray(packages.data)) {
+        packages.data = packages.data.map(pkg => this.addImageUrls(pkg));
+        console.log(`🖼️  Added image URLs to ${packages.data.length} packages`);
+      }
+
       return packages;
     } catch (error) {
       return {
@@ -118,7 +314,73 @@ export class PackageController {
     try {
       const user_id = req.user.userId;
       const record = await this.packageService.findOne(id, user_id);
+      
+      // Add full URLs to images if package exists
+      if (record.success && record.data) {
+        record.data = this.addImageUrls(record.data);
+      }
+      
       return record;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @Roles(Role.ADMIN, Role.VENDOR)
+  @ApiOperation({ summary: 'Get package images' })
+  @Get(':id/images')
+  async getPackageImages(@Param('id') id: string, @Req() req: Request) {
+    try {
+      const user_id = req.user.userId;
+      const record = await this.packageService.findOne(id, user_id);
+      
+      if (!record.success || !record.data) {
+        return {
+          success: false,
+          message: 'Package not found',
+        };
+      }
+      
+      // Extract only image information with URLs
+      const images = {
+        package_files: [],
+        trip_plan_images: []
+      };
+      
+      if (record.data.package_files && record.data.package_files.length > 0) {
+        images.package_files = record.data.package_files.map((file: any) => ({
+          id: file.id,
+          filename: file.file,
+          original_name: file.file_alt || file.originalname || 'Unknown',
+          type: file.type || 'image',
+          url: `${process.env.APP_URL || 'http://localhost:4000'}/storage/package/${encodeURIComponent(file.file)}`
+        }));
+      }
+      
+      if (record.data.package_trip_plans && record.data.package_trip_plans.length > 0) {
+        record.data.package_trip_plans.forEach((tripPlan: any) => {
+          if (tripPlan.package_trip_plan_images && tripPlan.package_trip_plan_images.length > 0) {
+            tripPlan.package_trip_plan_images.forEach((image: any) => {
+              images.trip_plan_images.push({
+                id: image.id,
+                filename: image.image,
+                original_name: image.image_alt || image.originalname || 'Unknown',
+                trip_plan_title: tripPlan.title,
+                url: `${process.env.APP_URL || 'http://localhost:4000'}/storage/package/${encodeURIComponent(image.image)}`
+              });
+            });
+          }
+        });
+      }
+      
+      return {
+        success: true,
+        data: images
+      };
+      
     } catch (error) {
       return {
         success: false,
@@ -130,23 +392,60 @@ export class PackageController {
   @Roles(Role.ADMIN, Role.VENDOR)
   @ApiOperation({ summary: 'Update package' })
   @Patch(':id')
+  @ApiConsumes('multipart/form-data')
   @UseInterceptors(
     FileFieldsInterceptor(
       [{ name: 'package_files' }, { name: 'trip_plans_images' }],
       {
         storage: diskStorage({
-          destination:
-            appConfig().storageUrl.rootUrl +
-            '/' +
-            appConfig().storageUrl.package,
+          destination: (req, file, cb) => {
+            // Ensure storage directories exist
+            const storagePath = path.join(process.cwd(), 'public', 'storage', 'package');
+            if (!fs.existsSync(storagePath)) {
+              fs.mkdirSync(storagePath, { recursive: true });
+            }
+            cb(null, storagePath);
+          },
           filename: (req, file, cb) => {
-            const randomName = Array(32)
+            // Generate unique filename with timestamp and clean name
+            const timestamp = Date.now();
+            const randomName = Array(16)
               .fill(null)
               .map(() => Math.round(Math.random() * 16).toString(16))
               .join('');
-            return cb(null, `${randomName}${file.originalname}`);
+            const extension = path.extname(file.originalname);
+            
+            // Clean the original filename to remove special characters and spaces
+            const cleanOriginalName = file.originalname
+              .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
+              .replace(/_+/g, '_') // Replace multiple underscores with single
+              .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+            
+            const filename = `${timestamp}_${randomName}_${cleanOriginalName}`;
+            console.log(`📁 Generated filename: ${filename} from original: ${file.originalname}`);
+            cb(null, filename);
           },
         }),
+        fileFilter: (req, file, cb) => {
+          // Validate file types
+          const allowedMimeTypes = [
+            'image/jpeg',
+            'image/jpg',
+            'image/png',
+            'image/gif',
+            'image/webp'
+          ];
+          
+          if (allowedMimeTypes.includes(file.mimetype)) {
+            cb(null, true);
+          } else {
+            cb(new BadRequestException(`Invalid file type: ${file.mimetype}. Only images are allowed.`), false);
+          }
+        },
+        limits: {
+          fileSize: 10 * 1024 * 1024, // 10MB limit
+          files: 10 // Maximum 10 files
+        }
       },
     ),
   )
@@ -156,12 +455,9 @@ export class PackageController {
     @Req() req: Request,
     @UploadedFiles(
       new ParseFilePipe({
-        validators: [
-          // new MaxFileSizeValidator({ maxSize: 1024 * 1024 * 10 }), // 10MB
-          // support all image types
-          // new FileTypeValidator({ fileType: 'image/*' }),
-        ],
+        validators: [],
         fileIsRequired: false,
+        errorHttpStatusCode: 400,
       }),
     )
     files: {
@@ -170,6 +466,26 @@ export class PackageController {
     },
   ) {
     try {
+      // Ensure storage directories exist
+      this.ensureStorageDirectories();
+      
+      // Validate uploaded files
+      if (files.package_files) {
+        for (const file of files.package_files) {
+          if (!file.mimetype.startsWith('image/')) {
+            throw new BadRequestException(`Invalid file type: ${file.originalname}. Only images are allowed.`);
+          }
+        }
+      }
+      
+      if (files.trip_plans_images) {
+        for (const file of files.trip_plans_images) {
+          if (!file.mimetype.startsWith('image/')) {
+            throw new BadRequestException(`Invalid file type: ${file.originalname}. Only images are allowed.`);
+          }
+        }
+      }
+
       const user_id = req.user.userId;
       const record = await this.packageService.update(
         id,
@@ -179,9 +495,20 @@ export class PackageController {
       );
       return record;
     } catch (error) {
+      console.error('Package update error:', error);
+      
+      // Clean up uploaded files on error
+      if (files.package_files || files.trip_plans_images) {
+        this.cleanupUploadedFiles(files);
+      }
+      
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      
       return {
         success: false,
-        message: error.message,
+        message: error.message || 'Failed to update package',
       };
     }
   }
