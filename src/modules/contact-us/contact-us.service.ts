@@ -1,6 +1,5 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { CreateContactUsDto } from './dto/create-contact-us.dto';
-import { UpdateContactUsDto } from './dto/update-contact-us.dto';
 import { MailService } from 'src/mail/mail.service';
 
 @Injectable()
