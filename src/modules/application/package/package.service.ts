@@ -1495,6 +1495,8 @@ export class PackageService {
     user_id?: string | null, 
     searchParams?: {
       searchQuery?: string;
+      country?: string;
+      location?: string;
       status?: number;
       categoryId?: string;
       destinationId?: string;
@@ -1508,7 +1510,16 @@ export class PackageService {
       durationStart?: string;
     }
   ) {
-    const skip = (page - 1) * limit;
+    try {
+      const skip = (page - 1) * limit;
+      
+      // Debug logging
+      console.log('getVendorPackage called with:', {
+        page,
+        limit,
+        user_id,
+        searchParams
+      });
     
     // Build where conditions
     const where: any = {
@@ -1521,11 +1532,54 @@ export class PackageService {
     }
 
     // Add search functionality
-    if (searchParams?.searchQuery) {
-      where.OR = [
-        { name: { contains: searchParams.searchQuery, mode: 'insensitive' } },
-        { description: { contains: searchParams.searchQuery, mode: 'insensitive' } },
-      ];
+    if (searchParams?.searchQuery || searchParams?.country || searchParams?.location) {
+      const searchConditions = [];
+      
+      // Search by package name and description
+      if (searchParams?.searchQuery) {
+        searchConditions.push(
+          { name: { contains: searchParams.searchQuery, mode: 'insensitive' } },
+          { description: { contains: searchParams.searchQuery, mode: 'insensitive' } }
+        );
+      }
+      
+      // Search by country
+      if (searchParams?.country) {
+        searchConditions.push({
+          package_destinations: {
+            some: {
+              destination: {
+                country: {
+                  name: { contains: searchParams.country, mode: 'insensitive' }
+                }
+              }
+            }
+          }
+        });
+      }
+      
+      // Search by location (city)
+      if (searchParams?.location) {
+        searchConditions.push(
+          // Search in package's direct location fields
+          { city: { contains: searchParams.location, mode: 'insensitive' } },
+          { country: { contains: searchParams.location, mode: 'insensitive' } },
+          // Search in destination names
+          {
+            package_destinations: {
+              some: {
+                destination: {
+                  name: { contains: searchParams.location, mode: 'insensitive' }
+                }
+              }
+            }
+          }
+        );
+      }
+      
+      if (searchConditions.length > 0) {
+        where.OR = searchConditions;
+      }
     }
 
     // Add status filter
@@ -1576,14 +1630,30 @@ export class PackageService {
     }
 
     // Add ratings filter
-    if (searchParams?.ratings && searchParams.ratings.length > 0) {
-      where.reviews = {
-        some: {
-          rating_value: {
-            in: searchParams.ratings
+    if (searchParams?.ratings && Array.isArray(searchParams.ratings) && searchParams.ratings.length > 0) {
+      // Filter out any invalid ratings
+      const validRatings = searchParams.ratings.filter(rating => 
+        typeof rating === 'number' && rating >= 0 && rating <= 5
+      );
+      
+      console.log('Ratings filter - Original:', searchParams.ratings);
+      console.log('Ratings filter - Valid:', validRatings);
+      
+      if (validRatings.length > 0) {
+        // Only return packages that have at least one review with the specified rating
+        // This ensures packages without reviews are excluded when rating filter is applied
+        where.reviews = {
+          some: {
+            rating_value: {
+              in: validRatings
+            },
+            deleted_at: null,
+            status: 1
           }
-        }
-      };
+        };
+        console.log('Applied ratings filter to where clause:', where.reviews);
+        console.log('Looking for packages with reviews having rating values:', validRatings);
+      }
     }
 
     // Add budget range filter
@@ -1622,6 +1692,8 @@ export class PackageService {
       }
     }
   
+    console.log('Final where clause for package query:', JSON.stringify(where, null, 2));
+    
     const [packages, total] = await Promise.all([
       this.prisma.package.findMany({
         skip,
@@ -1659,17 +1731,39 @@ export class PackageService {
           package_languages: {
             include: { language: { select: { id: true, name: true, code: true } } },
           },
-                  package_extra_services: {
-          include: { 
-            extra_service: { 
-              select: { id: true, name: true, price: true, description: true } 
-            } 
+          package_destinations: {
+            include: {
+              destination: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  country: {
+                    select: {
+                      id: true,
+                      name: true,
+                      country_code: true,
+                      flag: true
+                    }
+                  }
+                }
+              }
+            }
           },
-        },
+          package_extra_services: {
+            include: { 
+              extra_service: { 
+                select: { id: true, name: true, price: true, description: true } 
+              } 
+            },
+          },
         },
       }),
       this.prisma.package.count({ where }),
     ]);
+  
+    console.log(`Found ${packages.length} packages, total: ${total}`);
+    console.log('Package IDs:', packages.map(p => p.id));
   
     // Fetch rating aggregates for all returned package IDs in one query
     const packageIds = packages.map(p => p.id);
@@ -1684,12 +1778,28 @@ export class PackageService {
       _count: { rating_value: true },
     });
 
+    console.log('Rating aggregation results:', ratingAgg);
+
     const packageIdToRating = new Map<string, { averageRating: number; totalReviews: number }>();
     for (const row of ratingAgg as any[]) {
       packageIdToRating.set(row.package_id, {
         averageRating: row._avg?.rating_value ?? 0,
         totalReviews: row._count?.rating_value ?? 0,
       });
+    }
+    
+    console.log('Package ID to Rating mapping:', Object.fromEntries(packageIdToRating));
+    
+    // Debug: Check if any packages were returned without matching ratings
+    if (searchParams?.ratings && Array.isArray(searchParams.ratings) && searchParams.ratings.length > 0) {
+      const packagesWithoutMatchingRatings = packages.filter(pkg => {
+        const ratingData = packageIdToRating.get(pkg.id);
+        return !ratingData || ratingData.totalReviews === 0;
+      });
+      
+      if (packagesWithoutMatchingRatings.length > 0) {
+        console.log('WARNING: Found packages without matching ratings:', packagesWithoutMatchingRatings.map(p => p.id));
+      }
     }
     // Build per-package rating distribution (1..5)
     const distributionAgg = await this.prisma.review.groupBy({
@@ -1701,6 +1811,41 @@ export class PackageService {
       },
       _count: { rating_value: true },
     });
+    
+    console.log('Rating distribution results:', distributionAgg);
+    
+    // Debug: Check actual review data for returned packages when rating filter is applied
+    if (searchParams?.ratings && Array.isArray(searchParams.ratings) && searchParams.ratings.length > 0) {
+      const actualReviews = await this.prisma.review.findMany({
+        where: {
+          package_id: { in: packageIds },
+          deleted_at: null,
+          status: 1,
+        },
+        select: {
+          package_id: true,
+          rating_value: true,
+        }
+      });
+      
+      console.log('Actual review data for returned packages:', actualReviews);
+      
+      // Check if any packages have reviews that don't match the filter
+      const validRatings = searchParams.ratings.filter(rating => 
+        typeof rating === 'number' && rating >= 0 && rating <= 5
+      );
+      
+      const packagesWithNonMatchingReviews = new Set();
+      actualReviews.forEach(review => {
+        if (!validRatings.includes(review.rating_value)) {
+          packagesWithNonMatchingReviews.add(review.package_id);
+        }
+      });
+      
+      if (packagesWithNonMatchingReviews.size > 0) {
+        console.log('ERROR: Found packages with reviews that do not match the rating filter:', Array.from(packagesWithNonMatchingReviews));
+      }
+    }
 
     const packageIdToDistribution = new Map<string, Record<number, number>>();
     for (const row of distributionAgg as any[]) {
@@ -1819,6 +1964,10 @@ export class PackageService {
         totalPages: Math.ceil(total / limit),
       },
     };
+    } catch (error) {
+      console.error('Error in getVendorPackage service:', error);
+      throw error;
+    }
   }
 
   async createReview(

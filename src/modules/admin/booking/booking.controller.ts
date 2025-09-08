@@ -49,7 +49,7 @@ export class BookingController {
       } = query;
 
       // Set default values
-      const pageNumber = page || 1;
+      const pageNumber = page || 1; 
       const limitNumber = limit || 10;
       const sortBy = sort_by || 'created_at_desc';
 

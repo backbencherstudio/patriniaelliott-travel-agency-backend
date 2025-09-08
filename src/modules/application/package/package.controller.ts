@@ -124,41 +124,59 @@ export class PackageController {
   //   }
   // }
 
-  @ApiOperation({ summary: 'Get vendor packages with optional calendar data' })
+  @ApiOperation({ 
+    summary: 'Get vendor packages with enhanced search capabilities',
+    description: 'Search packages by name, description, country, location, destination, and other filters. Supports pagination and calendar data.'
+  })
   @Get()
   async getVendorPackage(
     @Query() query: GetVendorPackageDto & CalendarQueryDto, 
     @Req() req: any
   ) {
+    try {
     const page = parseInt(query.page?.toString() || '1', 10);
     const limit = parseInt(query.limit?.toString() || '10', 10);
     const user_id = req.user?.userId || null;
     
-    // Handle multiple type parameters
-    const types = Array.isArray(query.type) ? query.type : 
-                  (typeof query.type === 'string' && query.type.includes(',')) ? 
-                  query.type.split(',').map(t => t.trim()) : 
-                  query.type ? [query.type] : undefined;
-    
-    return this.packageService.getVendorPackage(
-      page, 
-      limit, 
-      user_id, 
-      { 
-        searchQuery: query.q, 
-        status: query.status, 
-        categoryId: query.category_id, 
-        destinationId: query.destination_id,
-        type: types,
-        freeCancellation: query.free_cancellation,
-        languages: query.languages,
-        ratings: query.ratings,
-        budgetEnd: query.budget_end,
-        budgetStart: query.budget_start,
-        durationEnd: query.duration_end,
-        durationStart: query.duration_start
-      }
-    );
+    // Debug logging for rating parameter
+    console.log('Rating parameter received:', (query as any).rating);
+    console.log('Query object:', query);
+      
+      // Handle multiple type parameters
+      const types = Array.isArray(query.type) ? query.type : 
+                    (typeof query.type === 'string' && query.type.includes(',')) ? 
+                    query.type.split(',').map(t => t.trim()) : 
+                    query.type ? [query.type] : undefined;
+      
+      return await this.packageService.getVendorPackage(
+        page, 
+        limit, 
+        user_id, 
+        { 
+          searchQuery: query.q,
+          country: (query as any).country,
+          location: (query as any).location,
+          status: query.status, 
+          categoryId: query.category_id, 
+          destinationId: query.destination_id,
+          type: types,
+          freeCancellation: query.free_cancellation,
+          languages: query.languages,
+          ratings: (query as any).rating,
+          budgetEnd: query.budget_end,
+          budgetStart: query.budget_start,
+          durationEnd: query.duration_end,
+          durationStart: query.duration_start
+        }
+      );
+    } catch (error) {
+      console.error('Error in getVendorPackage:', error);
+      return {
+        success: false,
+        message: error.message,
+        error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      };
+    }
   }
 
   // @UseGuards(JwtAuthGuard)

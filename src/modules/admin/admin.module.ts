@@ -16,12 +16,13 @@ import { LanguageModule } from './language/language.module';
 import { TravellerTypeModule } from './traveller-type/traveller-type.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { PaymentTransactionModule } from './payment-transaction/payment-transaction.module';
-import { UserModule } from './user/user.module';
+import { UserModule } from './user-dashboard/user.module';
 import { BookingModule } from './booking/booking.module';
 import { NotificationModule } from './notification/notification.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import {VendorPackageModule} from './vendor-package/vendor-package.module';
 import { VendorUserVerificationAdminModule } from './vendor-user-verification/vendor-user-verification.module';
+import { ListingManagementModule } from './listing-management/listing-management.module';
 @Module({
   imports: [
     FaqModule,
@@ -47,6 +48,7 @@ import { VendorUserVerificationAdminModule } from './vendor-user-verification/ve
     DashboardModule,
     VendorPackageModule,
     VendorUserVerificationAdminModule,
+    ListingManagementModule,
   ],
 })
 export class AdminModule {}

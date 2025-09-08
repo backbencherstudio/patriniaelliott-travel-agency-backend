@@ -23,6 +23,16 @@ export class GetVendorPackageDto {
   @IsString()
   q?: string;
 
+  @ApiProperty({ required: false, description: 'Search by country name' })
+  @IsOptional()
+  @IsString()
+  country?: string;
+
+  @ApiProperty({ required: false, description: 'Search by location/city name' })
+  @IsOptional()
+  @IsString()
+  location?: string;
+
   @ApiProperty({ required: false, description: 'Package status filter' })
   @IsOptional()
   @Type(() => Number)
@@ -56,19 +66,24 @@ export class GetVendorPackageDto {
   @IsString({ each: true })
   languages?: string[];
 
-  @ApiProperty({ required: false, description: 'Rating filter (single rating or array of ratings)', example: [4, 5] })
+  @ApiProperty({ required: false, description: 'Rating filter (single rating or comma-separated ratings)', example: '4,5' })
   @IsOptional()
   @Transform(({ value }) => {
-    if (Array.isArray(value)) {
-      return value.map(v => Number(v));
+    if (!value) return undefined;
+    if (typeof value === 'string' && value.includes(',')) {
+      return value.split(',').map(v => Number(v.trim())).filter(n => !isNaN(n));
     }
-    return [Number(value)];
+    if (Array.isArray(value)) {
+      return value.map(v => Number(v)).filter(n => !isNaN(n));
+    }
+    const num = Number(value);
+    return isNaN(num) ? undefined : [num];
   })
   @IsArray()
   @IsNumber({}, { each: true })
   @Min(0, { each: true })
   @Max(5, { each: true })
-  ratings?: number[];
+  rating?: number[];
 
   @ApiProperty({ required: false, description: 'Maximum budget filter' })
   @IsOptional()

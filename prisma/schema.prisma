@@ -344,46 +344,46 @@ model DestinationImage {
 }
 
 model Package {
-  id                     String    @id @default(cuid())
-  created_at             DateTime  @default(now())
-  updated_at             DateTime  @default(now())
-  deleted_at             DateTime?
-  status                 Int?      @default(1) @db.SmallInt
-  approved_at            DateTime?
-  user_id                String?
-  name                   String
-  description            String
-  price                  Decimal
-  duration               Int?
-  duration_type          String?
-  min_capacity           Int?      @default(1)
-  max_capacity           Int?      @default(1)
-  type                   String?   @default("tour")
-  cancellation_policy_id String?
-  address                String?
-  amenities              Json?
-  bathrooms              Int?
-  bedrooms               Int?
-  beds                   Json?
-  booking_method         String?   @default("instant")
-  breakfast_available    Boolean?  @default(false)
-  check_in               Json?
-  check_out              Json?
-  city                   String?
-  commission_rate        Decimal?  @default(15.0)
-  country                String?
-  host_earnings          Decimal?
-  house_rules            Json?
-  latitude               Float?
-  longitude              Float?
-  max_guests             Int?
-  parking                Json?
-  postal_code            String?
-  rate_plans             Json?
-  size_sqm               Float?
-  unit_number            String?
-  non_refundable_days    Json?
-
+  id                      String                     @id @default(cuid())
+  created_at              DateTime                   @default(now())
+  updated_at              DateTime                   @default(now())
+  deleted_at              DateTime?
+  status                  Int?                       @default(1) @db.SmallInt
+  approved_at             DateTime?
+  user_id                 String?
+  name                    String
+  description             String
+  price                   Decimal
+  duration                Int?
+  duration_type           String?
+  min_capacity            Int?                       @default(1)
+  max_capacity            Int?                       @default(1)
+  type                    String?                    @default("tour")
+  cancellation_policy_id  String?
+  address                 String?
+  amenities               Json?
+  bathrooms               Int?
+  bedrooms                Int?
+  beds                    Json?
+  booking_method          String?                    @default("instant")
+  breakfast_available     Boolean?                   @default(false)
+  check_in                Json?
+  check_out               Json?
+  city                    String?
+  commission_rate         Decimal?                   @default(15.0)
+  country                 String?
+  host_earnings           Decimal?
+  house_rules             Json?
+  latitude                Float?
+  longitude               Float?
+  max_guests              Int?
+  parking                 Json?
+  postal_code             String?
+  rate_plans              Json?
+  size_sqm                Float?
+  unit_number             String?
+  non_refundable_days     Json?
+  
   package_availabilities  PackageAvailability[]
   booking_items           BookingItem[]
   checkout_extraServices  CheckoutExtraService[]
@@ -1223,9 +1223,9 @@ model Tax {
 }
 
 model UserCard {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
   deleted_at DateTime?
 
   status Int? @default(1) @db.SmallInt
@@ -1235,10 +1235,10 @@ model UserCard {
   user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   // Card details (store securely / consider tokenization in production)
-  card_number  String
-  expiry_month Int
-  expiry_year  Int
-  cvv          String
+  card_number   String
+  expiry_month  Int
+  expiry_year   Int
+  cvv           String
 
   // Billing address snapshot (optional, so that historical records remain even if user updates their profile)
   billing_country        String?
