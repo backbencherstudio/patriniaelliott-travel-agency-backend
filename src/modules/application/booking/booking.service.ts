@@ -490,7 +490,33 @@ export class BookingService {
           user_id: user_id,
         },
         include: {
-          booking: true,
+          booking: {
+            include: {
+              booking_items: {
+                include: {
+                  package: {
+                    include: {
+                      user: {
+                        select: {
+                          id: true,
+                          name: true,
+                          avatar: true,
+                        },
+                      },
+                      reviews: {
+                        where: {
+                          status: 1,
+                        },
+                        select: {
+                          rating_value: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       });
 
@@ -500,6 +526,7 @@ export class BookingService {
       const paymentIntent = await StripePayment.retrievePaymentIntent(payment_intent_id);
 
       if (paymentIntent.status === 'requires_payment_method') {
+        
         // Update transaction status
         await this.prisma.paymentTransaction.update({
           where: { id: transaction.id },
@@ -513,6 +540,7 @@ export class BookingService {
         await this.prisma.booking.update({
           where: { id: transaction.booking_id },
           data: {
+            status: 'succeeded',
             payment_status: 'paid',
             paid_amount: paymentIntent.amount / 100,
             paid_currency: paymentIntent.currency,
@@ -522,11 +550,74 @@ export class BookingService {
         });
         await this.updateVendorWallet(transaction.booking_id);
 
+        // Get the first package from booking items for display
+        const firstBookingItem = transaction.booking.booking_items[0];
+        const packageData = firstBookingItem?.package;
+        
+        if (!packageData) {
+          throw new NotFoundException('Package not found in booking');
+        }
+
+        // Calculate average rating and review count
+        const reviews = packageData.reviews;
+        const averageRating = reviews.length > 0 
+          ? reviews.reduce((sum, review) => sum + (review.rating_value || 0), 0) / reviews.length 
+          : 0;
+        const reviewCount = reviews.length;
+
+        // Format amenities from JSON - get keys where value is true
+        let amenities = [];
+        if (packageData.amenities && typeof packageData.amenities === 'object') {
+          amenities = Object.keys(packageData.amenities).filter(key => packageData.amenities[key] === true);
+        }
+
+        // Add duration information to amenities
+        if (packageData.duration && packageData.duration_type) {
+          amenities.unshift(`${packageData.duration} ${packageData.duration_type}`);
+        }
+
+        // Add common amenities based on package type
+        if (packageData.type === 'apartment' || packageData.type === 'hotel') {
+          // Add basic amenities that are commonly included
+          if (packageData.bathrooms && packageData.bathrooms > 0) {
+            amenities.push(`${packageData.bathrooms} bathroom${packageData.bathrooms > 1 ? 's' : ''}`);
+          }
+          if (packageData.bedrooms && packageData.bedrooms > 0) {
+            amenities.push(`${packageData.bedrooms} bedroom${packageData.bedrooms > 1 ? 's' : ''}`);
+          }
+          if (packageData.max_guests && packageData.max_guests > 0) {
+            amenities.push(`Up to ${packageData.max_guests} guests`);
+          }
+        }
+
         return {
           success: true,
           message: 'Payment confirmed successfully',
           booking_id: transaction.booking_id,
           amount_paid: paymentIntent.amount / 100,
+          booking: {
+            id: transaction.booking.id,
+            invoice_number: transaction.booking.invoice_number,
+            status: 'succeeded', // Updated status after payment confirmation
+            type: transaction.booking.type,
+            total_amount: transaction.booking.total_amount,
+            booking_date_time: transaction.booking.booking_date_time,
+          },
+          package: {
+            id: packageData.id,
+            name: packageData.name,
+            description: packageData.description,
+            amenities: amenities,
+            host: {
+              id: packageData.user?.id,
+              name: packageData.user?.name || 'Unknown Host',
+              avatar: packageData.user?.avatar,
+            },
+            feedback: {
+              rating: Math.round(averageRating * 10) / 10, // Round to 1 decimal place
+              review_count: reviewCount,
+            },
+          },
         };
       } else {
         throw new BadRequestException(`Payment not successful. Status: ${paymentIntent.status}`);
