@@ -2,6 +2,7 @@ import stripe from 'stripe';
 import appConfig from '../../../../config/app.config';
 import { Fetch } from '../../Fetch';
 import * as fs from 'fs';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 const STRIPE_SECRET_KEY = appConfig().payment.stripe.secret_key;
 
@@ -41,6 +42,26 @@ export class StripePayment {
     const paymentMethod = await Stripe.paymentMethods.retrieve(id);
     return paymentMethod;
   }
+  static async attachPaymentMethod({
+    customer_id,
+    payment_method_id
+  }: {
+    customer_id: string;
+    payment_method_id: string;
+  }): Promise<stripe.PaymentMethod> {
+    const paymentMethod = await Stripe.paymentMethods.attach(payment_method_id, { customer: customer_id })
+    return paymentMethod;
+  }
+  static async getAllPaymentMethods({
+    id,
+  }: {
+    id: string;
+  }): Promise<any> {
+    const paymentMethod = await Stripe.paymentMethods.list({
+      customer: id
+    });
+    return paymentMethod;
+  }
 
   /**
    * Add customer to stripe
@@ -64,6 +85,19 @@ export class StripePayment {
       },
       description: 'New Customer',
     });
+
+    const setup_intent = await Stripe.setupIntents.create({
+      customer: customer.id,
+      automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+    })
+    const prisma = new PrismaService()
+
+    await prisma.user.update({
+      where: { id: user_id },
+      data: {
+        stripe_customer_id: customer.id,
+      }
+    })
     return customer;
   }
 
@@ -169,9 +203,8 @@ export class StripePayment {
    * @returns
    */
   static async createCheckoutSession() {
-    const success_url = `${
-      appConfig().app.url
-    }/success?session_id={CHECKOUT_SESSION_ID}`;
+    const success_url = `${appConfig().app.url
+      }/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancel_url = `${appConfig().app.url}/failed`;
 
     const session = await Stripe.checkout.sessions.create({
@@ -207,9 +240,8 @@ export class StripePayment {
     customer: string,
     price: string,
   ) {
-    const success_url = `${
-      appConfig().app.url
-    }/success?session_id={CHECKOUT_SESSION_ID}`;
+    const success_url = `${appConfig().app.url
+      }/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancel_url = `${appConfig().app.url}/failed`;
 
     const session = await Stripe.checkout.sessions.create({

@@ -78,6 +78,9 @@ export class UserProfileService {
 
       const paymentMethod = await StripePayment.getPaymentMethod({ id: paymentMethodId })
 
+      await StripePayment.attachPaymentMethod({ customer_id: paymentMethod.customer as string, payment_method_id: paymentMethod.id })
+
+
       const card = await this.prisma.userCard.create({
         data: {
           user_id: user_id,
@@ -96,11 +99,22 @@ export class UserProfileService {
         data: card
       };
     } catch (error) {
+      console.log('============err add card========================');
+      console.error(error?.message);
+      console.log('====================================');
       return {
         success: false,
         message: 'Failed to save card',
         error: error.message,
       };
+    }
+  }
+
+  async getCard(customer_id: string) {
+    try {
+
+    } catch (error) {
+
     }
   }
 
