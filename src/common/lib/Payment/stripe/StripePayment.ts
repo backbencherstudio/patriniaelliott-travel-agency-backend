@@ -33,6 +33,15 @@ export class StripePayment {
     return paymentMethod;
   }
 
+  static async getPaymentMethod({
+    id,
+  }: {
+    id: string;
+  }): Promise<stripe.PaymentMethod> {
+    const paymentMethod = await Stripe.paymentMethods.retrieve(id);
+    return paymentMethod;
+  }
+
   /**
    * Add customer to stripe
    * @param email

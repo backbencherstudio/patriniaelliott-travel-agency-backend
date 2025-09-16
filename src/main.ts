@@ -85,6 +85,8 @@ async function bootstrap() {
 
   app.useGlobalPipes(
     new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
       transform: true,
       transformOptions: {
         enableImplicitConversion: true,
@@ -92,6 +94,7 @@ async function bootstrap() {
     }),
   );
   app.useGlobalFilters(new CustomExceptionFilter());
+  app.useGlobalPipes()
 
   // storage setup
   SojebStorage.config({

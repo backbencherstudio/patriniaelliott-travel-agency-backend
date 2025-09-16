@@ -4,10 +4,11 @@ import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { CreateUserCardDto } from './dto/create-user-card.dto';
+import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 
 @Injectable()
 export class UserProfileService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
   async update(id: string, updateUserProfileDto: UpdateUserProfileDto) {
     try {
       // First check if user exists
@@ -73,35 +74,26 @@ export class UserProfileService {
 
   async addCard(user_id: string, createUserCardDto: CreateUserCardDto) {
     try {
-      // Validate user existence
-      const user = await this.prisma.user.findUnique({ where: { id: user_id } });
-      if (!user) {
-        return {
-          success: false,
-          message: 'User not found',
-        };
-      }
+      const { paymentMethodId } = createUserCardDto
 
-      const newCard = await this.prisma.userCard.create({
+      const paymentMethod = await StripePayment.getPaymentMethod({ id: paymentMethodId })
+
+      const card = await this.prisma.userCard.create({
         data: {
-          user_id,
-          card_number: createUserCardDto.card_number,
-          expiry_month: createUserCardDto.expiry_month,
-          expiry_year: createUserCardDto.expiry_year,
-          cvv: createUserCardDto.cvv,
-          billing_country: createUserCardDto.billing_country,
-          billing_street_address: createUserCardDto.billing_street_address,
-          billing_apt_suite_unit: createUserCardDto.billing_apt_suite_unit,
-          billing_state: createUserCardDto.billing_state,
-          billing_city: createUserCardDto.billing_city,
-          billing_zip_code: createUserCardDto.billing_zip_code,
-        },
-      });
+          user_id: user_id,
+          customerID: paymentMethod.customer as string,
+          stripePaymentMethodId: paymentMethod.id,
+          brand: paymentMethod.card.brand,
+          expMonth: paymentMethod.card.exp_month,
+          expYear: paymentMethod.card.exp_year,
+          last4: paymentMethod.card.last4
+        }
+      })
 
       return {
         success: true,
         message: 'Card saved successfully',
-        data: newCard,
+        data: card
       };
     } catch (error) {
       return {
