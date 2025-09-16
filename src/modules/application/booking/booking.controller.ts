@@ -18,14 +18,19 @@ import { CreateBookingDto } from './dto/create-booking.dto';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { Roles } from '../../../common/guard/role/roles.decorator';
+import { RolesGuard } from '../../../common/guard/role/roles.guard';
+import { Role } from '../../../common/guard/role/role.enum';
+import { use } from 'passport';
 
 @ApiBearerAuth()
 @ApiTags('Booking')
-@UseGuards(JwtAuthGuard)
 @Controller('booking')
 export class BookingController {
   constructor(private readonly bookingService: BookingService) {}
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Create booking with dynamic ID processing' })
   @Post()
   async create(
@@ -47,6 +52,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all bookings' })
   @Get()
   async findAll(
@@ -77,6 +83,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get one booking' })
   @Get(':id')
   async findOne(@Req() req: Request, @Param('id') id: string) {
@@ -93,7 +100,7 @@ export class BookingController {
     }
   }
 
-
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create feedback for a booking' })
   @Post('feedback')
   async createFeedback(@Req() req: Request, @Body() createFeedbackDto: CreateFeedbackDto) {
@@ -111,6 +118,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get feedback for a specific booking' })
   @Get(':booking_id/feedback')
   async getFeedback(@Req() req: Request, @Param('booking_id') booking_id: string) {
@@ -127,6 +135,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Update feedback for a booking' })
   @Put(':booking_id/feedback')
   async updateFeedback(
@@ -147,6 +156,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Delete feedback for a booking' })
   @Delete(':booking_id/feedback')
   async deleteFeedback(@Req() req: Request, @Param('booking_id') booking_id: string) {
@@ -163,6 +173,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all feedback for the current user' })
   @Get('feedback/all')
   async getUserFeedback(@Req() req: Request) {
@@ -179,6 +190,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create payment intent for booking' })
   @Post('payment/create-intent')
   async createPaymentIntent(
@@ -203,6 +215,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Confirm payment for booking' })
   @Post('payment/confirm/:payment_intent_id')
   async confirmPayment(
@@ -228,6 +241,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get payment status for booking' })
   @Get(':booking_id/payment-status')
   async getPaymentStatus(
