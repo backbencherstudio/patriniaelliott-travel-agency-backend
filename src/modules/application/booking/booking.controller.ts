@@ -51,14 +51,25 @@ export class BookingController {
   @Get()
   async findAll(
     @Req() req: Request,
-    @Query() query: { q?: string; status?: number; approve?: string },
+    @Query() query: { q?: string; status?: string; approve?: string; show_all?: string },
   ) {
-    try {
+    try {      
+
       const user_id = req.user.userId;
+      
+      if (!user_id) {
+        console.error('No user_id found in request object');
+        return {
+          success: false,
+          message: 'User not authenticated or user ID not found',
+        };
+      }
+
       const bookings = await this.bookingService.findAll(user_id, query);
 
       return bookings;
     } catch (error) {
+      console.error('Controller error:', error);
       return {
         success: false,
         message: error.message,

@@ -490,7 +490,33 @@ export class BookingService {
           user_id: user_id,
         },
         include: {
-          booking: true,
+          booking: {
+            include: {
+              booking_items: {
+                include: {
+                  package: {
+                    include: {
+                      user: {
+                        select: {
+                          id: true,
+                          name: true,
+                          avatar: true,
+                        },
+                      },
+                      reviews: {
+                        where: {
+                          status: 1,
+                        },
+                        select: {
+                          rating_value: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       });
 
@@ -500,6 +526,7 @@ export class BookingService {
       const paymentIntent = await StripePayment.retrievePaymentIntent(payment_intent_id);
 
       if (paymentIntent.status === 'requires_payment_method') {
+        
         // Update transaction status
         await this.prisma.paymentTransaction.update({
           where: { id: transaction.id },
@@ -513,6 +540,7 @@ export class BookingService {
         await this.prisma.booking.update({
           where: { id: transaction.booking_id },
           data: {
+            status: 'succeeded',
             payment_status: 'paid',
             paid_amount: paymentIntent.amount / 100,
             paid_currency: paymentIntent.currency,
@@ -522,11 +550,74 @@ export class BookingService {
         });
         await this.updateVendorWallet(transaction.booking_id);
 
+        // Get the first package from booking items for display
+        const firstBookingItem = transaction.booking.booking_items[0];
+        const packageData = firstBookingItem?.package;
+        
+        if (!packageData) {
+          throw new NotFoundException('Package not found in booking');
+        }
+
+        // Calculate average rating and review count
+        const reviews = packageData.reviews;
+        const averageRating = reviews.length > 0 
+          ? reviews.reduce((sum, review) => sum + (review.rating_value || 0), 0) / reviews.length 
+          : 0;
+        const reviewCount = reviews.length;
+
+        // Format amenities from JSON - get keys where value is true
+        let amenities = [];
+        if (packageData.amenities && typeof packageData.amenities === 'object') {
+          amenities = Object.keys(packageData.amenities).filter(key => packageData.amenities[key] === true);
+        }
+
+        // Add duration information to amenities
+        if (packageData.duration && packageData.duration_type) {
+          amenities.unshift(`${packageData.duration} ${packageData.duration_type}`);
+        }
+
+        // Add common amenities based on package type
+        if (packageData.type === 'apartment' || packageData.type === 'hotel') {
+          // Add basic amenities that are commonly included
+          if (packageData.bathrooms && packageData.bathrooms > 0) {
+            amenities.push(`${packageData.bathrooms} bathroom${packageData.bathrooms > 1 ? 's' : ''}`);
+          }
+          if (packageData.bedrooms && packageData.bedrooms > 0) {
+            amenities.push(`${packageData.bedrooms} bedroom${packageData.bedrooms > 1 ? 's' : ''}`);
+          }
+          if (packageData.max_guests && packageData.max_guests > 0) {
+            amenities.push(`Up to ${packageData.max_guests} guests`);
+          }
+        }
+
         return {
           success: true,
           message: 'Payment confirmed successfully',
           booking_id: transaction.booking_id,
           amount_paid: paymentIntent.amount / 100,
+          booking: {
+            id: transaction.booking.id,
+            invoice_number: transaction.booking.invoice_number,
+            status: 'succeeded', // Updated status after payment confirmation
+            type: transaction.booking.type,
+            total_amount: transaction.booking.total_amount,
+            booking_date_time: transaction.booking.booking_date_time,
+          },
+          package: {
+            id: packageData.id,
+            name: packageData.name,
+            description: packageData.description,
+            amenities: amenities,
+            host: {
+              id: packageData.user?.id,
+              name: packageData.user?.name || 'Unknown Host',
+              avatar: packageData.user?.avatar,
+            },
+            feedback: {
+              rating: Math.round(averageRating * 10) / 10, // Round to 1 decimal place
+              review_count: reviewCount,
+            },
+          },
         };
       } else {
         throw new BadRequestException(`Payment not successful. Status: ${paymentIntent.status}`);
@@ -581,7 +672,7 @@ export class BookingService {
       const booking = await this.prisma.booking.findFirst({
         where: {
           id: booking_id,
-          user_id: user_id,
+          deleted_at: null,
         },
         include: {
           payment_transactions: {
@@ -609,54 +700,178 @@ export class BookingService {
   }
 
 
-  async findAll(user_id: string, query: { q?: string; status?: number; approve?: string }) {
+  async findAll(user_id: string, query: { q?: string; status?: string; approve?: string; show_all?: string }) {
     try {
+      console.log('=== findAll DEBUG START ===');
+      console.log('User ID received:', user_id);
+      console.log('Query parameters:', query);
+      console.log('User ID type:', typeof user_id);
+
+      // First, let's check if there are ANY bookings in the database
+      const totalBookingsCount = await this.prisma.booking.count({
+        where: { deleted_at: null }
+      });
+      console.log('Total bookings in database:', totalBookingsCount);
+
+      // Check if there are bookings for this specific user
+      const userBookingsCount = await this.prisma.booking.count({
+        where: {
+          user_id: user_id,
+          deleted_at: null
+        }
+      });
+      console.log('Bookings for this user:', userBookingsCount);
+
+      // Let's also check what user_ids exist in the database
+      const allUserIds = await this.prisma.booking.findMany({
+        where: { deleted_at: null },
+        select: { user_id: true },
+        distinct: ['user_id']
+      });
+      console.log('All user_ids in bookings table:', allUserIds.map(b => b.user_id));
+
+      // Determine if requester is admin
+      const requester = await this.prisma.user.findUnique({
+        where: { id: user_id },
+        select: { type: true },
+      });
+
+      const isAdmin = requester?.type === 'admin' || requester?.type === 'su_admin';
+      const showAll = query.show_all === 'true';
+      console.log('Requester type:', requester?.type);
+      console.log('Is admin:', isAdmin);
+      console.log('Show all flag:', showAll);
+
       const where: any = {
-        user_id,
         deleted_at: null,
       };
-
-      if (query.status) {
-        where.status = query.status.toString();
+      if (!isAdmin && !showAll) {
+        where.user_id = user_id;
+        console.log('Filtering by user_id:', user_id);
+      } else {
+        console.log('Admin access or show_all=true - showing all bookings');
       }
 
+      // Handle status filtering
+      if (query.status) {
+        where.status = query.status;
+      }
+
+      // Handle approval filtering
+      if (query.approve) {
+        if (query.approve === 'true') {
+          where.approved_at = { not: null };
+        } else if (query.approve === 'false') {
+          where.approved_at = null;
+        }
+      }
+
+      // Handle search query
       if (query.q) {
         where.OR = [
           { invoice_number: { contains: query.q, mode: 'insensitive' } },
           { first_name: { contains: query.q, mode: 'insensitive' } },
           { last_name: { contains: query.q, mode: 'insensitive' } },
+          { email: { contains: query.q, mode: 'insensitive' } },
         ];
       }
+
+      console.log('Final where clause:', JSON.stringify(where, null, 2));
 
       const bookings = await this.prisma.booking.findMany({
         where,
         include: {
+          // Include all user fields for both customer and vendor
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone_number: true,
+              avatar: true,
+              type: true,
+              status: true,
+              created_at: true,
+            },
+          },
           vendor: {
             select: {
               id: true,
               name: true,
               email: true,
+              phone_number: true,
+              avatar: true,
+              type: true,
+              status: true,
+              created_at: true,
             },
           },
+          // Include all booking items with complete package data
           booking_items: {
             include: {
+              package: {
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true,
+                      avatar: true,
+                    },
+                  },
+                  reviews: {
+                    where: {
+                      status: 1,
+                    },
+                    select: {
+                      rating_value: true,
+                      comment: true,
+                      created_at: true,
+                    },
+                  },
+                },
+              },
+              PackageRoomType: true,
+            },
+          },
+          // Include all booking travellers
+          booking_travellers: true,
+          // Include all booking extra services with complete service data
+          booking_extra_services: {
+            include: {
+              extra_service: true,
+            },
+          },
+          // Include all booking coupons
+          booking_coupons: {
+            include: {
+              coupon: true,
+            },
+          },
+          // Include all payment transactions
+          payment_transactions: {
+            orderBy: {
+              created_at: 'desc',
+            },
+          },
+          // Include all reviews for this booking
+          reviews: {
+            where: {
+              deleted_at: null,
+            },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  avatar: true,
+                },
+              },
               package: {
                 select: {
                   id: true,
                   name: true,
-                  description: true,
-                },
-              },
-            },
-          },
-          booking_travellers: true,
-          booking_extra_services: {
-            include: {
-              extra_service: {
-                select: {
-                  id: true,
-                  name: true,
-                  description: true,
                 },
               },
             },
@@ -667,13 +882,24 @@ export class BookingService {
         },
       });
 
+      console.log(`Query returned ${bookings.length} bookings`);
+      console.log('=== findAll DEBUG END ===');
+
       return {
         success: true,
         data: bookings,
-        message: 'Bookings retrieved successfully',
+        message: `Bookings retrieved successfully. Found ${bookings.length} booking(s).`,
+        count: bookings.length,
+        debug: {
+          totalBookingsInDB: totalBookingsCount,
+          userBookingsInDB: userBookingsCount,
+          user_id_received: user_id,
+          user_id_type: typeof user_id
+        }
       };
     } catch (error) {
-      throw new BadRequestException(error.message);
+      console.error('Error in findAll:', error);
+      throw new BadRequestException(`Failed to retrieve bookings: ${error.message}`);
     }
   }
 
@@ -1040,6 +1266,54 @@ export class BookingService {
       };
     } catch (error) {
       throw new BadRequestException(error.message);
+    }
+  }
+
+  // Debug method to check database without authentication
+  async debugDatabaseCheck() {
+    try {
+      // Get total bookings count
+      const totalBookings = await this.prisma.booking.count();
+      
+      // Get all bookings with basic info
+      const allBookings = await this.prisma.booking.findMany({
+        select: {
+          id: true,
+          user_id: true,
+          vendor_id: true,
+          status: true,
+          invoice_number: true,
+          created_at: true,
+          deleted_at: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+        },
+        orderBy: {
+          created_at: 'desc',
+        },
+        take: 10, // Get first 10 bookings
+      });
+
+      // Get unique user_ids
+      const uniqueUserIds = await this.prisma.booking.findMany({
+        select: { user_id: true },
+        distinct: ['user_id'],
+        where: { user_id: { not: null } }
+      });
+
+      return {
+        success: true,
+        data: {
+          totalBookings,
+          sampleBookings: allBookings,
+          uniqueUserIds: uniqueUserIds.map(u => u.user_id),
+          message: 'Database check completed'
+        }
+      };
+    } catch (error) {
+      console.error('Database check failed:', error);
+      throw new BadRequestException(`Database check failed: ${error.message}`);
     }
   }
 }
