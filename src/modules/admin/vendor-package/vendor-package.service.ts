@@ -682,6 +682,7 @@ export class VendorPackageService {
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           package_files.push(fileName);
+          console.log(`Successfully uploaded package file: ${fileName}`);
         }
       }
       
@@ -696,6 +697,7 @@ export class VendorPackageService {
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           trip_plans_images.push(fileName);
+          console.log(`Successfully uploaded trip plan image: ${fileName}`);
         }
       }
       
@@ -711,6 +713,7 @@ export class VendorPackageService {
           const fileName = `${randomName}${file.originalname}`;
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
+          
           room_photos.push(fileName);
           console.log(`Successfully uploaded room photo: ${fileName}`);
         }
@@ -750,8 +753,8 @@ export class VendorPackageService {
         }
       }
       
-      // Filter out room_photos from packageData to prevent it from being included in the main package
-      const { room_photos: _, ...cleanPackageData } = packageData as any
+      // Filter out room_photos, country_id, countryId, and country from packageData to prevent them from being included in the main package
+      const { room_photos: _, country_id: __, countryId: ___, country: ____, ...cleanPackageData } = packageData as any
       if (cleanPackageData.type) {
         cleanPackageData.type = cleanPackageData.type.toLowerCase();
       }
@@ -787,6 +790,30 @@ export class VendorPackageService {
           ]
         }
       };
+
+      // Explicitly handle country field - set as string to avoid relationship issues
+      if (createVendorPackageDto.country) {
+        data.country = createVendorPackageDto.country;
+        console.log('Setting country as string:', createVendorPackageDto.country);
+      } else if ((createVendorPackageDto as any).country_id) {
+        // If country_id is provided, look up the country name and set as string
+        try {
+          const country = await this.prisma.country.findUnique({
+            where: { id: (createVendorPackageDto as any).country_id },
+            select: { name: true }
+          });
+          
+          if (country) {
+            data.country = country.name;
+            console.log('Found country name from ID:', country.name);
+          } else {
+            console.log('Country ID not found in database. Skipping country field.');
+          }
+        } catch (error) {
+          console.error('Error looking up country by ID:', error);
+          console.log('Skipping country field due to error.');
+        }
+      }
 
       // Add package room types if provided
       if (package_room_types && package_room_types.length > 0) {
@@ -901,7 +928,9 @@ export class VendorPackageService {
       console.log('Final data object for Prisma:', {
         hasPackageRoomTypes: !!data.package_room_types,
         packageRoomTypesData: data.package_room_types,
-        roomPhotosInData: data.package_room_types?.create?.[0]?.room_photos || []
+        roomPhotosInData: data.package_room_types?.create?.[0]?.room_photos || [],
+        countryField: data.country,
+        dataKeys: Object.keys(data)
       });
 
       // Create package with nested data
@@ -994,10 +1023,17 @@ export class VendorPackageService {
         calendar_configuration: calendarConfig,
       };
 
+      // Generate full URLs for room_photos in the return value
+      const roomPhotosWithUrls = room_photos.map(filename => {
+        const fullUrl = this.generateFileUrl(filename, 'package');
+        console.log(`Generated full URL for room photo: ${filename} -> ${fullUrl}`);
+        return fullUrl;
+      });
+
       return {
         success: true,
         data: processedResult,
-        roomPhotos: room_photos,
+        roomPhotos: roomPhotosWithUrls,
         message: 'Package created successfully with files, room types, and availabilities',
         meta: {
           requiresVendorVerification: !isVendorType || !isVendorVerified,
@@ -1056,6 +1092,7 @@ export class VendorPackageService {
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           package_files.push(fileName);
+          console.log(`Successfully uploaded package file: ${fileName}`);
         }
       }
       
@@ -1070,6 +1107,7 @@ export class VendorPackageService {
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           trip_plans_images.push(fileName);
+          console.log(`Successfully uploaded trip plan image: ${fileName}`);
         }
       }
       

@@ -304,9 +304,34 @@ export class VendorUserVerificationService {
         throw new Error('Access denied. Only vendors can view verification details.');
       }
 
-      // Check if vendor verification exists
+      // If vendor verification doesn't exist, create a default one
       if (!user.VendorVerification) {
-        throw new Error('Vendor verification not found. Please register as a vendor first.');
+        console.log(`Creating default VendorVerification record for user: ${userId}`);
+        
+        const defaultVerification = await this.prisma.vendorVerification.create({
+          data: {
+            user_id: userId,
+            first_name: user.first_name || user.name || 'Unknown',
+            phone_number: user.phone_number || 'Not provided',
+            business_website: '',
+            vendor_type: 'individual',
+            status: 'pending'
+          }
+        });
+
+        // Fetch the user again with the new verification record
+        const updatedUser = await this.prisma.user.findUnique({
+          where: { id: userId },
+          include: {
+            VendorVerification: true,
+            user_documents: {
+              where: { type: 'vendor_verification' },
+              orderBy: { created_at: 'desc' }
+            }
+          }
+        });
+
+        user.VendorVerification = updatedUser.VendorVerification;
       }
 
       // Add image URLs using SojebStorage
@@ -324,6 +349,7 @@ export class VendorUserVerificationService {
         success: true,
         data: user,
         email: user.email ?? null,
+        message: user.VendorVerification ? 'Vendor verification found' : 'Default vendor verification created'
       };
     } catch (error) {
       throw new Error(`Failed to get vendor verification: ${error.message}`);
