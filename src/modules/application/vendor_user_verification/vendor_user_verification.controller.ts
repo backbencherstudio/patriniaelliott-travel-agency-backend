@@ -26,15 +26,15 @@ export class VendorUserVerificationController {
   @ApiOperation({ summary: 'Upload a vendor verification document' })
   @UseGuards(JwtAuthGuard)
   @Post()
-  @UseInterceptors(FileInterceptor('document'))
+  @UseInterceptors(FileInterceptor('image'))
   async create(
     @Req() req: any,
     @Body() body: UserDocumentDto,
-    @UploadedFile() document?: Express.Multer.File,
+    @UploadedFile() image?: Express.Multer.File,
   ) {
     try {
       const user_id = req.user.userId;
-      return await this.vendorUserVerificationService.create(body, user_id, document);
+      return await this.vendorUserVerificationService.create(body, user_id, image);
     } catch (error) {
       return {
         success: false,
@@ -110,9 +110,7 @@ export class VendorUserVerificationController {
         await this.vendorUserVerificationService.create(
           {
             type: 'vendor_verification',
-            file_name: document.originalname,
-            file_path: document.filename,
-            file_type: document.mimetype,
+            status: 'pending'
           },
           user_id,
           document
@@ -142,9 +140,7 @@ export class VendorUserVerificationController {
         await this.vendorUserVerificationService.create(
           {
             type: 'vendor_verification',
-            file_name: document.originalname,
-            file_path: document.filename,
-            file_type: document.mimetype,
+            status: 'pending'
           },
           userId,
           document,
