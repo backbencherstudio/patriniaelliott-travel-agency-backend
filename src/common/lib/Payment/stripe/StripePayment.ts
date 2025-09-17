@@ -15,6 +15,24 @@ const STRIPE_WEBHOOK_SECRET = appConfig().payment.stripe.webhook_secret;
  * Stripe payment method helper
  */
 export class StripePayment {
+
+  static async createAccount({ email, first_name, last_name, }: { email: string, first_name: string, last_name: string }) {
+    const newAccount = await Stripe.accounts.create({
+      type: 'express',
+      email: email,
+      business_type: "individual",
+      individual: {
+        email: email,
+        first_name: first_name,
+        last_name: last_name,
+      },
+      capabilities: {
+        transfers: { requested: true },
+      },
+    })
+    return newAccount
+  }
+
   static async createPaymentMethod({
     card,
     billing_details,
@@ -63,7 +81,7 @@ export class StripePayment {
     return paymentMethod;
   }
 
-  static async deletePaymentMethods(card_id: string){
+  static async deletePaymentMethods(card_id: string) {
     return await Stripe.paymentMethods.detach(card_id)
   }
 

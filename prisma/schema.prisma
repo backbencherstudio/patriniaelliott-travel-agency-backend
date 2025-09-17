@@ -100,6 +100,7 @@ model User {
   withdrawals                   Withdrawal[]
   user_documents                UserDocument[]
   stripe_customer_id            String?
+  VendorPaymentMethod           VendorPaymentMethod[]
 
   @@map("users")
 }
@@ -1236,6 +1237,17 @@ model UserCard {
   user                     User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("user_cards")
+}
+
+model VendorPaymentMethod {
+  id             String @id @default(cuid())
+  name           String
+  payment_method String
+  account_id     String @unique
+  user_id        String
+  user           User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("vendor_payment_methods")
 }
 
 enum MessageStatus {

@@ -8,9 +8,9 @@ import { CreatePaymentDto, PaymentIntentResponseDto } from './dto/create-payment
 
 @Injectable()
 export class BookingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
- 
+
   async createBooking(
     user_id: string,
     createBookingDto: CreateBookingDto,
@@ -39,14 +39,14 @@ export class BookingService {
 
         // Process booking items and validate packages
         const processedItems = await this.processBookingItems(prisma, createBookingDto.booking_items);
-        
+
         if (!processedItems || processedItems.length === 0) {
           throw new BadRequestException('No valid booking items found');
         }
-        
+
         // Get vendor_id from the first package (assuming all packages are from same vendor)
         const vendor_id = processedItems[0]?.package?.user_id;
-        
+
         if (!vendor_id) {
           throw new BadRequestException('Invalid package or vendor not found');
         }
@@ -146,15 +146,15 @@ export class BookingService {
       return result;
     } catch (error) {
       console.error('Booking creation error:', error);
-      
+
       if (error.message.includes('timeout') || error.message.includes('transaction')) {
         throw new BadRequestException('Database operation timed out. Please try again.');
       }
-      
+
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;
       }
-      
+
       throw new BadRequestException('Failed to create booking. Please try again.');
     }
   }
@@ -231,7 +231,7 @@ export class BookingService {
     return processedItems;
   }
 
- 
+
   private validateBookingDates(start_date: Date, end_date: Date) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -270,11 +270,11 @@ export class BookingService {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
-    
+
     // Get count of bookings for today
     const todayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const todayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
-    
+
     const count = await prisma.booking.count({
       where: {
         created_at: {
@@ -288,7 +288,7 @@ export class BookingService {
     return `INV-${year}${month}${day}-${sequence}`;
   }
 
- 
+
   private async createBookingItems(prisma: any, booking_id: string, items: any[]) {
     const bookingItems = [];
 
@@ -357,7 +357,7 @@ export class BookingService {
     return bookingTravellers;
   }
 
- 
+
   private async createBookingExtraServices(prisma: any, booking_id: string, extraServices?: BookingExtraServiceDto[]) {
     if (!extraServices || extraServices.length === 0) {
       return [];
@@ -398,7 +398,7 @@ export class BookingService {
     return bookingExtraServices;
   }
 
- 
+
   async createPaymentIntent(
     user_id: string,
     createPaymentDto: CreatePaymentDto,
@@ -424,24 +424,14 @@ export class BookingService {
         throw new BadRequestException('Booking is already paid');
       }
 
-      // Create or get Stripe customer
-      let stripeCustomer;
-      try {
-        stripeCustomer = await StripePayment.createCustomer({
-          user_id: booking.user.id,
-          name: booking.user.name || `${booking.first_name} ${booking.last_name}`,
-          email: booking.user.email || createPaymentDto.customer_email,
-        });
-      } catch (error) {
-        // If customer already exists, try to retrieve
-        console.log('Customer creation failed, might already exist:', error.message);
-      }
+      const totalAmount = Number(booking.total_amount) * 100
+      const platformFee = Math.round(totalAmount * 0.1);
 
       // Create payment intent
       const paymentIntent = await StripePayment.createPaymentIntent({
-        amount: createPaymentDto.amount,
+        amount: totalAmount,
         currency: createPaymentDto.currency,
-        customer_id: stripeCustomer?.id,
+        customer_id: booking.user.stripe_customer_id,
         metadata: {
           booking_id: booking.id,
           user_id: booking.user_id,
@@ -449,6 +439,22 @@ export class BookingService {
           invoice_number: booking.invoice_number,
         },
       });
+
+      //   const paymentIntent2 = await stripe.paymentIntents.create({
+      //   amount: totalAmount,
+      //   currency: "usd",
+      //   application_fee_amount: platformFee,
+      //   transfer_data: {
+      //     destination: expert.stripeAccountId!,
+      //   },
+      //   automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+      //   capture_method: "manual",
+      //   metadata: {
+      //     bookingId: booking.id,
+      //     studentId: userId!,
+      //     expertId: data.expertId,
+      //   },
+      // });
 
       // Create payment transaction record
       await this.prisma.paymentTransaction.create({
@@ -741,7 +747,7 @@ export class BookingService {
     }
   }
 
-  
+
   async createFeedback(user_id: string, createFeedbackDto: CreateFeedbackDto) {
     try {
       // Verify booking exists and belongs to user
@@ -829,7 +835,7 @@ export class BookingService {
     }
   }
 
- 
+
   async getFeedback(booking_id: string, user_id: string) {
     try {
       // Verify booking exists and belongs to user
@@ -879,7 +885,7 @@ export class BookingService {
     }
   }
 
- 
+
   async updateFeedback(user_id: string, booking_id: string, updateFeedbackDto: UpdateFeedbackDto) {
     try {
       // Verify booking exists and belongs to user
@@ -1002,7 +1008,7 @@ export class BookingService {
     }
   }
 
- 
+
   async getUserFeedback(user_id: string) {
     try {
       const feedbacks = await this.prisma.review.findMany({

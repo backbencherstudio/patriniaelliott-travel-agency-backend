@@ -24,7 +24,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 @UseGuards(JwtAuthGuard)
 @Controller('booking')
 export class BookingController {
-  constructor(private readonly bookingService: BookingService) {}
+  constructor(private readonly bookingService: BookingService) { }
 
   @ApiOperation({ summary: 'Create booking with dynamic ID processing' })
   @Post()
@@ -32,19 +32,11 @@ export class BookingController {
     @Req() req: Request,
     @Body() createBookingDto: CreateBookingDto,
   ) {
-    try {
-      const user_id = req.user.userId;
-      const booking = await this.bookingService.createBooking(
-        user_id,
-        createBookingDto,
-      );
-      return booking;
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
+    const user_id = req.user.userId;
+    return await this.bookingService.createBooking(
+      user_id,
+      createBookingDto,
+    );
   }
 
   @ApiOperation({ summary: 'Get all bookings' })
