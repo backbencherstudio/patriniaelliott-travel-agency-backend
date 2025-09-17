@@ -8,7 +8,7 @@ import { ApiOperation } from '@nestjs/swagger';
 import { CreateUserCardDto } from './dto/create-user-card.dto';
 
 @Controller('user-profile')
-// @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class UserProfileController {
   constructor(private readonly userProfileService: UserProfileService) { }
 
@@ -48,16 +48,9 @@ export class UserProfileController {
     @Req() req: Request,
     @Body() createUserCardDto: CreateUserCardDto,
   ) {
-    try {
-      // const user_id = req.user.userId;
-      const user_id = 'cmfndpo290000vc3w9vfifzsx';
-      return this.userProfileService.addCard(user_id, createUserCardDto);
-    } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to save card',
-      };
-    }
+    // const user_id = req.user.userId;
+    const user_id = 'cmfndpo290000vc3w9vfifzsx';
+    return this.userProfileService.addCard(user_id, createUserCardDto);
   }
 
 
@@ -75,14 +68,7 @@ export class UserProfileController {
     @Req() req: Request,
     @Param('cardId') cardId: string,
   ) {
-    try {
-      const user_id = req.user.userId;
-      return this.userProfileService.deleteCard(user_id, cardId);
-    } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to delete card',
-      };
-    }
+    const user_id = req.user?.userId;
+    return this.userProfileService.deleteCard(user_id, cardId);
   }
 }

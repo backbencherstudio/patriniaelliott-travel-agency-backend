@@ -1224,16 +1224,16 @@ model Tax {
 }
 
 model UserCard {
-  id                    String  @id @default(cuid())
-  stripe_payment_method_id String
-  customer_id            String
-  brand                 String?
-  last4                 String?
-  exp_month              Int?
-  exp_year               Int?
-  is_default  Boolean @default(false)
-  user_id               String
-  user                  User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  id                       String  @id @default(cuid())
+  stripe_payment_method_id String  @unique
+  customer_id              String
+  brand                    String?
+  last4                    String?
+  exp_month                Int?
+  exp_year                 Int?
+  is_default               Boolean @default(false)
+  user_id                  String
+  user                     User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("user_cards")
 }

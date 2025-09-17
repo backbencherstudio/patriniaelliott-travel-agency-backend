@@ -63,6 +63,10 @@ export class StripePayment {
     return paymentMethod;
   }
 
+  static async deletePaymentMethods(card_id: string){
+    return await Stripe.paymentMethods.detach(card_id)
+  }
+
   /**
    * Add customer to stripe
    * @param email
@@ -85,11 +89,6 @@ export class StripePayment {
       },
       description: 'New Customer',
     });
-
-    const setup_intent = await Stripe.setupIntents.create({
-      customer: customer.id,
-      automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
-    })
     const prisma = new PrismaService()
 
     await prisma.user.update({

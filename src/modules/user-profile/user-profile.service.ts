@@ -153,9 +153,8 @@ export class UserProfileService {
 
   async deleteCard(user_id: string, card_id: string) {
     try {
-      // Verify card exists and belongs to user
       const card = await this.prisma.userCard.findFirst({
-        where: { id: card_id, user_id },
+        where: { stripe_payment_method_id: card_id, user_id },
       });
 
       if (!card) {
@@ -165,13 +164,15 @@ export class UserProfileService {
         };
       }
 
-      await this.prisma.userCard.delete({ where: { id: card_id } });
+      await StripePayment.deletePaymentMethods(card_id)
+      await this.prisma.userCard.delete({ where: { stripe_payment_method_id: card_id } });
 
       return {
         success: true,
         message: 'Card deleted successfully',
       };
     } catch (error) {
+      console.error('Error deleting card:', error?.message)
       return {
         success: false,
         message: 'Failed to delete card',
