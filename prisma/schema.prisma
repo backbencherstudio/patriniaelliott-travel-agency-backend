@@ -1225,12 +1225,13 @@ model Tax {
 
 model UserCard {
   id                    String  @id @default(cuid())
-  stripePaymentMethodId String  @unique
-  customerID            String
+  stripe_payment_method_id String
+  customer_id            String
   brand                 String?
   last4                 String?
-  expMonth              Int?
-  expYear               Int?
+  exp_month              Int?
+  exp_year               Int?
+  is_default  Boolean @default(false)
   user_id               String
   user                  User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
 

@@ -50,7 +50,7 @@ export class UserProfileController {
   ) {
     try {
       // const user_id = req.user.userId;
-      const user_id = 'cmfm9miep0002vc18ns8mjehb';
+      const user_id = 'cmfndpo290000vc3w9vfifzsx';
       return this.userProfileService.addCard(user_id, createUserCardDto);
     } catch (error) {
       return {
