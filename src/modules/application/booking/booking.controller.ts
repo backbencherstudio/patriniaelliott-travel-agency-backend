@@ -18,6 +18,7 @@ import { CreateBookingDto } from './dto/create-booking.dto';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
 
 @ApiBearerAuth()
 @ApiTags('Booking')
@@ -189,24 +190,14 @@ export class BookingController {
   async confirmPayment(
     @Req() req: Request,
     @Param('payment_intent_id') payment_intent_id: string,
+    @Body() body: ConfirmPaymentDto,
   ) {
-    try {
-      console.log(payment_intent_id);
-      const user_id = req.user.userId;
-      const result = await this.bookingService.confirmPayment(
-        user_id,
-        payment_intent_id,
-      );
-      return {
-        success: true,
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
+    const user_id = req.user.userId;
+    return await this.bookingService.confirmPayment(
+      user_id,
+      payment_intent_id,
+      body.payment_method_id
+    );
   }
 
   @ApiOperation({ summary: 'Get payment status for booking' })

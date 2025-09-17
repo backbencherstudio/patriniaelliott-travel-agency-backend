@@ -1,4 +1,4 @@
-import { HttpException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAccountDto } from './dto/create-account.dto';
@@ -13,6 +13,17 @@ export class StripeService {
             });
             if (!user) {
                 throw new NotFoundException('User not found');
+            }
+
+            const isExistStripe = await this.prisma.vendorPaymentMethod.findFirst({
+                where: {
+                    user_id,
+                    payment_method: 'stripe'
+                }
+            })
+
+            if (isExistStripe) {
+                throw new BadRequestException('Stripe already added.')
             }
 
             const newAccount = await StripePayment.createAccount({ email: data.payment_email, first_name: data.card_holder_name?.split(" ")?.[0], last_name: data.card_holder_name?.split(" ")?.[1] })

@@ -11,7 +11,7 @@ import { Roles } from 'src/common/guard/role/roles.decorator';
 @ApiBearerAuth()
 @ApiTags('Stripe')
 @UseGuards(JwtAuthGuard, RolesGuard)
-// @Roles(Role.ADMIN, Role.VENDOR)
+@Roles(Role.ADMIN, Role.VENDOR)
 @Controller('/payments/stripe')
 export class StripeController {
     constructor(private stripeService: StripeService) { }

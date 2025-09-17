@@ -424,14 +424,29 @@ export class BookingService {
         throw new BadRequestException('Booking is already paid');
       }
 
-      const totalAmount = Number(booking.total_amount) * 100
+      const totalAmount = Number(booking.total_amount)
       const platformFee = Math.round(totalAmount * 0.1);
+
+      const account = await this.prisma.vendorPaymentMethod.findFirst({
+        where: {
+          user_id: booking.vendor_id,
+          payment_method: createPaymentDto.provider
+        }
+      })
+      const customer = await this.prisma.userCard.findFirst({
+        where: {
+          user_id: user_id,
+          is_default: true
+        }
+      })
 
       // Create payment intent
       const paymentIntent = await StripePayment.createPaymentIntent({
         amount: totalAmount,
+        customer_id: customer.customer_id,
+        application_fee_amount: platformFee,
+        account_id: account.account_id,
         currency: createPaymentDto.currency,
-        customer_id: booking.user.stripe_customer_id,
         metadata: {
           booking_id: booking.id,
           user_id: booking.user_id,
@@ -439,22 +454,6 @@ export class BookingService {
           invoice_number: booking.invoice_number,
         },
       });
-
-      //   const paymentIntent2 = await stripe.paymentIntents.create({
-      //   amount: totalAmount,
-      //   currency: "usd",
-      //   application_fee_amount: platformFee,
-      //   transfer_data: {
-      //     destination: expert.stripeAccountId!,
-      //   },
-      //   automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
-      //   capture_method: "manual",
-      //   metadata: {
-      //     bookingId: booking.id,
-      //     studentId: userId!,
-      //     expertId: data.expertId,
-      //   },
-      // });
 
       // Create payment transaction record
       await this.prisma.paymentTransaction.create({
@@ -467,7 +466,7 @@ export class BookingService {
           reference_number: paymentIntent.id,
           status: 'pending',
           raw_status: paymentIntent.status,
-          amount: createPaymentDto.amount / 100, // Convert from cents
+          amount: totalAmount,
           currency: createPaymentDto.currency,
           paid_amount: 0,
           paid_currency: createPaymentDto.currency,
@@ -488,6 +487,7 @@ export class BookingService {
   async confirmPayment(
     user_id: string,
     payment_intent_id: string,
+    payment_method_id: string
   ) {
     try {
       const transaction = await this.prisma.paymentTransaction.findFirst({
@@ -506,34 +506,42 @@ export class BookingService {
       const paymentIntent = await StripePayment.retrievePaymentIntent(payment_intent_id);
 
       if (paymentIntent.status === 'requires_payment_method') {
-        // Update transaction status
-        await this.prisma.paymentTransaction.update({
-          where: { id: transaction.id },
-          data: {
-            status: 'succeeded',
-            paid_amount: paymentIntent.amount / 100,
-            paid_currency: paymentIntent.currency,
-            raw_status: paymentIntent.status,
-          },
-        });
-        await this.prisma.booking.update({
-          where: { id: transaction.booking_id },
-          data: {
-            payment_status: 'paid',
-            paid_amount: paymentIntent.amount / 100,
-            paid_currency: paymentIntent.currency,
-            payment_provider: 'stripe',
-            payment_reference_number: payment_intent_id,
-          },
-        });
-        await this.updateVendorWallet(transaction.booking_id);
+        await StripePayment.confirmPayment(paymentIntent.id, payment_method_id)
 
-        return {
-          success: true,
-          message: 'Payment confirmed successfully',
-          booking_id: transaction.booking_id,
-          amount_paid: paymentIntent.amount / 100,
-        };
+        const updatedIntent = await StripePayment.retrievePaymentIntent(payment_intent_id);
+
+        if (updatedIntent.status === "requires_capture") {
+          await StripePayment.capturePayment(payment_intent_id)
+          await this.prisma.paymentTransaction.update({
+            where: { id: transaction.id },
+            data: {
+              status: 'succeeded',
+              paid_amount: paymentIntent.amount / 100,
+              paid_currency: paymentIntent.currency,
+              raw_status: paymentIntent.status,
+            },
+          });
+          await this.prisma.booking.update({
+            where: { id: transaction.booking_id },
+            data: {
+              payment_status: 'paid',
+              paid_amount: paymentIntent.amount / 100,
+              paid_currency: paymentIntent.currency,
+              payment_provider: 'stripe',
+              payment_reference_number: payment_intent_id,
+            },
+          });
+          await this.updateVendorWallet(transaction.booking_id);
+
+          return {
+            success: true,
+            message: 'Payment confirmed successfully',
+            booking_id: transaction.booking_id,
+            amount_paid: paymentIntent.amount / 100,
+          };
+        } else {
+          throw new Error(`PaymentIntent not ready to capture. Status: ${updatedIntent.status}`);
+        }
       } else {
         throw new BadRequestException(`Payment not successful. Status: ${paymentIntent.status}`);
       }

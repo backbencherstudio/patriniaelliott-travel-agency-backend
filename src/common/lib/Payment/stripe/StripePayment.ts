@@ -65,6 +65,13 @@ export class StripePayment {
     return paymentMethod;
   }
 
+  static async confirmPayment(intentId: string, payment_method_id: string) {
+    return await Stripe.paymentIntents.confirm(intentId, {
+      payment_method: payment_method_id,
+      return_url: process.env.FRONTEND_URL,
+    });
+  }
+
   static async getPaymentMethod({
     id,
   }: {
@@ -199,21 +206,31 @@ export class StripePayment {
   }
 
   static async createPaymentIntent({
-    amount,
-    currency,
     customer_id,
+    amount,
+    application_fee_amount,
+    currency,
+    account_id,
     metadata,
   }: {
     amount: number;
+    application_fee_amount: number;
     currency: string;
+    account_id: string;
     customer_id: string;
     metadata?: stripe.MetadataParam;
   }): Promise<stripe.PaymentIntent> {
     return Stripe.paymentIntents.create({
-      amount: amount * 100, // amount in cents
+      amount: amount * 100,
       currency: currency,
       customer: customer_id,
-      metadata: metadata,
+      application_fee_amount: application_fee_amount,
+      transfer_data: {
+        destination: account_id
+      },
+      automatic_payment_methods: { enabled: true, allow_redirects: 'always' },
+      capture_method: 'manual',
+      metadata
     });
   }
 
@@ -224,6 +241,10 @@ export class StripePayment {
    */
   static async retrievePaymentIntent(payment_intent_id: string): Promise<stripe.PaymentIntent> {
     return Stripe.paymentIntents.retrieve(payment_intent_id);
+  }
+
+  static async capturePayment(payment_intent_id: string): Promise<stripe.PaymentIntent> {
+    return Stripe.paymentIntents.capture(payment_intent_id);
   }
 
   /**

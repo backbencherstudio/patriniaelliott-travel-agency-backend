@@ -2,46 +2,17 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, IsNumber, IsOptional } from 'class-validator';
 
 export class CreatePaymentDto {
-  @ApiProperty({
-    description: 'Booking ID to pay for',
-    example: 'clx1234567890abcdef'
-  })
   @IsNotEmpty()
   @IsString()
-  booking_id: string;
+  booking_id: string
 
-  @ApiProperty({
-    description: 'Payment method ID from Stripe',
-    example: 'pm_1234567890abcdef'
-  })
-  @IsOptional()
-  @IsString()
-  payment_method_id: string;
-
-  @ApiProperty({
-    description: 'Amount to pay (in cents)',
-    example: 700000
-  })
   @IsNotEmpty()
-  @IsNumber()
-  amount: number;
-
-  @ApiProperty({
-    description: 'Currency code',
-    example: 'usd',
-    default: 'usd'
-  })
-  @IsOptional()
   @IsString()
-  currency?: string = 'usd';
+  currency: string
 
-  @ApiProperty({
-    description: 'Customer email for receipt',
-    example: 'sadman@gmail.com'
-  })
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
-  customer_email?: string;
+  provider: string
 }
 
 export class PaymentIntentResponseDto {
