@@ -1,32 +1,37 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsEmail, IsBoolean, IsNumber } from 'class-validator';
 
-// DTO for User Document
+// DTO for User Document - Following UserDocument schema
 export class UserDocumentDto {
-  @ApiProperty({ required: true })
+  @ApiProperty({ 
+    required: true, 
+    description: 'Type of document (e.g., passport, driver_license, business_license, etc.)',
+    example: 'passport'
+  })
   @IsOptional()
   @IsString()
-  type: string;
+  type?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ 
+    required: false, 
+    description: 'Document number (passport number, license number, etc.)',
+    example: 'P123456789'
+  })
   @IsOptional()
   @IsString()
-  file_type?: string;
+  number?: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  file_path?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  file_name?: string;
-
-  @ApiProperty({ required: false })
+  @ApiProperty({ 
+    required: false, 
+    description: 'Status of document verification',
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending'
+  })
   @IsOptional()
   @IsString()
   status?: string;
+
+  // Note: image field will be handled by file upload, not in DTO
 }
 
 // DTO for Vendor Verification Registration
