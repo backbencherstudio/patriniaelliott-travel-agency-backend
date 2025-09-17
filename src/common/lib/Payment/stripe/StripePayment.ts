@@ -32,6 +32,19 @@ export class StripePayment {
     })
     return newAccount
   }
+  static async AccountLinkCreate({ account_id, refresh_url, return_url }: { account_id: string, refresh_url: string, return_url: string }) {
+    const accountLink = await Stripe.accountLinks.create({
+      account: account_id,
+      refresh_url: refresh_url,
+      return_url: return_url,
+      type: "account_onboarding",
+    });
+    return accountLink
+  }
+  static async AccountStatus(account_id: string) {
+    const account = await Stripe.accounts.retrieve(account_id);
+    return account
+  }
 
   static async createPaymentMethod({
     card,
