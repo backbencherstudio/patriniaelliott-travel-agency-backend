@@ -13,6 +13,9 @@ export class StripeController {
     @Req() req: Request,
   ) {
     try {
+      console.log('====================================');
+      console.log('web hook init');
+      console.log('====================================');
       const payload = req.rawBody.toString();
       const event = await this.stripeService.handleWebhook(payload, signature);
 

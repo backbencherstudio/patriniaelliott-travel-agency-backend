@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query } from '@nestjs/common';
 import { UserProfileService } from './user-profile.service';
 import { CreateUserProfileDto } from './dto/create-user-profile.dto';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
@@ -10,7 +10,7 @@ import { CreateUserCardDto } from './dto/create-user-card.dto';
 @Controller('user-profile')
 @UseGuards(JwtAuthGuard)
 export class UserProfileController {
-  constructor(private readonly userProfileService: UserProfileService) {}
+  constructor(private readonly userProfileService: UserProfileService) { }
 
   @ApiOperation({ summary: 'Update user profile' })
   @Patch('/update')
@@ -43,35 +43,31 @@ export class UserProfileController {
   }
 
   @ApiOperation({ summary: 'Add user card details' })
-  @Post('/card')
+  @Post('/cards')
   async addCard(
     @Req() req: Request,
     @Body() createUserCardDto: CreateUserCardDto,
   ) {
-    try {
-      const user_id = req.user.userId;
-      return this.userProfileService.addCard(user_id, createUserCardDto);
-    } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to save card',
-      };
-    }
+    const user_id = req.user.userId;
+    return this.userProfileService.addCard(user_id, createUserCardDto);
   }
 
-  @Delete('/card/:cardId')
+
+  @ApiOperation({ summary: 'Get call cards by user' })
+  @Get('/cards/:customer_id')
+  async indexCard(
+    @Req() req: Request,
+    @Param('customer_id') customer_id: string,
+  ) {
+    return this.userProfileService.getCard(customer_id)
+  }
+
+  @Delete('/cards/:cardId')
   async deleteCard(
     @Req() req: Request,
     @Param('cardId') cardId: string,
   ) {
-    try {
-      const user_id = req.user.userId;
-      return this.userProfileService.deleteCard(user_id, cardId);
-    } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to delete card',
-      };
-    }
+    const user_id = req.user?.userId;
+    return this.userProfileService.deleteCard(user_id, cardId);
   }
 }

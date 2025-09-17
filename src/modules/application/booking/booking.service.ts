@@ -8,9 +8,9 @@ import { CreatePaymentDto, PaymentIntentResponseDto } from './dto/create-payment
 
 @Injectable()
 export class BookingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
- 
+
   async createBooking(
     user_id: string,
     createBookingDto: CreateBookingDto,
@@ -39,14 +39,14 @@ export class BookingService {
 
         // Process booking items and validate packages
         const processedItems = await this.processBookingItems(prisma, createBookingDto.booking_items);
-        
+
         if (!processedItems || processedItems.length === 0) {
           throw new BadRequestException('No valid booking items found');
         }
-        
+
         // Get vendor_id from the first package (assuming all packages are from same vendor)
         const vendor_id = processedItems[0]?.package?.user_id;
-        
+
         if (!vendor_id) {
           throw new BadRequestException('Invalid package or vendor not found');
         }
@@ -146,15 +146,15 @@ export class BookingService {
       return result;
     } catch (error) {
       console.error('Booking creation error:', error);
-      
+
       if (error.message.includes('timeout') || error.message.includes('transaction')) {
         throw new BadRequestException('Database operation timed out. Please try again.');
       }
-      
+
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;
       }
-      
+
       throw new BadRequestException('Failed to create booking. Please try again.');
     }
   }
@@ -231,7 +231,7 @@ export class BookingService {
     return processedItems;
   }
 
- 
+
   private validateBookingDates(start_date: Date, end_date: Date) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -270,11 +270,11 @@ export class BookingService {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
-    
+
     // Get count of bookings for today
     const todayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const todayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
-    
+
     const count = await prisma.booking.count({
       where: {
         created_at: {
@@ -288,7 +288,7 @@ export class BookingService {
     return `INV-${year}${month}${day}-${sequence}`;
   }
 
- 
+
   private async createBookingItems(prisma: any, booking_id: string, items: any[]) {
     const bookingItems = [];
 
@@ -357,7 +357,7 @@ export class BookingService {
     return bookingTravellers;
   }
 
- 
+
   private async createBookingExtraServices(prisma: any, booking_id: string, extraServices?: BookingExtraServiceDto[]) {
     if (!extraServices || extraServices.length === 0) {
       return [];
@@ -398,7 +398,7 @@ export class BookingService {
     return bookingExtraServices;
   }
 
- 
+
   async createPaymentIntent(
     user_id: string,
     createPaymentDto: CreatePaymentDto,
@@ -424,24 +424,29 @@ export class BookingService {
         throw new BadRequestException('Booking is already paid');
       }
 
-      // Create or get Stripe customer
-      let stripeCustomer;
-      try {
-        stripeCustomer = await StripePayment.createCustomer({
-          user_id: booking.user.id,
-          name: booking.user.name || `${booking.first_name} ${booking.last_name}`,
-          email: booking.user.email || createPaymentDto.customer_email,
-        });
-      } catch (error) {
-        // If customer already exists, try to retrieve
-        console.log('Customer creation failed, might already exist:', error.message);
-      }
+      const totalAmount = Number(booking.total_amount)
+      const platformFee = Math.round(totalAmount * 0.1);
+
+      const account = await this.prisma.vendorPaymentMethod.findFirst({
+        where: {
+          user_id: booking.vendor_id,
+          payment_method: createPaymentDto.provider
+        }
+      })
+      const customer = await this.prisma.userCard.findFirst({
+        where: {
+          user_id: user_id,
+          is_default: true
+        }
+      })
 
       // Create payment intent
       const paymentIntent = await StripePayment.createPaymentIntent({
-        amount: createPaymentDto.amount,
+        amount: totalAmount,
+        customer_id: customer.customer_id,
+        application_fee_amount: platformFee,
+        account_id: account.account_id,
         currency: createPaymentDto.currency,
-        customer_id: stripeCustomer?.id,
         metadata: {
           booking_id: booking.id,
           user_id: booking.user_id,
@@ -461,7 +466,7 @@ export class BookingService {
           reference_number: paymentIntent.id,
           status: 'pending',
           raw_status: paymentIntent.status,
-          amount: createPaymentDto.amount / 100, // Convert from cents
+          amount: totalAmount,
           currency: createPaymentDto.currency,
           paid_amount: 0,
           paid_currency: createPaymentDto.currency,
@@ -482,6 +487,7 @@ export class BookingService {
   async confirmPayment(
     user_id: string,
     payment_intent_id: string,
+    payment_method_id: string
   ) {
     try {
       const transaction = await this.prisma.paymentTransaction.findFirst({
@@ -526,99 +532,42 @@ export class BookingService {
       const paymentIntent = await StripePayment.retrievePaymentIntent(payment_intent_id);
 
       if (paymentIntent.status === 'requires_payment_method') {
-        
-        // Update transaction status
-        await this.prisma.paymentTransaction.update({
-          where: { id: transaction.id },
-          data: {
-            status: 'succeeded',
-            paid_amount: paymentIntent.amount / 100,
-            paid_currency: paymentIntent.currency,
-            raw_status: paymentIntent.status,
-          },
-        });
-        await this.prisma.booking.update({
-          where: { id: transaction.booking_id },
-          data: {
-            status: 'succeeded',
-            payment_status: 'paid',
-            paid_amount: paymentIntent.amount / 100,
-            paid_currency: paymentIntent.currency,
-            payment_provider: 'stripe',
-            payment_reference_number: payment_intent_id,
-          },
-        });
-        await this.updateVendorWallet(transaction.booking_id);
+        await StripePayment.confirmPayment(paymentIntent.id, payment_method_id)
 
-        // Get the first package from booking items for display
-        const firstBookingItem = transaction.booking.booking_items[0];
-        const packageData = firstBookingItem?.package;
-        
-        if (!packageData) {
-          throw new NotFoundException('Package not found in booking');
-        }
+        const updatedIntent = await StripePayment.retrievePaymentIntent(payment_intent_id);
 
-        // Calculate average rating and review count
-        const reviews = packageData.reviews;
-        const averageRating = reviews.length > 0 
-          ? reviews.reduce((sum, review) => sum + (review.rating_value || 0), 0) / reviews.length 
-          : 0;
-        const reviewCount = reviews.length;
-
-        // Format amenities from JSON - get keys where value is true
-        let amenities = [];
-        if (packageData.amenities && typeof packageData.amenities === 'object') {
-          amenities = Object.keys(packageData.amenities).filter(key => packageData.amenities[key] === true);
-        }
-
-        // Add duration information to amenities
-        if (packageData.duration && packageData.duration_type) {
-          amenities.unshift(`${packageData.duration} ${packageData.duration_type}`);
-        }
-
-        // Add common amenities based on package type
-        if (packageData.type === 'apartment' || packageData.type === 'hotel') {
-          // Add basic amenities that are commonly included
-          if (packageData.bathrooms && packageData.bathrooms > 0) {
-            amenities.push(`${packageData.bathrooms} bathroom${packageData.bathrooms > 1 ? 's' : ''}`);
-          }
-          if (packageData.bedrooms && packageData.bedrooms > 0) {
-            amenities.push(`${packageData.bedrooms} bedroom${packageData.bedrooms > 1 ? 's' : ''}`);
-          }
-          if (packageData.max_guests && packageData.max_guests > 0) {
-            amenities.push(`Up to ${packageData.max_guests} guests`);
-          }
-        }
-
-        return {
-          success: true,
-          message: 'Payment confirmed successfully',
-          booking_id: transaction.booking_id,
-          amount_paid: paymentIntent.amount / 100,
-          booking: {
-            id: transaction.booking.id,
-            invoice_number: transaction.booking.invoice_number,
-            status: 'succeeded', // Updated status after payment confirmation
-            type: transaction.booking.type,
-            total_amount: transaction.booking.total_amount,
-            booking_date_time: transaction.booking.booking_date_time,
-          },
-          package: {
-            id: packageData.id,
-            name: packageData.name,
-            description: packageData.description,
-            amenities: amenities,
-            host: {
-              id: packageData.user?.id,
-              name: packageData.user?.name || 'Unknown Host',
-              avatar: packageData.user?.avatar,
+        if (updatedIntent.status === "requires_capture") {
+          await StripePayment.capturePayment(payment_intent_id)
+          await this.prisma.paymentTransaction.update({
+            where: { id: transaction.id },
+            data: {
+              status: 'succeeded',
+              paid_amount: paymentIntent.amount / 100,
+              paid_currency: paymentIntent.currency,
+              raw_status: paymentIntent.status,
             },
-            feedback: {
-              rating: Math.round(averageRating * 10) / 10, // Round to 1 decimal place
-              review_count: reviewCount,
+          });
+          await this.prisma.booking.update({
+            where: { id: transaction.booking_id },
+            data: {
+              payment_status: 'paid',
+              paid_amount: paymentIntent.amount / 100,
+              paid_currency: paymentIntent.currency,
+              payment_provider: 'stripe',
+              payment_reference_number: payment_intent_id,
             },
-          },
-        };
+          });
+          await this.updateVendorWallet(transaction.booking_id);
+
+          return {
+            success: true,
+            message: 'Payment confirmed successfully',
+            booking_id: transaction.booking_id,
+            amount_paid: paymentIntent.amount / 100,
+          };
+        } else {
+          throw new Error(`PaymentIntent not ready to capture. Status: ${updatedIntent.status}`);
+        }
       } else {
         throw new BadRequestException(`Payment not successful. Status: ${paymentIntent.status}`);
       }
@@ -967,7 +916,7 @@ export class BookingService {
     }
   }
 
-  
+
   async createFeedback(user_id: string, createFeedbackDto: CreateFeedbackDto) {
     try {
       // Verify booking exists and belongs to user
@@ -1055,7 +1004,7 @@ export class BookingService {
     }
   }
 
- 
+
   async getFeedback(booking_id: string, user_id: string) {
     try {
       // Verify booking exists and belongs to user
@@ -1105,7 +1054,7 @@ export class BookingService {
     }
   }
 
- 
+
   async updateFeedback(user_id: string, booking_id: string, updateFeedbackDto: UpdateFeedbackDto) {
     try {
       // Verify booking exists and belongs to user
@@ -1228,7 +1177,7 @@ export class BookingService {
     }
   }
 
- 
+
   async getUserFeedback(user_id: string) {
     try {
       const feedbacks = await this.prisma.review.findMany({

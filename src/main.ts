@@ -92,6 +92,7 @@ async function bootstrap() {
     }),
   );
   app.useGlobalFilters(new CustomExceptionFilter());
+  app.useGlobalPipes()
 
   // storage setup
   SojebStorage.config({
