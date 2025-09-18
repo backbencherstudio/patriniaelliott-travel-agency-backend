@@ -8,11 +8,12 @@ import { Role } from '../../../common/guard/role/role.enum';
 
 @ApiTags('Admin Vendor User Verification')
 @Controller('admin/vendor-user-verification')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.VENDOR)
+
 export class VendorUserVerificationAdminController {
   constructor(private readonly service: VendorUserVerificationAdminService) {}
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMIN, Role.VENDOR)
   @ApiOperation({ summary: 'List user documents' })
   @Get('documents')
   async list(@Query() query: { status?: string; page?: number; limit?: number }) {
@@ -23,6 +24,8 @@ export class VendorUserVerificationAdminController {
     });
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Approve a document' })
   @Patch('documents/:id/approve')
   async approveDocument(@Param('id') id: string) {
@@ -30,24 +33,32 @@ export class VendorUserVerificationAdminController {
     return this.service.approveDocument(id);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Reject a document' })
   @Patch('documents/:id/reject')
   async rejectDocument(@Param('id') id: string, @Body() body: { reason?: string }) {
     return this.service.rejectDocument(id, body?.reason);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Approve vendor verification for a user' })
   @Patch('vendor/:userId/approve')
   async approveVendor(@Param('userId') userId: string) {
     return this.service.approveVendor(userId);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Reject vendor verification for a user' })
   @Patch('vendor/:userId/reject')
   async rejectVendor(@Param('userId') userId: string, @Body() body: { reason?: string }) {
     return this.service.rejectVendor(userId, body?.reason);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Update vendor verification by user id' })
   @Patch('vendor/:userId')
   async updateVendorByUserId(@Param('userId') userId: string, @Body() body: any) {

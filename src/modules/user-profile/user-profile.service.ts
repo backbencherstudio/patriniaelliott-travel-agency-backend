@@ -72,29 +72,96 @@ export class UserProfileService {
     }
   }
 
+  // async addCard(user_id: string, createUserCardDto: CreateUserCardDto) {
+  //   try {
+  //     const { paymentMethodId } = createUserCardDto;
+
+  //     const paymentMethod = await StripePayment.getPaymentMethod({ id: paymentMethodId });
+
+  //     if (!paymentMethod || !paymentMethod.card) {
+  //       throw new Error('Invalid payment method');
+  //     }
+  //     console.log('================customer id====================');
+  //     console.log(paymentMethod);
+  //     console.log('================user id====================');
+  //     console.log(user_id);
+  //     console.log('====================================');
+  //     const user = await this.prisma.user.findUnique({
+  //       where: {
+  //         id: user_id
+  //       }
+  //     })
+ 
+  //     await StripePayment.attachPaymentMethod({
+  //       customer_id: user.stripe_customer_id,
+  //       payment_method_id: paymentMethod.id,
+  //     });
+  //     // await StripePayment.attachPaymentMethod({
+  //     //   customer_id: paymentMethod.customer as string,
+  //     //   payment_method_id: paymentMethod.id,
+  //     // });
+
+  //     const defaultCard = await this.prisma.userCard.findFirst({
+  //       where: { user_id, is_default: true },
+  //     });
+
+  //     const card = await this.prisma.userCard.create({
+  //       data: {
+  //         user_id,
+  //         customer_id: paymentMethod.customer as string,
+  //         stripe_payment_method_id: paymentMethod.id,
+  //         brand: paymentMethod.card.brand,
+  //         exp_month: paymentMethod.card.exp_month,
+  //         exp_year: paymentMethod.card.exp_year,
+  //         last4: paymentMethod.card.last4,
+  //         is_default: !defaultCard,
+  //       },
+  //     });
+
+  //     return {
+  //       success: true,
+  //       message: 'Card saved successfully',
+  //       data: card,
+  //     };
+  //   } catch (error: any) {
+  //     console.error(`Error adding card: ${error?.message}`);
+  //     return {
+  //       success: false,
+  //       message: 'Failed to save card',
+  //       error: error?.message,
+  //     };
+  //   }
+  // }
+
   async addCard(user_id: string, createUserCardDto: CreateUserCardDto) {
     try {
       const { paymentMethodId } = createUserCardDto;
-
+ 
       const paymentMethod = await StripePayment.getPaymentMethod({ id: paymentMethodId });
-
+ 
       if (!paymentMethod || !paymentMethod.card) {
         throw new Error('Invalid payment method');
       }
-
+ 
+      const user = await this.prisma.user.findUnique({
+        where: {
+          id: user_id
+        }
+      })
+ 
       await StripePayment.attachPaymentMethod({
-        customer_id: paymentMethod.customer as string,
+        customer_id: user.stripe_customer_id,
         payment_method_id: paymentMethod.id,
       });
-
+ 
       const defaultCard = await this.prisma.userCard.findFirst({
         where: { user_id, is_default: true },
       });
-
+ 
       const card = await this.prisma.userCard.create({
         data: {
           user_id,
-          customer_id: paymentMethod.customer as string,
+          customer_id: user.stripe_customer_id,
           stripe_payment_method_id: paymentMethod.id,
           brand: paymentMethod.card.brand,
           exp_month: paymentMethod.card.exp_month,
@@ -103,7 +170,7 @@ export class UserProfileService {
           is_default: !defaultCard,
         },
       });
-
+ 
       return {
         success: true,
         message: 'Card saved successfully',
@@ -118,6 +185,7 @@ export class UserProfileService {
       };
     }
   }
+ 
 
 
   async getCard(customer_id: string) {

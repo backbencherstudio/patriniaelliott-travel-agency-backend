@@ -29,8 +29,7 @@ import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
 export class BookingController {
   constructor(private readonly bookingService: BookingService) { }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create booking with dynamic ID processing' })
   @Post()
   async create(

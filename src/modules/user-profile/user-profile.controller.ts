@@ -8,7 +8,7 @@ import { ApiOperation } from '@nestjs/swagger';
 import { CreateUserCardDto } from './dto/create-user-card.dto';
 
 @Controller('user-profile')
-@UseGuards(JwtAuthGuard)
+ @UseGuards(JwtAuthGuard)
 export class UserProfileController {
   constructor(private readonly userProfileService: UserProfileService) { }
 
@@ -48,7 +48,8 @@ export class UserProfileController {
     @Req() req: Request,
     @Body() createUserCardDto: CreateUserCardDto,
   ) {
-    const user_id = req.user.userId;
+    const user_id =req.user.userId;
+    // const user_id ='cmfp6yiry0002jv64hv4jj4dc';
     return this.userProfileService.addCard(user_id, createUserCardDto);
   }
 
