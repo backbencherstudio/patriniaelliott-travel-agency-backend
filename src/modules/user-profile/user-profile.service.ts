@@ -82,8 +82,14 @@ export class UserProfileService {
         throw new Error('Invalid payment method');
       }
 
+      const user = await this.prisma.user.findUnique({
+        where: {
+          id: user_id
+        }
+      })
+
       await StripePayment.attachPaymentMethod({
-        customer_id: paymentMethod.customer as string,
+        customer_id: user.stripe_customer_id,
         payment_method_id: paymentMethod.id,
       });
 
@@ -94,7 +100,7 @@ export class UserProfileService {
       const card = await this.prisma.userCard.create({
         data: {
           user_id,
-          customer_id: paymentMethod.customer as string,
+          customer_id: user.stripe_customer_id,
           stripe_payment_method_id: paymentMethod.id,
           brand: paymentMethod.card.brand,
           exp_month: paymentMethod.card.exp_month,
