@@ -8,7 +8,7 @@ import appConfig from '../../../config/app.config';
 export class PaymentTransactionService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(user_id?: string) {
+  async findAll() {
     try {
       const userDetails = await UserRepository.getUserDetails(user_id);
 

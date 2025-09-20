@@ -6,7 +6,6 @@ import {
   Param,
   Delete,
   UseGuards,
-  Req,
   Query,
 } from '@nestjs/common';
 import { BookingService } from './booking.service';
@@ -17,12 +16,11 @@ import { Role } from 'src/common/guard/role/role.enum';
 import { Roles } from 'src/common/guard/role/roles.decorator';
 import { RolesGuard } from 'src/common/guard/role/roles.guard';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
-import { Request } from 'express';
 
 @ApiBearerAuth()
 @ApiTags('Booking')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.VENDOR)
+@Roles(Role.ADMIN)
 @Controller('admin/booking')
 export class BookingController {
   constructor(private readonly bookingService: BookingService) {}
@@ -32,12 +30,8 @@ export class BookingController {
     description: 'Filter bookings by type: "all" (default), "hotel", "apartment", or "tour"'
   })
   @Get()
-  async findAll(
-    @Req() req: Request,
-    @Query() query: QueryBookingDto,
-  ) {
+  async findAll(@Query() query: QueryBookingDto) {
     try {
-      const user_id = req.user.userId;
       const {
         q,
         status,
@@ -55,7 +49,6 @@ export class BookingController {
       const sortBy = sort_by || 'created_at_desc';
 
       const bookings = await this.bookingService.findAll({
-        user_id,
         q,
         status,
         approve,
@@ -65,7 +58,7 @@ export class BookingController {
         limit: limitNumber,
         sort_by: sortBy,
       });
-
+      
       return bookings;
     } catch (error) {
       return {
@@ -75,7 +68,10 @@ export class BookingController {
     }
   }
 
-  @ApiOperation({ summary: 'Get booking by id' })
+  @ApiOperation({ 
+    summary: 'Get detailed booking information',
+    description: 'Get comprehensive booking details including package info, guest details, reservation details, and payment information'
+  })
   @Get(':id')
   async findOne(@Param('id') id: string) {
     try {
@@ -138,10 +134,9 @@ export class BookingController {
     description: 'Get count of bookings for each service type (All, Hotel, Apartment, Tour)'
   })
   @Get('statistics')
-  async getBookingStatistics(@Req() req: Request) {
+  async getBookingStatistics() {
     try {
-      const user_id = req.user.userId;
-      const statistics = await this.bookingService.getBookingStatistics(user_id);
+      const statistics = await this.bookingService.getBookingStatistics();
       return statistics;
     } catch (error) {
       return {
@@ -156,12 +151,8 @@ export class BookingController {
     description: 'Export filtered bookings to PDF format'
   })
   @Get('export/pdf')
-  async exportAsPdf(
-    @Req() req: Request,
-    @Query() query: QueryBookingDto,
-  ) {
+  async exportAsPdf(@Query() query: QueryBookingDto) {
     try {
-      const user_id = req.user.userId;
       const {
         q,
         status,
@@ -171,7 +162,6 @@ export class BookingController {
       } = query;
 
       const bookings = await this.bookingService.findAll({
-        user_id,
         q,
         status,
         approve,

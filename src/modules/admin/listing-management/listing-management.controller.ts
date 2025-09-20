@@ -52,7 +52,7 @@ export class ListingManagementController {
         message: error.message,
       };
     }
-  }
+  } 
 
   @ApiResponse({ description: 'Get a package by id' })
   @Get(':id')

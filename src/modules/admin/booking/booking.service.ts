@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { UpdateBookingDto } from './dto/update-booking.dto';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { UserRepository } from '../../../common/repository/user/user.repository';
 import { SojebStorage } from '../../../common/lib/Disk/SojebStorage';
 import appConfig from '../../../config/app.config';
 
@@ -10,7 +9,6 @@ export class BookingService {
   constructor(private prisma: PrismaService) {}
 
   async findAll({
-    user_id,
     q,
     status = null,
     approve,
@@ -20,7 +18,6 @@ export class BookingService {
     limit,
     sort_by,
   }: {
-    user_id?: string;
     q?: string;
     status?: number;
     approve?: string;
@@ -36,14 +33,6 @@ export class BookingService {
     const sortBy = sort_by || 'created_at_desc';
     try {
       const where_condition = {};
-      
-      // filter using vendor id if the package is from vendor
-      if (user_id) {
-        const userDetails = await UserRepository.getUserDetails(user_id);
-        if (userDetails && userDetails.type == 'vendor') {
-          where_condition['vendor_id'] = user_id;
-        }
-      }
       
       // search using q
       if (q) {
@@ -178,7 +167,7 @@ export class BookingService {
           updated_at: true,
         },
       });
-
+      console.log(bookings);
       // Format the bookings data to match UI requirements
       const formattedBookings = bookings.map(booking => {
         // Get check-in and check-out dates from booking items
@@ -337,32 +326,56 @@ export class BookingService {
           address2: true,
           city: true,
           state: true,
+          zip_code: true,
+          country: true,
           comments: true,
+          created_at: true,
+          updated_at: true,
           user: {
             select: {
+              id: true,
               name: true,
               email: true,
               avatar: true,
+              phone_number: true,
             },
           },
           booking_items: {
             select: {
+              id: true,
               start_date: true,
               end_date: true,
+              quantity: true,
+              price: true,
               package: {
                 select: {
                   id: true,
                   name: true,
                   price: true,
+                  type: true,
+                  description: true,
+                  package_files: {
+                    where: {
+                      is_featured: true,
+                    },
+                    select: {
+                      file: true,
+                      file_alt: true,
+                    },
+                    take: 1,
+                  },
                 },
               },
             },
           },
           booking_extra_services: {
             select: {
+              id: true,
+              price: true,
               extra_service: {
                 select: {
                   name: true,
+                  description: true,
                   price: true,
                 },
               },
@@ -370,32 +383,43 @@ export class BookingService {
           },
           booking_travellers: {
             select: {
+              id: true,
               full_name: true,
+              first_name: true,
+              last_name: true,
               type: true,
+              gender: true,
+              email: true,
+              phone_number: true,
             },
           },
           booking_coupons: {
             select: {
+              id: true,
+              code: true,
+              amount: true,
+              amount_type: true,
               coupon: {
                 select: {
                   name: true,
-                  amount: true,
-                  amount_type: true,
+                  description: true,
                 },
               },
             },
           },
           payment_transactions: {
             select: {
+              id: true,
               amount: true,
               currency: true,
               paid_amount: true,
               paid_currency: true,
               status: true,
+              provider: true,
+              reference_number: true,
+              created_at: true,
             },
           },
-          created_at: true,
-          updated_at: true,
         },
       });
 
@@ -406,22 +430,164 @@ export class BookingService {
         };
       }
 
-      // add avatar url
-      if (booking.user && booking.user.avatar) {
-        booking.user['avatar_url'] = SojebStorage.url(
-          appConfig().storageUrl.avatar + booking.user.avatar,
-        );
-      }
+      // Format the response to match the UI requirements
+      const formattedBooking = {
+        // Basic booking info
+        id: booking.id,
+        invoice_number: booking.invoice_number,
+        status: booking.status,
+        type: booking.type,
+        total_amount: booking.total_amount,
+        payment_status: booking.payment_status,
+        created_at: booking.created_at,
+        updated_at: booking.updated_at,
+
+        // Package information (for the left side of the card)
+        package: booking.booking_items?.[0]?.package ? {
+          id: booking.booking_items[0].package.id,
+          name: booking.booking_items[0].package.name,
+          price: booking.booking_items[0].package.price,
+          type: booking.booking_items[0].package.type,
+          description: booking.booking_items[0].package.description,
+          featured_image: booking.booking_items[0].package.package_files?.[0] ? {
+            url: SojebStorage.url(
+              appConfig().storageUrl.package + booking.booking_items[0].package.package_files[0].file,
+            ),
+            alt: booking.booking_items[0].package.package_files[0].file_alt,
+          } : null,
+        } : null,
+
+        // Guest information (for the right side of the card)
+        guest: {
+          id: booking.user?.id,
+          name: booking.user?.name || `${booking.first_name || ''} ${booking.last_name || ''}`.trim(),
+          email: booking.user?.email || booking.email,
+          phone: booking.user?.phone_number || booking.phone_number,
+          avatar: booking.user?.avatar ? {
+            url: SojebStorage.url(
+              appConfig().storageUrl.avatar + booking.user.avatar,
+            ),
+            alt: booking.user.name,
+          } : null,
+        },
+
+        // Reservation details
+        reservation_details: {
+          guest_name: booking.user?.name || `${booking.first_name || ''} ${booking.last_name || ''}`.trim(),
+          reservation_id: booking.invoice_number || `#${booking.id.slice(-5)}`,
+          guests: booking.booking_travellers?.length || 1,
+          check_in: booking.booking_items?.[0]?.start_date,
+          check_out: booking.booking_items?.[0]?.end_date,
+          status: this.formatStatus(booking.status),
+          payment: this.formatPaymentStatus(booking.payment_status),
+        },
+
+        // Additional details
+        booking_items: booking.booking_items?.map(item => ({
+          id: item.id,
+          start_date: item.start_date,
+          end_date: item.end_date,
+          quantity: item.quantity,
+          price: item.price,
+          package: item.package,
+        })) || [],
+
+        booking_travellers: booking.booking_travellers?.map(traveller => ({
+          id: traveller.id,
+          full_name: traveller.full_name,
+          first_name: traveller.first_name,
+          last_name: traveller.last_name,
+          type: traveller.type,
+          gender: traveller.gender,
+          email: traveller.email,
+          phone_number: traveller.phone_number,
+        })) || [],
+
+        booking_extra_services: booking.booking_extra_services?.map(service => ({
+          id: service.id,
+          name: service.extra_service?.name,
+          description: service.extra_service?.description,
+          price: service.price,
+        })) || [],
+
+        booking_coupons: booking.booking_coupons?.map(coupon => ({
+          id: coupon.id,
+          code: coupon.code,
+          name: coupon.coupon?.name,
+          description: coupon.coupon?.description,
+          amount: coupon.amount,
+          amount_type: coupon.amount_type,
+        })) || [],
+
+        payment_transactions: booking.payment_transactions?.map(transaction => ({
+          id: transaction.id,
+          amount: transaction.amount,
+          currency: transaction.currency,
+          paid_amount: transaction.paid_amount,
+          paid_currency: transaction.paid_currency,
+          status: transaction.status,
+          provider: transaction.provider,
+          reference_number: transaction.reference_number,
+          created_at: transaction.created_at,
+        })) || [],
+
+        // Contact information
+        contact: {
+          first_name: booking.first_name,
+          last_name: booking.last_name,
+          email: booking.email,
+          phone_number: booking.phone_number,
+          address1: booking.address1,
+          address2: booking.address2,
+          city: booking.city,
+          state: booking.state,
+          zip_code: booking.zip_code,
+          country: booking.country,
+        },
+
+        // Comments
+        comments: booking.comments,
+      };
 
       return {
         success: true,
-        data: booking,
+        data: formattedBooking,
       };
     } catch (error) {
       return {
         success: false,
         message: error.message,
       };
+    }
+  }
+
+  private formatStatus(status: string): string {
+    switch (status?.toLowerCase()) {
+      case 'confirmed':
+      case 'approved':
+        return 'Confirmed';
+      case 'canceled':
+      case 'cancelled':
+        return 'Canceled';
+      case 'pending':
+        return 'Pending';
+      default:
+        return status || 'Pending';
+    }
+  }
+
+  private formatPaymentStatus(paymentStatus: string): string {
+    switch (paymentStatus?.toLowerCase()) {
+      case 'approved':
+      case 'paid':
+        return 'Completed';
+      case 'canceled':
+      case 'cancelled':
+        return 'Canceled';
+      case 'pending':
+        return 'Pending';
+      default:
+        return paymentStatus || 'Pending';
     }
   }
 
@@ -567,41 +733,26 @@ export class BookingService {
     }
   }
 
-  async getBookingStatistics(user_id?: string) {
+  async getBookingStatistics() {
     try {
-      const where_condition = {};
-      
-      // filter using vendor id if the package is from vendor
-      if (user_id) {
-        const userDetails = await UserRepository.getUserDetails(user_id);
-        if (userDetails && userDetails.type == 'vendor') {
-          where_condition['vendor_id'] = user_id;
-        }
-      }
-
       // Get total count
-      const totalCount = await this.prisma.booking.count({
-        where: where_condition,
-      });
+      const totalCount = await this.prisma.booking.count();
 
       // Get count by type
       const hotelCount = await this.prisma.booking.count({
         where: {
-          ...where_condition,
           type: 'hotel',
         },
       });
 
       const apartmentCount = await this.prisma.booking.count({
         where: {
-          ...where_condition,
           type: 'apartment',
         },
       });
 
       const tourCount = await this.prisma.booking.count({
         where: {
-          ...where_condition,
           type: 'tour',
         },
       });
