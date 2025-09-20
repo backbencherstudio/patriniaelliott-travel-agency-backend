@@ -15,49 +15,65 @@ export class VendorUserVerificationService {
     userId: string,
     file?: Express.Multer.File,
   ) {
-    // Check if user exists
-    const userData = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!userData) {
-      throw new Error('User not found');
+    try {
+      // Check if user exists
+      const userData = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (!userData) {
+        throw new Error('User not found');
+      }
+
+      // Set default type if not provided
+      const documentType = userDocumentDto.type || 'vendor_verification';
+
+      let imageFileName: string | null = null;
+
+      if (file) {
+        // Generate unique filename for the uploaded image
+        const randomName = Array(32)
+          .fill(null)
+          .map(() => Math.round(Math.random() * 16).toString(16))
+          .join('');
+        const fileExtension = file.originalname.split('.').pop();
+        imageFileName = `${randomName}.${fileExtension}`;
+        
+        // Upload file using SojebStorage with the document path
+        const filePath = appConfig().storageUrl.package + imageFileName;
+        await SojebStorage.put(filePath, file.buffer);
+        
+        console.log(`Document uploaded successfully: ${imageFileName}`);
+      }
+
+      // Create UserDocument record following the schema
+      const document = await this.prisma.userDocument.create({
+        data: {
+          user_id: userId,
+          type: documentType,
+          number: userDocumentDto.number || null,
+          image: imageFileName, // This stores the filename, not the full path
+          status: userDocumentDto.status || 'pending',
+        },
+      });
+
+      // Generate public URL for the image if it exists
+      const documentWithUrl = {
+        ...document,
+        image_url: imageFileName ? this.generateFileUrl(imageFileName, 'package') : null
+      };
+
+      return {
+        success: true,
+        data: documentWithUrl,
+        message: 'Document uploaded successfully for vendor verification.',
+      };
+    } catch (error) {
+      throw new Error(`Failed to create user document: ${error.message}`);
     }
+  }
 
-    // Use SojebStorage for file handling
-    let file_name = userDocumentDto.file_name;
-    let file_path = userDocumentDto.file_path;
-    let file_type = userDocumentDto.file_type;
-
-    if (file) {
-      // Upload file using SojebStorage
-      const fileName = file.originalname;
-      const fileBuffer = file.buffer;
-      
-      await SojebStorage.put(fileName, fileBuffer);
-      
-      file_name = fileName;
-      file_path = fileName;
-      file_type = file.mimetype;
-    }
-
-    if (!file_name || !file_path || !file_type) {
-      throw new Error('Document file is required or provide file_name, file_path, and file_type.');
-    }
-
-    const document = await this.prisma.userDocument.create({
-      data: {
-        user: { connect: { id: userId } },
-        type: userDocumentDto.type,
-        file_type,
-        file_path,
-        file_name,
-        status: userDocumentDto.status ?? 'pending',
-      },
-    });
-
-    return {
-      success: true,
-      data: document,
-      message: 'Document uploaded for vendor verification.',
-    };
+  // Helper method to generate file URLs
+  private generateFileUrl(filename: string, type: string): string {
+    const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+    return `${baseUrl}/storage/${type}/${filename}`;
   }
 
   async registerVendor(vendorData: VendorVerificationDto, file?: Express.Multer.File) {
@@ -134,9 +150,7 @@ export class VendorUserVerificationService {
           data: {
             user_id: user.id,
             type: 'vendor_verification',
-            file_type: file.mimetype,
-            file_path: fileName,
-            file_name: fileName,
+            image: fileName,
             status: 'pending',
           },
         });
@@ -304,18 +318,41 @@ export class VendorUserVerificationService {
         throw new Error('Access denied. Only vendors can view verification details.');
       }
 
-      // Check if vendor verification exists
+      // If vendor verification doesn't exist, create a default one
       if (!user.VendorVerification) {
-        throw new Error('Vendor verification not found. Please register as a vendor first.');
+        console.log(`Creating default VendorVerification record for user: ${userId}`);
+        
+        const defaultVerification = await this.prisma.vendorVerification.create({
+          data: {
+            user_id: userId,
+            first_name: user.first_name || user.name || 'Unknown',
+            phone_number: user.phone_number || 'Not provided',
+            business_website: '',
+            vendor_type: 'individual',
+            status: 'pending'
+          }
+        });
+
+        // Fetch the user again with the new verification record
+        const updatedUser = await this.prisma.user.findUnique({
+          where: { id: userId },
+          include: {
+            VendorVerification: true,
+            user_documents: {
+              where: { type: 'vendor_verification' },
+              orderBy: { created_at: 'desc' }
+            }
+          }
+        });
+
+        user.VendorVerification = updatedUser.VendorVerification;
       }
 
       // Add image URLs using SojebStorage
       if (user.user_documents && user.user_documents.length > 0) {
         for (const document of user.user_documents) {
-          if (document.file_path) {
-            document['file_url'] = SojebStorage.url(
-              appConfig().storageUrl.package + document.file_path,
-            );
+          if (document.image) {
+            document['image_url'] = this.generateFileUrl(document.image, 'package');
           }
         }
       }
@@ -324,6 +361,7 @@ export class VendorUserVerificationService {
         success: true,
         data: user,
         email: user.email ?? null,
+        message: user.VendorVerification ? 'Vendor verification found' : 'Default vendor verification created'
       };
     } catch (error) {
       throw new Error(`Failed to get vendor verification: ${error.message}`);

@@ -13,6 +13,9 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../common/guard/role/roles.guard';
+import { Roles } from '../../../common/guard/role/roles.decorator';
+import { Role } from '../../../common/guard/role/role.enum';
 import { BookingService } from './booking.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
@@ -22,11 +25,11 @@ import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
 
 @ApiBearerAuth()
 @ApiTags('Booking')
-@UseGuards(JwtAuthGuard)
 @Controller('booking')
 export class BookingController {
   constructor(private readonly bookingService: BookingService) { }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create booking with dynamic ID processing' })
   @Post()
   async create(
@@ -44,14 +47,25 @@ export class BookingController {
   @Get()
   async findAll(
     @Req() req: Request,
-    @Query() query: { q?: string; status?: number; approve?: string },
+    @Query() query: { q?: string; status?: string; approve?: string; show_all?: string },
   ) {
-    try {
+    try {      
+
       const user_id = req.user.userId;
+      
+      if (!user_id) {
+        console.error('No user_id found in request object');
+        return {
+          success: false,
+          message: 'User not authenticated or user ID not found',
+        };
+      }
+
       const bookings = await this.bookingService.findAll(user_id, query);
 
       return bookings;
     } catch (error) {
+      console.error('Controller error:', error);
       return {
         success: false,
         message: error.message,
@@ -59,6 +73,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get one booking' })
   @Get(':id')
   async findOne(@Req() req: Request, @Param('id') id: string) {
@@ -75,7 +90,7 @@ export class BookingController {
     }
   }
 
-
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create feedback for a booking' })
   @Post('feedback')
   async createFeedback(@Req() req: Request, @Body() createFeedbackDto: CreateFeedbackDto) {
@@ -93,6 +108,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get feedback for a specific booking' })
   @Get(':booking_id/feedback')
   async getFeedback(@Req() req: Request, @Param('booking_id') booking_id: string) {
@@ -109,6 +125,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Update feedback for a booking' })
   @Put(':booking_id/feedback')
   async updateFeedback(
@@ -129,6 +146,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Delete feedback for a booking' })
   @Delete(':booking_id/feedback')
   async deleteFeedback(@Req() req: Request, @Param('booking_id') booking_id: string) {
@@ -145,6 +163,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all feedback for the current user' })
   @Get('feedback/all')
   async getUserFeedback(@Req() req: Request) {
@@ -161,6 +180,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create payment intent for booking' })
   @Post('payment/create-intent')
   async createPaymentIntent(
@@ -185,6 +205,7 @@ export class BookingController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Confirm payment for booking' })
   @Post('payment/confirm/:payment_intent_id')
   async confirmPayment(
