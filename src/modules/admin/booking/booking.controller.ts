@@ -43,6 +43,7 @@ export class BookingController {
         status,
         approve,
         type,
+        date_range,
         page,
         limit,
         sort_by,
@@ -59,6 +60,7 @@ export class BookingController {
         status,
         approve,
         type,
+        date_range,
         page: pageNumber,
         limit: limitNumber,
         sort_by: sortBy,
@@ -123,6 +125,80 @@ export class BookingController {
         updateBookingDto,
       );
       return booking;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ 
+    summary: 'Get booking statistics by type',
+    description: 'Get count of bookings for each service type (All, Hotel, Apartment, Tour)'
+  })
+  @Get('statistics')
+  async getBookingStatistics(@Req() req: Request) {
+    try {
+      const user_id = req.user.userId;
+      const statistics = await this.bookingService.getBookingStatistics(user_id);
+      return statistics;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ 
+    summary: 'Export bookings as PDF',
+    description: 'Export filtered bookings to PDF format'
+  })
+  @Get('export/pdf')
+  async exportAsPdf(
+    @Req() req: Request,
+    @Query() query: QueryBookingDto,
+  ) {
+    try {
+      const user_id = req.user.userId;
+      const {
+        q,
+        status,
+        approve,
+        type,
+        date_range,
+      } = query;
+
+      const bookings = await this.bookingService.findAll({
+        user_id,
+        q,
+        status,
+        approve,
+        type,
+        date_range,
+        page: 1,
+        limit: 1000, // Export all matching records
+        sort_by: 'created_at_desc',
+      });
+
+      // For now, return the data in a format that can be used to generate PDF
+      // In a real implementation, you would use a PDF library like puppeteer or pdfkit
+      return {
+        success: true,
+        message: 'Bookings data ready for PDF export',
+        data: bookings.data,
+        export_info: {
+          total_records: bookings.pagination?.total_items || 0,
+          export_date: new Date().toISOString(),
+          filters_applied: {
+            search: q || 'none',
+            status: status || 'all',
+            approval: approve || 'all',
+            type: type || 'all'
+          }
+        }
+      };
     } catch (error) {
       return {
         success: false,
