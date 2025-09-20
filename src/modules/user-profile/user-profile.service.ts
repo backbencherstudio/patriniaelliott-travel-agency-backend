@@ -187,6 +187,27 @@ export class UserProfileService {
     }
   }
 
+  async getTransactions(user_id: string) {
+    try {
+      const transactions = await this.prisma.paymentTransaction.findMany({
+        where: {
+          user_id: user_id
+        }
+      })
+      return {
+        success: true,
+        message: 'Transactions fetched successfully.',
+        data: transactions,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to fetch transactions.',
+        error: error.message,
+      };
+    }
+  }
+
   async remove(id: string) {
     try {
       const existingUser = await this.prisma.user.findUnique({
