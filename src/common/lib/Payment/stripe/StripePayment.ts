@@ -2,6 +2,7 @@ import stripe from 'stripe';
 import appConfig from '../../../../config/app.config';
 import { Fetch } from '../../Fetch';
 import * as fs from 'fs';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 const STRIPE_SECRET_KEY = appConfig().payment.stripe.secret_key;
 
@@ -14,6 +15,37 @@ const STRIPE_WEBHOOK_SECRET = appConfig().payment.stripe.webhook_secret;
  * Stripe payment method helper
  */
 export class StripePayment {
+
+  static async createAccount({ email, first_name, last_name, }: { email: string, first_name: string, last_name: string }) {
+    const newAccount = await Stripe.accounts.create({
+      type: 'express',
+      email: email,
+      business_type: "individual",
+      individual: {
+        email: email,
+        first_name: first_name,
+        last_name: last_name,
+      },
+      capabilities: {
+        transfers: { requested: true },
+      },
+    })
+    return newAccount
+  }
+  static async AccountLinkCreate({ account_id, refresh_url, return_url }: { account_id: string, refresh_url: string, return_url: string }) {
+    const accountLink = await Stripe.accountLinks.create({
+      account: account_id,
+      refresh_url: refresh_url,
+      return_url: return_url,
+      type: "account_onboarding",
+    });
+    return accountLink
+  }
+  static async AccountStatus(account_id: string) {
+    const account = await Stripe.accounts.retrieve(account_id);
+    return account
+  }
+
   static async createPaymentMethod({
     card,
     billing_details,
@@ -31,6 +63,46 @@ export class StripePayment {
       billing_details: billing_details,
     });
     return paymentMethod;
+  }
+
+  static async confirmPayment(intentId: string, payment_method_id: string) {
+    return await Stripe.paymentIntents.confirm(intentId, {
+      payment_method: payment_method_id,
+      return_url: process.env.FRONTEND_URL,
+    });
+  }
+
+  static async getPaymentMethod({
+    id,
+  }: {
+    id: string;
+  }): Promise<stripe.PaymentMethod> {
+    const paymentMethod = await Stripe.paymentMethods.retrieve(id);
+    return paymentMethod;
+  }
+  static async attachPaymentMethod({
+    customer_id,
+    payment_method_id
+  }: {
+    customer_id: string;
+    payment_method_id: string;
+  }): Promise<stripe.PaymentMethod> {
+    const paymentMethod = await Stripe.paymentMethods.attach(payment_method_id, { customer: customer_id })
+    return paymentMethod;
+  }
+  static async getAllPaymentMethods({
+    id,
+  }: {
+    id: string;
+  }): Promise<any> {
+    const paymentMethod = await Stripe.paymentMethods.list({
+      customer: id
+    });
+    return paymentMethod;
+  }
+
+  static async deletePaymentMethods(card_id: string) {
+    return await Stripe.paymentMethods.detach(card_id)
   }
 
   /**
@@ -55,6 +127,14 @@ export class StripePayment {
       },
       description: 'New Customer',
     });
+    const prisma = new PrismaService()
+
+    await prisma.user.update({
+      where: { id: user_id },
+      data: {
+        stripe_customer_id: customer.id,
+      }
+    })
     return customer;
   }
 
@@ -126,21 +206,31 @@ export class StripePayment {
   }
 
   static async createPaymentIntent({
-    amount,
-    currency,
     customer_id,
+    amount,
+    application_fee_amount,
+    currency,
+    account_id,
     metadata,
   }: {
     amount: number;
+    application_fee_amount: number;
     currency: string;
+    account_id: string;
     customer_id: string;
     metadata?: stripe.MetadataParam;
   }): Promise<stripe.PaymentIntent> {
     return Stripe.paymentIntents.create({
-      amount: amount * 100, // amount in cents
+      amount: amount * 100,
       currency: currency,
       customer: customer_id,
-      metadata: metadata,
+      application_fee_amount: application_fee_amount,
+      transfer_data: {
+        destination: account_id
+      },
+      automatic_payment_methods: { enabled: true, allow_redirects: 'always' },
+      capture_method: 'manual',
+      metadata
     });
   }
 
@@ -153,6 +243,10 @@ export class StripePayment {
     return Stripe.paymentIntents.retrieve(payment_intent_id);
   }
 
+  static async capturePayment(payment_intent_id: string): Promise<stripe.PaymentIntent> {
+    return Stripe.paymentIntents.capture(payment_intent_id);
+  }
+
   /**
    * Create stripe hosted checkout session
    * @param customer
@@ -160,9 +254,8 @@ export class StripePayment {
    * @returns
    */
   static async createCheckoutSession() {
-    const success_url = `${
-      appConfig().app.url
-    }/success?session_id={CHECKOUT_SESSION_ID}`;
+    const success_url = `${appConfig().app.url
+      }/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancel_url = `${appConfig().app.url}/failed`;
 
     const session = await Stripe.checkout.sessions.create({
@@ -198,9 +291,8 @@ export class StripePayment {
     customer: string,
     price: string,
   ) {
-    const success_url = `${
-      appConfig().app.url
-    }/success?session_id={CHECKOUT_SESSION_ID}`;
+    const success_url = `${appConfig().app.url
+      }/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancel_url = `${appConfig().app.url}/failed`;
 
     const session = await Stripe.checkout.sessions.create({

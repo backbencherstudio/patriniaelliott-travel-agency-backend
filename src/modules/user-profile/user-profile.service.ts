@@ -4,10 +4,11 @@ import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { CreateUserCardDto } from './dto/create-user-card.dto';
+import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 
 @Injectable()
 export class UserProfileService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
   async update(id: string, updateUserProfileDto: UpdateUserProfileDto) {
     try {
       // First check if user exists
@@ -71,42 +72,148 @@ export class UserProfileService {
     }
   }
 
+  // async addCard(user_id: string, createUserCardDto: CreateUserCardDto) {
+  //   try {
+  //     const { paymentMethodId } = createUserCardDto;
+
+  //     const paymentMethod = await StripePayment.getPaymentMethod({ id: paymentMethodId });
+
+  //     if (!paymentMethod || !paymentMethod.card) {
+  //       throw new Error('Invalid payment method');
+  //     }
+  //     console.log('================customer id====================');
+  //     console.log(paymentMethod);
+  //     console.log('================user id====================');
+  //     console.log(user_id);
+  //     console.log('====================================');
+  //     const user = await this.prisma.user.findUnique({
+  //       where: {
+  //         id: user_id
+  //       }
+  //     })
+ 
+  //     await StripePayment.attachPaymentMethod({
+  //       customer_id: user.stripe_customer_id,
+  //       payment_method_id: paymentMethod.id,
+  //     });
+  //     // await StripePayment.attachPaymentMethod({
+  //     //   customer_id: paymentMethod.customer as string,
+  //     //   payment_method_id: paymentMethod.id,
+  //     // });
+
+  //     const defaultCard = await this.prisma.userCard.findFirst({
+  //       where: { user_id, is_default: true },
+  //     });
+
+  //     const card = await this.prisma.userCard.create({
+  //       data: {
+  //         user_id,
+  //         customer_id: paymentMethod.customer as string,
+  //         stripe_payment_method_id: paymentMethod.id,
+  //         brand: paymentMethod.card.brand,
+  //         exp_month: paymentMethod.card.exp_month,
+  //         exp_year: paymentMethod.card.exp_year,
+  //         last4: paymentMethod.card.last4,
+  //         is_default: !defaultCard,
+  //       },
+  //     });
+
+  //     return {
+  //       success: true,
+  //       message: 'Card saved successfully',
+  //       data: card,
+  //     };
+  //   } catch (error: any) {
+  //     console.error(`Error adding card: ${error?.message}`);
+  //     return {
+  //       success: false,
+  //       message: 'Failed to save card',
+  //       error: error?.message,
+  //     };
+  //   }
+  // }
+
   async addCard(user_id: string, createUserCardDto: CreateUserCardDto) {
     try {
-      // Validate user existence
-      const user = await this.prisma.user.findUnique({ where: { id: user_id } });
-      if (!user) {
-        return {
-          success: false,
-          message: 'User not found',
-        };
+      const { paymentMethodId } = createUserCardDto;
+ 
+      const paymentMethod = await StripePayment.getPaymentMethod({ id: paymentMethodId });
+ 
+      if (!paymentMethod || !paymentMethod.card) {
+        throw new Error('Invalid payment method');
       }
-
-      const newCard = await this.prisma.userCard.create({
+ 
+      const user = await this.prisma.user.findUnique({
+        where: {
+          id: user_id
+        }
+      })
+ 
+      await StripePayment.attachPaymentMethod({
+        customer_id: user.stripe_customer_id,
+        payment_method_id: paymentMethod.id,
+      });
+ 
+      const defaultCard = await this.prisma.userCard.findFirst({
+        where: { user_id, is_default: true },
+      });
+ 
+      const card = await this.prisma.userCard.create({
         data: {
           user_id,
-          card_number: createUserCardDto.card_number,
-          expiry_month: createUserCardDto.expiry_month,
-          expiry_year: createUserCardDto.expiry_year,
-          cvv: createUserCardDto.cvv,
-          billing_country: createUserCardDto.billing_country,
-          billing_street_address: createUserCardDto.billing_street_address,
-          billing_apt_suite_unit: createUserCardDto.billing_apt_suite_unit,
-          billing_state: createUserCardDto.billing_state,
-          billing_city: createUserCardDto.billing_city,
-          billing_zip_code: createUserCardDto.billing_zip_code,
+          customer_id: user.stripe_customer_id,
+          stripe_payment_method_id: paymentMethod.id,
+          brand: paymentMethod.card.brand,
+          exp_month: paymentMethod.card.exp_month,
+          exp_year: paymentMethod.card.exp_year,
+          last4: paymentMethod.card.last4,
+          is_default: !defaultCard,
         },
       });
-
+ 
       return {
         success: true,
         message: 'Card saved successfully',
-        data: newCard,
+        data: card,
+      };
+    } catch (error: any) {
+      console.error(`Error adding card: ${error?.message}`);
+      return {
+        success: false,
+        message: 'Failed to save card',
+        error: error?.message,
+      };
+    }
+  }
+ 
+
+
+  async getCard(customer_id: string) {
+    try {
+      const user = await this.prisma.user.findFirst({
+        where: {
+          stripe_customer_id: customer_id
+        }
+      })
+
+      if (!user) {
+        throw new NotFoundException('User not found.')
+      }
+
+      const cards = await this.prisma.userCard.findMany({
+        where: {
+          customer_id: customer_id
+        }
+      })
+      return {
+        success: true,
+        message: 'Cards fetched successfully',
+        data: cards
       };
     } catch (error) {
       return {
         success: false,
-        message: 'Failed to save card',
+        message: 'Failed to fetch card',
         error: error.message,
       };
     }
@@ -114,9 +221,8 @@ export class UserProfileService {
 
   async deleteCard(user_id: string, card_id: string) {
     try {
-      // Verify card exists and belongs to user
       const card = await this.prisma.userCard.findFirst({
-        where: { id: card_id, user_id },
+        where: { stripe_payment_method_id: card_id, user_id },
       });
 
       if (!card) {
@@ -126,13 +232,15 @@ export class UserProfileService {
         };
       }
 
-      await this.prisma.userCard.delete({ where: { id: card_id } });
+      await StripePayment.deletePaymentMethods(card_id)
+      await this.prisma.userCard.delete({ where: { stripe_payment_method_id: card_id } });
 
       return {
         success: true,
         message: 'Card deleted successfully',
       };
     } catch (error) {
+      console.error('Error deleting card:', error?.message)
       return {
         success: false,
         message: 'Failed to delete card',

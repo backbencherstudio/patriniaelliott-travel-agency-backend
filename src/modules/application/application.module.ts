@@ -12,6 +12,7 @@ import { LanguageModule } from './language/language.module';
 import { PageModule } from './page/page.module';
 import { VendorVerificationModule } from './vendor-verification/vendor-verification.module';
 import { VendorUserVerificationModule } from './vendor_user_verification/vendor_user_verification.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { VendorUserVerificationModule } from './vendor_user_verification/vendor_
     PageModule,
     VendorVerificationModule,
     VendorUserVerificationModule,
+    PaymentsModule,
   ],
 })
 export class ApplicationModule {}

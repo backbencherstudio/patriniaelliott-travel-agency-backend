@@ -13,46 +13,36 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../common/guard/role/roles.guard';
+import { Roles } from '../../../common/guard/role/roles.decorator';
+import { Role } from '../../../common/guard/role/role.enum';
 import { BookingService } from './booking.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
-import { Roles } from '../../../common/guard/role/roles.decorator';
-import { RolesGuard } from '../../../common/guard/role/roles.guard';
-import { Role } from '../../../common/guard/role/role.enum';
-import { use } from 'passport';
+import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
 
 @ApiBearerAuth()
 @ApiTags('Booking')
 @Controller('booking')
 export class BookingController {
-  constructor(private readonly bookingService: BookingService) {}
+  constructor(private readonly bookingService: BookingService) { }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create booking with dynamic ID processing' })
   @Post()
   async create(
     @Req() req: Request,
     @Body() createBookingDto: CreateBookingDto,
   ) {
-    try {
-      const user_id = req.user.userId;
-      const booking = await this.bookingService.createBooking(
-        user_id,
-        createBookingDto,
-      );
-      return booking;
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
+    const user_id = req.user.userId;
+    return await this.bookingService.createBooking(
+      user_id,
+      createBookingDto,
+    );
   }
 
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all bookings' })
   @Get()
   async findAll(
@@ -221,27 +211,16 @@ export class BookingController {
   async confirmPayment(
     @Req() req: Request,
     @Param('payment_intent_id') payment_intent_id: string,
+    @Body() body: ConfirmPaymentDto,
   ) {
-    try {
-      console.log(payment_intent_id);
-      const user_id = req.user.userId;
-      const result = await this.bookingService.confirmPayment(
-        user_id,
-        payment_intent_id,
-      );
-      return {
-        success: true,
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
+    const user_id = req.user.userId;
+    return await this.bookingService.confirmPayment(
+      user_id,
+      payment_intent_id,
+      body.payment_method_id
+    );
   }
 
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get payment status for booking' })
   @Get(':booking_id/payment-status')
   async getPaymentStatus(
