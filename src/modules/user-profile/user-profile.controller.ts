@@ -42,6 +42,7 @@ export class UserProfileController {
     }
   }
 
+  // Payments
   @ApiOperation({ summary: 'Add user card details' })
   @Post('/cards')
   async addCard(
@@ -70,5 +71,12 @@ export class UserProfileController {
   ) {
     const user_id = req.user?.userId;
     return this.userProfileService.deleteCard(user_id, cardId);
+  }
+
+  @ApiOperation({ summary: 'Get call cards by user' })
+  @Get('/transactions')
+  async transactions(@Req() req: Request,) {
+    const user_id = req.user?.userId;
+    return this.userProfileService.getTransactions(user_id)
   }
 }
