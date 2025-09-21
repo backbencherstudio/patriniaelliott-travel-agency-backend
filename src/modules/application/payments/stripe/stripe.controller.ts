@@ -63,4 +63,14 @@ export class StripeController {
         const user_id = req.user.userId;
         return this.stripeService.accountStatus(user_id, id)
     }
+
+    @ApiOperation({ summary: 'Get stripe accounts' })
+    @Post('/withdraw')
+    async withdraw(
+        @Req() req: Request,
+        @Param('id') id: string
+    ) {
+        const user_id = req.user.userId;
+        return this.stripeService.accountStatus(user_id, id)
+    }
 }

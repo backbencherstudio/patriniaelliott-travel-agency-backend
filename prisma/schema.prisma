@@ -1151,7 +1151,7 @@ model PackageRoomType {
 model Withdrawal {
   id               String    @id @default(cuid())
   user_id          String
-  amount           Decimal
+  amount           Float
   currency         String    @default("USD")
   status           String    @default("pending")
   method           String

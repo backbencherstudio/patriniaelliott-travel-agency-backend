@@ -9,7 +9,7 @@ import { Role } from '@/src/common/guard/role/role.enum';
 
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-// @Roles(Role.ADMIN, Role.VENDOR)
+@Roles(Role.ADMIN)
 @Controller('dashboard/payments')
 export class PaymentsController {
     constructor(private paymentService: PaymentsService) { }

@@ -164,4 +164,34 @@ export class StripeService {
             throw new InternalServerErrorException(`Error getting account status: ${error?.message}`);
         }
     }
+
+    async withdraw({ amount, method, vendorId, }: { vendorId: string, amount: number, method: string }) {
+        const wallet = await this.prisma.vendorWallet.findUnique({
+            where: { user_id: vendorId },
+        });
+
+        if (!wallet || Number(wallet.balance) < amount) {
+            throw new BadRequestException("Insufficient balance");
+        }
+
+        await this.prisma.vendorWallet.update({
+            where: { user_id: vendorId },
+            data: { balance: { decrement: amount } },
+        });
+
+        const withdrawal = await this.prisma.withdrawal.create({
+            data: {
+                user_id: vendorId,
+                amount,
+                status: "pending",
+                method: method
+            },
+        });
+
+        return {
+            success: true,
+            message: "Withdrawal request submitted. Waiting for admin approval.",
+            data: withdrawal,
+        };
+    }
 }
