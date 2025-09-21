@@ -11,7 +11,7 @@ import { UserRepository } from 'src/common/repository/user/user.repository';
 
 @Injectable()
 export class VendorVerificationService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async createOrUpdateVerification(
     userId: string,
@@ -285,7 +285,7 @@ export class VendorVerificationService {
     }
 
     const bookingItem = booking.booking_items[0]; // Assuming one item per booking for this invoice
-    const serviceFee = booking.total_amount.toNumber() - bookingItem.price.toNumber();
+    const serviceFee = booking.total_amount.toNumber() - bookingItem.price;
 
     return {
       success: true,

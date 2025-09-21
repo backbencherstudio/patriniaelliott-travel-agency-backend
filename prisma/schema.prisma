@@ -111,12 +111,12 @@ model UserDocument {
   updated_at DateTime  @default(now())
   deleted_at DateTime?
 
-  status    String? @default("pending")// pending, approved, rejected
-  user_id   String?
-  type      String?
-  image     String?
-  number    String?
-  user      User?   @relation(fields: [user_id], references: [id])
+  status  String? @default("pending") // pending, approved, rejected
+  user_id String?
+  type    String?
+  image   String?
+  number  String?
+  user    User?   @relation(fields: [user_id], references: [id])
 
   @@map("user_documents")
 }
@@ -747,12 +747,12 @@ model BookingItem {
   created_at        DateTime         @default(now())
   updated_at        DateTime         @default(now())
   deleted_at        DateTime?
-  booking_id        String?
+  booking_id        String           @unique
   package_id        String?
   start_date        DateTime?
   end_date          DateTime?
   quantity          Int?             @default(1)
-  price             Decimal?
+  price             Float
   packageRoomTypeId String?
   booking           Booking?         @relation(fields: [booking_id], references: [id])
   PackageRoomType   PackageRoomType? @relation(fields: [packageRoomTypeId], references: [id])

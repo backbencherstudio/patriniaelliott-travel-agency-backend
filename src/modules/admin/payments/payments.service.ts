@@ -24,6 +24,7 @@ export class PaymentsService {
                 dateRange,
                 startDate,
                 endDate,
+                type
             } = query.data;
 
             let from: Date | undefined;
@@ -61,12 +62,27 @@ export class PaymentsService {
             if (from && to) {
                 where.created_at = { gte: from, lte: to };
             }
+            if (type && type !== 'all') {
+                where.type = type
+            }
 
             const total = await this.prisma.paymentTransaction.count({ where });
 
-            const [total_bookings, transactions] = await Promise.all([
+            const [total_bookings, total_commission, total_withdraw, total_refund, transactions] = await Promise.all([
                 this.prisma.booking.count({
                     where: from && to ? { created_at: { gte: from, lte: to } } : {}
+                }),
+                this.prisma.paymentTransaction.aggregate({
+                    where: { type: "commission", ...(from && to ? { created_at: { gte: from, lte: to } } : {}) },
+                    _sum: { amount: true }
+                }),
+                this.prisma.paymentTransaction.aggregate({
+                    where: { type: "withdraw", ...(from && to ? { created_at: { gte: from, lte: to } } : {}) },
+                    _sum: { amount: true }
+                }),
+                this.prisma.paymentTransaction.aggregate({
+                    where: { type: "refund", status: 'approved', ...(from && to ? { created_at: { gte: from, lte: to } } : {}) },
+                    _sum: { amount: true }
                 }),
                 this.prisma.paymentTransaction.findMany({
                     where,
@@ -91,7 +107,10 @@ export class PaymentsService {
                 message: "Successfully fetched transactions.",
                 data: {
                     statistics: {
-                        total_bookings: total_bookings || 0,
+                        total_bookings: total_bookings.toString() || '0',
+                        total_commission: total_commission._sum.amount || '0',
+                        total_withdraw: total_withdraw._sum.amount || '0',
+                        total_refund: total_refund._sum.amount || '0',
                     },
                     transactions: {
                         data: transactions,

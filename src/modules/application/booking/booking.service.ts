@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, HttpException, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateBookingDto, BookingItemDto, BookingTravellerDto, BookingExtraServiceDto } from './dto/create-booking.dto';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
@@ -616,7 +616,7 @@ export class BookingService {
   }
 
 
-  async getPaymentStatus(user_id: string, booking_id: string) {
+  async getPaymentStatus(booking_id: string) {
     try {
       const booking = await this.prisma.booking.findFirst({
         where: {
@@ -648,6 +648,65 @@ export class BookingService {
     }
   }
 
+  async refundRequest(user_id: string, booking_id: string) {
+    try {
+      const booking = await this.prisma.booking.findUnique({
+        where: {
+          id: booking_id,
+          user_id: user_id,
+        },
+        select: {
+          booking_items: {
+            select: {
+              price: true,
+              quantity: true
+            }
+          }
+        }
+      })
+
+      if (!booking) {
+        throw new NotFoundException('Booking not Found')
+      }
+
+      const amount = booking.booking_items?.[0]?.price * booking.booking_items?.[0]?.quantity
+
+      const alreadyRequested = await this.prisma.paymentTransaction.findFirst(({
+        where: {
+          type: 'refund',
+          booking_id: booking_id
+        }
+      }))
+
+      if (alreadyRequested) {
+        throw new BadRequestException('Duplicate refund request.')
+      }
+
+      const refundReq = await this.prisma.paymentTransaction.create({
+        data: {
+          amount,
+          provider: 'stripe',
+          type: 'refund',
+          status: 'pending',
+          booking_id,
+          user_id
+        }
+      })
+      return {
+        success: true,
+        message: "Refund request submitted. Waiting for admin approval.",
+        data: refundReq,
+      };
+    } catch (error) {
+      console.error("Error requesting refund:", error?.message);
+      if (error instanceof BadRequestException) throw error;
+      if (error instanceof HttpException) throw error;
+
+      throw new InternalServerErrorException(
+        `Error requesting refund: ${error?.message}`
+      );
+    }
+  }
 
   async findAll(user_id: string, query: { q?: string; status?: string; approve?: string; show_all?: string }) {
     try {
@@ -1223,7 +1282,7 @@ export class BookingService {
     try {
       // Get total bookings count
       const totalBookings = await this.prisma.booking.count();
-      
+
       // Get all bookings with basic info
       const allBookings = await this.prisma.booking.findMany({
         select: {

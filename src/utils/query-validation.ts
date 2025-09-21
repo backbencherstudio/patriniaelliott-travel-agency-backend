@@ -14,7 +14,10 @@ export const dashboardTransactionsQuerySchema = z.object({
         .refine((val) => val > 0, { message: "perPage must be greater than 0" }),
 
     payment_method: z.string().optional(),
-
+    type: z
+        .enum(["all", "order", "refund"])
+        .optional()
+        .default('all'),
     dateRange: z
         .enum(["7d", "30d", "90d", "365d", "all", "custom"])
         .optional()

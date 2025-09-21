@@ -105,6 +105,14 @@ export class StripePayment {
     return await Stripe.paymentMethods.detach(card_id)
   }
 
+  static async createRefund({ amount, payment_intent }: {payment_intent: string, amount: number }){
+    return await Stripe.refunds.create({
+      payment_intent,
+      amount: amount * 100,
+      reason: 'requested_by_customer'
+    })
+  }
+
   /**
    * Add customer to stripe
    * @param email
