@@ -105,7 +105,7 @@ export class StripePayment {
     return await Stripe.paymentMethods.detach(card_id)
   }
 
-  static async createRefund({ amount, payment_intent }: {payment_intent: string, amount: number }){
+  static async createRefund({ amount, payment_intent }: { payment_intent: string, amount: number }) {
     return await Stripe.refunds.create({
       payment_intent,
       amount: amount * 100,
@@ -253,6 +253,14 @@ export class StripePayment {
 
   static async capturePayment(payment_intent_id: string): Promise<stripe.PaymentIntent> {
     return Stripe.paymentIntents.capture(payment_intent_id);
+  }
+
+  static async transferBalance({ account_id, amount, currency }: { amount: number, currency: string, account_id }): Promise<stripe.Transfer> {
+    return await Stripe.transfers.create({
+      amount: amount * 100,
+      currency,
+      destination: account_id
+    });
   }
 
   /**
@@ -447,9 +455,10 @@ export class StripePayment {
     currency: string,
   ) {
     const payout = await Stripe.payouts.create({
-      amount: amount * 100, // amount in cents
+      amount: amount * 100,
       currency: currency,
-      destination: account_id,
+    }, {
+      stripeAccount: account_id
     });
 
     return payout;

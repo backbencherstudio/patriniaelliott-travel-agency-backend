@@ -165,33 +165,74 @@ export class StripeService {
         }
     }
 
-    async withdraw({ amount, method, vendorId, }: { vendorId: string, amount: number, method: string }) {
+    async getBallance(user_id: string) {
+        try {
+            const wallet = await this.prisma.vendorWallet.findUnique({
+                where: { user_id: user_id },
+            });
+
+
+            if (!wallet) {
+                throw new NotFoundException('Wallet not found');
+            }
+            return {
+                success: true,
+                message: 'Ballance fetched successfully.',
+                data: wallet
+            }
+        } catch (error) {
+            if (error instanceof HttpException) {
+                throw error;
+            }
+            throw new InternalServerErrorException(`Error getting vendor ballance info: ${error?.message}`);
+        }
+    }
+
+    async withdraw({ amount, method, vendorId }: { vendorId: string, amount: number, method: string }) {
         const wallet = await this.prisma.vendorWallet.findUnique({
             where: { user_id: vendorId },
         });
 
         if (!wallet || Number(wallet.balance) < amount) {
-            throw new BadRequestException("Insufficient balance");
+            throw new BadRequestException("Insufficient balance.");
         }
 
+        const vendor = await this.prisma.vendorPaymentMethod.findFirst({
+            where: {
+                user_id: vendorId,
+                payment_method: 'stripe'
+            }
+        })
+
+        if (!vendor || !vendor.account_id) {
+            throw new BadRequestException("Vendor does not have a Stripe account linked.");
+        }
+
+        // const transfer = await StripePayment.transferBalance({ account_id: vendor.account_id, amount: 1000, currency: 'usd' })
+
+
+        const payout = await StripePayment.createPayout(vendor.account_id, amount, 'usd')
+        await this.prisma.paymentTransaction.create({
+            data: {
+                provider: 'stripe',
+                user_id: vendorId,
+                amount,
+                currency: 'usd',
+                paid_amount: amount,
+                type: 'withdraw',
+                status: 'succeeded',
+                reference_number: `${payout.id}_withdraw`
+            }
+        })
         await this.prisma.vendorWallet.update({
             where: { user_id: vendorId },
             data: { balance: { decrement: amount } },
         });
 
-        const withdrawal = await this.prisma.withdrawal.create({
-            data: {
-                user_id: vendorId,
-                amount,
-                status: "pending",
-                method: method
-            },
-        });
-
         return {
             success: true,
-            message: "Withdrawal request submitted. Waiting for admin approval.",
-            data: withdrawal,
+            message: "Withdrawal request submitted.",
+            data: payout,
         };
     }
 }
