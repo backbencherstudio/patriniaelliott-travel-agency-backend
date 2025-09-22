@@ -232,7 +232,7 @@ export class StripePayment {
       amount: amount * 100,
       currency: currency,
       customer: customer_id,
-      application_fee_amount: application_fee_amount,
+      application_fee_amount: application_fee_amount * 100,
       transfer_data: {
         destination: account_id
       },

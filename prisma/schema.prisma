@@ -249,7 +249,7 @@ model PaymentTransaction {
   type             String?   @default("order")
   withdraw_via     String?   @default("wallet")
   provider         String?
-  reference_number String?
+  reference_number String?   @unique
   status           String?   @default("pending")
   raw_status       String?
   amount           Decimal?
@@ -259,6 +259,7 @@ model PaymentTransaction {
   booking          Booking?  @relation(fields: [booking_id], references: [id])
   user             User?     @relation(fields: [user_id], references: [id])
 
+  @@unique([reference_number, type, status])
   @@map("payment_transactions")
 }
 

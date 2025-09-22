@@ -1,6 +1,7 @@
+import { StripePayment } from '@/src/common/lib/Payment/stripe/StripePayment';
 import { PrismaService } from '@/src/prisma/prisma.service';
 import { dashboardTransactionsQuerySchema } from '@/src/utils/query-validation';
-import { BadRequestException, HttpException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 
 @Injectable()
 export class PaymentsService {
@@ -132,6 +133,47 @@ export class PaymentsService {
 
             throw new InternalServerErrorException(
                 `Error fetching transactions: ${error?.message}`
+            );
+        }
+    }
+
+    async refundRequest(booking_id: string) {
+        try {
+            const booking = await this.prisma.booking.findUnique({
+                where: {
+                    id: booking_id
+                }
+            })
+            if (!booking) {
+                throw new NotFoundException('Booking not found.')
+            }
+
+            const payment = await this.prisma.paymentTransaction.findUnique({
+                where: {
+                    reference_number: `${booking.payment_reference_number}_refund`,
+                    type: 'refund'
+                }
+            })
+
+            await StripePayment.createRefund({ amount: Number(payment.amount), payment_intent: booking.payment_reference_number, })
+            await this.prisma.paymentTransaction.update({
+                where: {
+                    id: payment.id
+                },
+                data: {
+                    status: 'approved'
+                }
+            })
+            return {
+                success: true,
+                message: "Refund request approved.",
+            };
+        } catch (error) {
+            console.error("Error review refund:", error?.message);
+            if (error instanceof HttpException) throw error;
+
+            throw new InternalServerErrorException(
+                `Error review refund: ${error?.message}`
             );
         }
     }

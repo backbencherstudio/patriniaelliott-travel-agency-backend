@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '@/src/common/guard/role/roles.guard';
@@ -18,5 +18,11 @@ export class PaymentsController {
     @Get('/transactions')
     async transactions(@Req() req: Request, @Query() query: any) {
         return this.paymentService.getTransactions(query)
+    }
+
+    @ApiOperation({ summary: 'Get transactions by user' })
+    @Post('/transactions/refund-request/:booking_id')
+    async approveOrCancelRefundRequest(@Req() req: Request, @Param('booking_id') booking_id: string,) {
+        return this.paymentService.refundRequest(booking_id)
     }
 }

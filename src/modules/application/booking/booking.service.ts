@@ -424,8 +424,9 @@ export class BookingService {
         throw new BadRequestException('Booking is already paid');
       }
 
-      const totalAmount = Number(booking.total_amount)
-      const platformFee = Math.round(totalAmount * 0.1);
+      const commission_rate = 15;
+      const total_amount = Number(booking.total_amount)
+      const platform_fee = (total_amount * commission_rate) / 100;
 
       const account = await this.prisma.vendorPaymentMethod.findFirst({
         where: {
@@ -442,9 +443,9 @@ export class BookingService {
 
       // Create payment intent
       const paymentIntent = await StripePayment.createPaymentIntent({
-        amount: totalAmount,
+        amount: total_amount,
         customer_id: customer.customer_id,
-        application_fee_amount: platformFee,
+        application_fee_amount: platform_fee,
         account_id: account.account_id,
         currency: createPaymentDto.currency,
         metadata: {
@@ -455,6 +456,21 @@ export class BookingService {
         },
       });
 
+      await this.prisma.paymentTransaction.create({
+        data: {
+          provider: 'stripe',
+          order_id: booking.invoice_number,
+          user_id: user_id,
+          amount: platform_fee,
+          booking_id: booking.id,
+          currency: createPaymentDto.currency,
+          paid_amount: total_amount,
+          type: 'commission',
+          status: 'pending',
+          reference_number: `${paymentIntent.id}_commission`
+        }
+      })
+
       // Create payment transaction record
       await this.prisma.paymentTransaction.create({
         data: {
@@ -463,12 +479,12 @@ export class BookingService {
           order_id: booking.invoice_number,
           type: 'booking',
           provider: 'stripe',
-          reference_number: paymentIntent.id,
+          reference_number: `${paymentIntent.id}_booking`,
           status: 'pending',
           raw_status: paymentIntent.status,
-          amount: totalAmount,
+          amount: total_amount,
           currency: createPaymentDto.currency,
-          paid_amount: 0,
+          paid_amount: total_amount,
           paid_currency: createPaymentDto.currency,
         },
       });
@@ -492,7 +508,7 @@ export class BookingService {
     try {
       const transaction = await this.prisma.paymentTransaction.findFirst({
         where: {
-          reference_number: payment_intent_id,
+          reference_number: `${payment_intent_id}_booking`,
           user_id: user_id,
         },
         include: {
@@ -537,34 +553,48 @@ export class BookingService {
         const updatedIntent = await StripePayment.retrievePaymentIntent(payment_intent_id);
 
         if (updatedIntent.status === "requires_capture") {
-          await StripePayment.capturePayment(payment_intent_id)
-          await this.prisma.paymentTransaction.update({
-            where: { id: transaction.id },
-            data: {
-              status: 'succeeded',
-              paid_amount: paymentIntent.amount / 100,
-              paid_currency: paymentIntent.currency,
-              raw_status: paymentIntent.status,
-            },
-          });
-          await this.prisma.booking.update({
-            where: { id: transaction.booking_id },
-            data: {
-              payment_status: 'paid',
-              paid_amount: paymentIntent.amount / 100,
-              paid_currency: paymentIntent.currency,
-              payment_provider: 'stripe',
-              payment_reference_number: payment_intent_id,
-            },
-          });
-          await this.updateVendorWallet(transaction.booking_id);
+          const capturePayment = await StripePayment.capturePayment(payment_intent_id)
+          if (capturePayment.status === 'succeeded') {
+            await this.prisma.paymentTransaction.update({
+              where: { id: transaction.id },
+              data: {
+                status: 'succeeded',
+                paid_amount: paymentIntent.amount / 100,
+                paid_currency: paymentIntent.currency,
+                raw_status: paymentIntent.status,
+              },
+            });
+            await this.prisma.paymentTransaction.update({
+              where: {
+                reference_number: `${payment_intent_id}_commission`,
+                type: 'commission',
+                status: 'pending'
+              },
+              data: {
+                status: 'succeeded'
+              }
+            })
+            await this.prisma.booking.update({
+              where: { id: transaction.booking_id },
+              data: {
+                payment_status: 'paid',
+                paid_amount: paymentIntent.amount / 100,
+                paid_currency: paymentIntent.currency,
+                payment_provider: 'stripe',
+                payment_reference_number: payment_intent_id,
+              },
+            });
+            await this.updateVendorWallet(transaction.booking_id);
 
-          return {
-            success: true,
-            message: 'Payment confirmed successfully',
-            booking_id: transaction.booking_id,
-            amount_paid: paymentIntent.amount / 100,
-          };
+            return {
+              success: true,
+              message: 'Payment confirmed successfully',
+              booking_id: transaction.booking_id,
+              amount_paid: paymentIntent.amount / 100,
+            };
+          } else {
+            throw new Error(`PaymentIntent not ready to capture. Status: ${capturePayment.status}`);
+          }
         } else {
           throw new Error(`PaymentIntent not ready to capture. Status: ${updatedIntent.status}`);
         }
@@ -656,6 +686,7 @@ export class BookingService {
           user_id: user_id,
         },
         select: {
+          payment_reference_number: true,
           booking_items: {
             select: {
               price: true,
@@ -689,7 +720,8 @@ export class BookingService {
           type: 'refund',
           status: 'pending',
           booking_id,
-          user_id
+          user_id,
+          reference_number: `${booking.payment_reference_number}_refund`
         }
       })
       return {
