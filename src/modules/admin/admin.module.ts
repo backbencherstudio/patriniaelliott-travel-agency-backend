@@ -23,6 +23,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import {VendorPackageModule} from './vendor-package/vendor-package.module';
 import { VendorUserVerificationAdminModule } from './vendor-user-verification/vendor-user-verification.module';
 import { ListingManagementModule } from './listing-management/listing-management.module';
+import { PaymentsModule } from './payments/payments.module';
 @Module({
   imports: [
     FaqModule,
@@ -49,6 +50,7 @@ import { ListingManagementModule } from './listing-management/listing-management
     VendorPackageModule,
     VendorUserVerificationAdminModule,
     ListingManagementModule,
+    PaymentsModule,
   ],
 })
 export class AdminModule {}

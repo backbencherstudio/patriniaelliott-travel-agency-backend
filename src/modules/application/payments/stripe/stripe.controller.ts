@@ -7,6 +7,7 @@ import { CreateAccountDto } from './dto/create-account.dto';
 import { RolesGuard } from 'src/common/guard/role/roles.guard';
 import { Role } from 'src/common/guard/role/role.enum';
 import { Roles } from 'src/common/guard/role/roles.decorator';
+import { WithdrawDto } from './dto/withdraw.dto';
 
 @ApiBearerAuth()
 @ApiTags('Stripe')
@@ -35,6 +36,15 @@ export class StripeController {
         return this.stripeService.index(user_id)
     }
     @ApiOperation({ summary: 'Get stripe accounts' })
+    @Get('/ballance')
+    async getBallance(
+        @Req() req: Request,
+        @Param('id') id: string
+    ) {
+        const user_id = req.user.userId;
+        return this.stripeService.getBallance(user_id)
+    }
+    @ApiOperation({ summary: 'Get stripe accounts' })
     @Get('/:id')
     async getAccountByID(
         @Req() req: Request,
@@ -54,7 +64,7 @@ export class StripeController {
         return this.stripeService.getOnboardingLink(user_id, stripe_account_id)
     }
 
-    @ApiOperation({ summary: 'Get stripe accounts' })
+    @ApiOperation({ summary: 'Get stripe account status' })
     @Get('/:id/status')
     async accountStatus(
         @Req() req: Request,
@@ -62,5 +72,16 @@ export class StripeController {
     ) {
         const user_id = req.user.userId;
         return this.stripeService.accountStatus(user_id, id)
+    }
+
+    @ApiOperation({ summary: 'Create withdraw' })
+    @Post('/withdraw')
+    async withdraw(
+        @Req() req: Request,
+        @Param('id') id: string,
+        @Body() body: WithdrawDto
+    ) {
+        const user_id = req.user.userId;
+        return this.stripeService.withdraw({ amount: body.amount, method: body.method, vendorId: user_id, })
     }
 }

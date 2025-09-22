@@ -25,6 +25,7 @@ import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
 
 @ApiBearerAuth()
 @ApiTags('Booking')
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('booking')
 export class BookingController {
   constructor(private readonly bookingService: BookingService) { }
@@ -49,10 +50,10 @@ export class BookingController {
     @Req() req: Request,
     @Query() query: { q?: string; status?: string; approve?: string; show_all?: string },
   ) {
-    try {      
+    try {
 
       const user_id = req.user.userId;
-      
+
       if (!user_id) {
         console.error('No user_id found in request object');
         return {
@@ -228,9 +229,7 @@ export class BookingController {
     @Param('booking_id') booking_id: string,
   ) {
     try {
-      const user_id = req.user.userId;
       const paymentStatus = await this.bookingService.getPaymentStatus(
-        user_id,
         booking_id,
       );
       return {
@@ -243,5 +242,15 @@ export class BookingController {
         message: error.message,
       };
     }
+  }
+
+  @ApiOperation({ summary: 'Refund Request' })
+  @Post('/payment/refund/:booking_id')
+  async refund(
+    @Req() req: Request,
+    @Param('booking_id') booking_id: string,
+  ) {
+    const user_id = req.user.userId;
+    return await this.bookingService.refundRequest(user_id, booking_id)
   }
 }
