@@ -325,6 +325,7 @@ model Destination {
   tour_pice            Decimal?
   cancellation_policy  Json?
   language             String?
+  country_name         String?
   country_id           String?
   destination_images   DestinationImage[]
   country              Country?             @relation(fields: [country_id], references: [id])

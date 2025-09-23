@@ -24,8 +24,29 @@ export class DestinationService {
       if (createDestinationDto.description) {
         data.description = createDestinationDto.description;
       }
-      if (createDestinationDto.country_id) {
-        data.country_id = createDestinationDto.country_id;
+      if (createDestinationDto.country_name) {
+        data.country_name = createDestinationDto.country_name;
+      }
+      if (createDestinationDto.tour_duration !== undefined) {
+        data.tour_duration = Number(createDestinationDto.tour_duration);
+      }
+      if (createDestinationDto.duration_type) {
+        data.duration_type = createDestinationDto.duration_type;
+      }
+      if (createDestinationDto.tour_pice !== undefined) {
+        data.tour_pice = Number(createDestinationDto.tour_pice);
+      }
+      if (createDestinationDto.cancellation_policy) {
+        try {
+          data.cancellation_policy = JSON.parse(
+            createDestinationDto.cancellation_policy,
+          );
+        } catch (err) {
+          throw new Error('Invalid cancellation_policy JSON');
+        }
+      }
+      if (createDestinationDto.language) {
+        data.language = createDestinationDto.language;
       }
       const destination = await this.prisma.destination.create({
         data: {
@@ -75,6 +96,7 @@ export class DestinationService {
           id: true,
           name: true,
           description: true,
+          country_name: true,
           country: {
             select: {
               id: true,
@@ -219,8 +241,14 @@ export class DestinationService {
       if (updateDestinationDto.description) {
         data.description = updateDestinationDto.description;
       }
-      if (updateDestinationDto.country_id) {
-        data.country_id = updateDestinationDto.country_id;
+      if (updateDestinationDto.country_name) {
+        const country = await this.prisma.country.findFirst({
+          where: { name: updateDestinationDto.country_name },
+          select: { id: true },
+        });
+        if (country) {
+          data.country_id = country.id;
+        }
       }
       await this.prisma.destination.update({
         where: { id, user_id, ...where_condition },

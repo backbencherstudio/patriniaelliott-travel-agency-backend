@@ -157,22 +157,6 @@ export class CreatePackageDto {
   @ApiProperty()
   extra_services?: any;
 
-  @ApiProperty({
-    description: 'Bedrooms data as JSON array',
-    example: [
-      {
-        title: "Master Bedroom",
-        beds: {
-          single_bed: 1,
-          double_bed: 1,
-          large_bed: 0,
-          extra_large_bed: 0
-        }
-      }
-    ],
-  })
-  @IsString()
-  bedrooms?: string;
 
   @ApiProperty({
     description: 'Package array object with stringyfied ids',
