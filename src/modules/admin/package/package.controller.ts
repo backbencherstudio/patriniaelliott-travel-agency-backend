@@ -230,6 +230,23 @@ export class PackageController {
       // Ensure storage directories exist
       this.ensureStorageDirectories();
       
+      // Normalize bedrooms payload to expected JSON string
+      if (createPackageDto && (createPackageDto as any).bedrooms !== undefined) {
+        try {
+          if (typeof (createPackageDto as any).bedrooms === 'string') {
+            JSON.parse((createPackageDto as any).bedrooms as unknown as string);
+          } else {
+            (createPackageDto as any).bedrooms = JSON.stringify(
+              (createPackageDto as any).bedrooms,
+            );
+          }
+        } catch (err) {
+          throw new BadRequestException(
+            'Invalid bedrooms format. Provide valid JSON (array of bedroom objects).',
+          );
+        }
+      }
+
       // Validate uploaded files
       if (files.package_files) {
         for (const file of files.package_files) {

@@ -8,7 +8,7 @@ import { ApiOperation } from '@nestjs/swagger';
 import { CreateUserCardDto } from './dto/create-user-card.dto';
 
 @Controller('user-profile')
- @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class UserProfileController {
   constructor(private readonly userProfileService: UserProfileService) { }
 
@@ -42,14 +42,14 @@ export class UserProfileController {
     }
   }
 
+  // Payments
   @ApiOperation({ summary: 'Add user card details' })
   @Post('/cards')
   async addCard(
     @Req() req: Request,
     @Body() createUserCardDto: CreateUserCardDto,
   ) {
-    const user_id =req.user.userId;
-    // const user_id ='cmfp6yiry0002jv64hv4jj4dc';
+    const user_id = req.user.userId;
     return this.userProfileService.addCard(user_id, createUserCardDto);
   }
 
@@ -70,5 +70,12 @@ export class UserProfileController {
   ) {
     const user_id = req.user?.userId;
     return this.userProfileService.deleteCard(user_id, cardId);
+  }
+
+  @ApiOperation({ summary: 'Get transactions by user' })
+  @Get('/transactions')
+  async transactions(@Req() req: Request,) {
+    const user_id = req.user?.userId;
+    return this.userProfileService.getTransactions(user_id)
   }
 }

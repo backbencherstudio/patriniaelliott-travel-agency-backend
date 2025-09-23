@@ -84,16 +84,23 @@ export class PackageService {
 
       // add trip plan to package
       if (createPackageDto.trip_plans) {
+        console.log('Processing trip_plans:', createPackageDto.trip_plans);
         const trip_plans = JSON.parse(createPackageDto.trip_plans);
+        console.log('Parsed trip_plans:', trip_plans);
         for (const trip_plan of trip_plans) {
+          console.log('Processing trip_plan:', trip_plan);
           const trip_plan_data = {
             title: trip_plan.title,
             description: trip_plan.description,
+            meting_points: trip_plan.meetingPoint, // Store meetingPoint in meting_points field
+            trip_plan: trip_plan.tripPlan, // Store tripPlan array in JSON field
             package_id: record.id,
           };
+          console.log('Creating trip_plan with data:', trip_plan_data);
           const trip_plan_record = await this.prisma.packageTripPlan.create({
             data: trip_plan_data,
           });
+          console.log('Trip plan created successfully:', trip_plan_record.id);
           if (trip_plan_record) {
             // add trip plan images to trip plan
             if (files.trip_plans_images && files.trip_plans_images.length > 0) {
@@ -127,23 +134,52 @@ export class PackageService {
 
       // add destination to package
       if (createPackageDto.destinations) {
-        const destinations = JSON.parse(createPackageDto.destinations);
-        for (const destination of destinations) {
-          const existing_destination =
-            await this.prisma.packageDestination.findFirst({
-              where: {
-                destination_id: destination.id,
-                package_id: record.id,
-              },
-            });
-          if (!existing_destination) {
-            await this.prisma.packageDestination.create({
-              data: {
-                destination_id: destination.id,
-                package_id: record.id,
-              },
-            });
+        console.log('Processing destinations:', createPackageDto.destinations);
+        try {
+          const destinations = JSON.parse(createPackageDto.destinations);
+          console.log('Parsed destinations:', destinations);
+          
+          // Validate that destination IDs exist
+          const destinationIds = destinations.map((dest: any) => dest.id);
+          const existingDestinations = await this.prisma.destination.findMany({
+            where: { id: { in: destinationIds } },
+            select: { id: true, name: true }
+          });
+          
+          const existingIds = existingDestinations.map(dest => dest.id);
+          const invalidIds = destinationIds.filter(id => !existingIds.includes(id));
+          
+          if (invalidIds.length > 0) {
+            console.error('Invalid destination IDs:', invalidIds);
+            throw new Error(`The following destination IDs do not exist: ${invalidIds.join(', ')}`);
           }
+          
+          console.log('Valid destinations found:', existingDestinations);
+          
+          for (const destination of destinations) {
+            const existing_destination =
+              await this.prisma.packageDestination.findFirst({
+                where: {
+                  destination_id: destination.id,
+                  package_id: record.id,
+                },
+              });
+            if (!existing_destination) {
+              console.log(`Creating package destination for destination ID: ${destination.id}`);
+              await this.prisma.packageDestination.create({
+                data: {
+                  destination_id: destination.id,
+                  package_id: record.id,
+                },
+              });
+              console.log(`Package destination created successfully for: ${destination.id}`);
+            } else {
+              console.log(`Package destination already exists for: ${destination.id}`);
+            }
+          }
+        } catch (error) {
+          console.error('Error processing destinations:', error);
+          throw new Error(`Failed to process destinations: ${error.message}`);
         }
       }
 

@@ -216,6 +216,29 @@ export class VendorPackageService {
             } 
           },
         },
+        // Include package trip plans
+        package_trip_plans: {
+          where: { deleted_at: null },
+          orderBy: { sort_order: 'asc' },
+          select: { 
+            id: true, 
+            title: true, 
+            description: true, 
+            meting_points: true, 
+            trip_plan: true, 
+            sort_order: true,
+            package_trip_plan_images: {
+              where: { deleted_at: null },
+              orderBy: { sort_order: 'asc' },
+              select: {
+                id: true,
+                image: true,
+                image_alt: true,
+                sort_order: true
+              }
+            }
+          },
+        },
         },
       }),
       this.prisma.package.count({ where }),
@@ -425,6 +448,25 @@ export class VendorPackageService {
             } 
           },
         },
+        // Include package trip plans
+        package_trip_plans: {
+          where: {
+            deleted_at: null
+          },
+          orderBy: {
+            sort_order: 'asc'
+          },
+          include: {
+            package_trip_plan_images: {
+              where: {
+                deleted_at: null
+              },
+              orderBy: {
+                sort_order: 'asc'
+              }
+            }
+          }
+        },
       }
     });
 
@@ -595,6 +637,17 @@ export class VendorPackageService {
       if (!packageData) {
         throw new Error('Package not found or you do not have permission to update it');
       }
+      
+      // Parse bedrooms JSON if provided
+      if (updateVendorPackageDto.bedrooms && typeof updateVendorPackageDto.bedrooms === 'string') {
+        try {
+          updateVendorPackageDto.bedrooms = JSON.parse(updateVendorPackageDto.bedrooms);
+        } catch (error) {
+          console.error('Failed to parse bedrooms JSON in update:', error);
+          // Keep as string if parsing fails
+        }
+      }
+      
       const updatedPackage = await this.prisma.package.update({
         where: {
           id: packageId
@@ -674,30 +727,48 @@ export class VendorPackageService {
       // Upload package files
       if (files?.package_files) {
         for (const file of files.package_files) {
-          const randomName = Array(32)
+          // Generate unique filename with timestamp and clean name (consistent with package controller)
+          const timestamp = Date.now();
+          const randomName = Array(16)
             .fill(null)
             .map(() => Math.round(Math.random() * 16).toString(16))
             .join('');
-          const fileName = `${randomName}${file.originalname}`;
+          
+          // Clean the original filename to remove special characters and spaces
+          const cleanOriginalName = file.originalname
+            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
+            .replace(/_+/g, '_') // Replace multiple underscores with single
+            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+          
+          const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           package_files.push(fileName);
-          console.log(`Successfully uploaded package file: ${fileName}`);
+          console.log(`📁 Generated filename: ${fileName} from original: ${file.originalname}`);
         }
       }
       
       // Upload trip plans images
       if (files?.trip_plans_images) {
         for (const file of files.trip_plans_images) {
-          const randomName = Array(32)
+          // Generate unique filename with timestamp and clean name (consistent with package controller)
+          const timestamp = Date.now();
+          const randomName = Array(16)
             .fill(null)
             .map(() => Math.round(Math.random() * 16).toString(16))
             .join('');
-          const fileName = `${randomName}${file.originalname}`;
+          
+          // Clean the original filename to remove special characters and spaces
+          const cleanOriginalName = file.originalname
+            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
+            .replace(/_+/g, '_') // Replace multiple underscores with single
+            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+          
+          const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           trip_plans_images.push(fileName);
-          console.log(`Successfully uploaded trip plan image: ${fileName}`);
+          console.log(`📁 Generated filename: ${fileName} from original: ${file.originalname}`);
         }
       }
       
@@ -706,16 +777,25 @@ export class VendorPackageService {
         console.log(`Found ${files.room_photos.length} room_photos files to upload`);
         for (const file of files.room_photos) {
           console.log(`Uploading room photo: ${file.originalname} (${file.size} bytes)`);
-          const randomName = Array(32)
+          // Generate unique filename with timestamp and clean name (consistent with package controller)
+          const timestamp = Date.now();
+          const randomName = Array(16)
             .fill(null)
             .map(() => Math.round(Math.random() * 16).toString(16))
             .join('');
-          const fileName = `${randomName}${file.originalname}`;
+          
+          // Clean the original filename to remove special characters and spaces
+          const cleanOriginalName = file.originalname
+            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
+            .replace(/_+/g, '_') // Replace multiple underscores with single
+            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+          
+          const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           
           room_photos.push(fileName);
-          console.log(`Successfully uploaded room photo: ${fileName}`);
+          console.log(`📁 Generated filename: ${fileName} from original: ${file.originalname}`);
         }
       } else {
         console.log('No room_photos files found in request');
@@ -737,6 +817,8 @@ export class VendorPackageService {
         calendar_end_date,
         close_dates,
         close_date_ranges,
+        destinations,
+        trip_plans,
         ...packageData 
       } = createVendorPackageDto;
       
@@ -755,8 +837,111 @@ export class VendorPackageService {
       
       // Filter out room_photos, country_id, countryId, and country from packageData to prevent them from being included in the main package
       const { room_photos: _, country_id: __, countryId: ___, country: ____, ...cleanPackageData } = packageData as any
+      
+      // Remove trip-plan-only fields that do not exist on Package
+      const forbiddenRootTripFields = ['title', 'meetingPoint', 'tripPlan'];
+      for (const key of forbiddenRootTripFields) {
+        if (key in cleanPackageData) {
+          delete cleanPackageData[key];
+        }
+      }
+
+      // If trip-plan fields were sent at root, capture them to create a nested PackageTripPlan later
+      let rootTripPlanPayload: any = null;
+      const rawPackageData = packageData as any;
+      if (rawPackageData && (rawPackageData.title || rawPackageData.meetingPoint || rawPackageData.tripPlan)) {
+        try {
+          const parsedTripPlan = typeof rawPackageData.tripPlan === 'string'
+            ? JSON.parse(rawPackageData.tripPlan)
+            : rawPackageData.tripPlan;
+          rootTripPlanPayload = {
+            title: rawPackageData.title || 'Trip Plan 1',
+            description: '',
+            meting_points: rawPackageData.meetingPoint || '',
+            trip_plan: parsedTripPlan || [],
+            sort_order: 0,
+          };
+        } catch {
+          rootTripPlanPayload = {
+            title: rawPackageData.title || 'Trip Plan 1',
+            description: '',
+            meting_points: rawPackageData.meetingPoint || '',
+            trip_plan: [],
+            sort_order: 0,
+          };
+        }
+      }
+
+      // Clean string values by removing extra quotes
+      const cleanStringValue = (value: any): any => {
+        if (typeof value === 'string') {
+          // Remove surrounding quotes if they exist
+          return value.replace(/^"(.*)"$/, '$1');
+        }
+        return value;
+      };
+      
+      // Clean string fields
+      console.log('Before cleaning:', {
+        type: cleanPackageData.type,
+        duration_type: cleanPackageData.duration_type,
+        name: cleanPackageData.name,
+        description: cleanPackageData.description,
+        price: cleanPackageData.price
+      });
+      
       if (cleanPackageData.type) {
-        cleanPackageData.type = cleanPackageData.type.toLowerCase();
+        cleanPackageData.type = cleanStringValue(cleanPackageData.type).toLowerCase();
+      }
+      if (cleanPackageData.duration_type) {
+        cleanPackageData.duration_type = cleanStringValue(cleanPackageData.duration_type);
+      }
+      if (cleanPackageData.name) {
+        cleanPackageData.name = cleanStringValue(cleanPackageData.name);
+      }
+      if (cleanPackageData.description) {
+        cleanPackageData.description = cleanStringValue(cleanPackageData.description);
+      }
+      if (cleanPackageData.price) {
+        cleanPackageData.price = cleanStringValue(cleanPackageData.price);
+      }
+      
+      // Clean other string fields that might have quotes
+      const stringFieldsToClean = [
+        'address', 'city', 'country', 'postal_code', 'unit_number',
+        'cancellation_policy_id', 'booking_method', 'commission_rate',
+        'host_earnings'
+      ];
+      
+      stringFieldsToClean.forEach(field => {
+        if (cleanPackageData[field]) {
+          cleanPackageData[field] = cleanStringValue(cleanPackageData[field]);
+        }
+      });
+      
+      console.log('After cleaning:', {
+        type: cleanPackageData.type,
+        duration_type: cleanPackageData.duration_type,
+        name: cleanPackageData.name,
+        description: cleanPackageData.description,
+        price: cleanPackageData.price
+      });
+      
+      console.log('Extracted fields:', {
+        destinations: destinations,
+        trip_plans: trip_plans,
+        package_room_types: package_room_types,
+        package_availabilities: package_availabilities
+      });
+      
+      // Parse bedrooms JSON if provided
+      if (cleanPackageData.bedrooms && typeof cleanPackageData.bedrooms === 'string') {
+        try {
+          cleanPackageData.bedrooms = JSON.parse(cleanPackageData.bedrooms);
+        } catch (error) {
+          console.error('Failed to parse bedrooms JSON:', error);
+          // Keep as string if parsing fails
+        }
       }
       
       console.log('Extracted DTO data:', {
@@ -815,6 +1000,88 @@ export class VendorPackageService {
         }
       }
 
+      // Handle destinations separately if provided
+      if (destinations) {
+        let destinationsArray = [];
+        
+        // Parse destinations if it's a string
+        if (typeof destinations === 'string') {
+          try {
+            destinationsArray = JSON.parse(destinations);
+          } catch (error) {
+            console.error('Failed to parse destinations JSON:', error);
+          }
+        } else if (Array.isArray(destinations)) {
+          destinationsArray = destinations;
+        }
+        
+        // Create package_destinations relationship
+        if (destinationsArray.length > 0) {
+          // Validate that destination IDs exist
+          const destinationIds = destinationsArray.map((dest: any) => dest.id);
+          const existingDestinations = await this.prisma.destination.findMany({
+            where: { id: { in: destinationIds } },
+            select: { id: true }
+          });
+          
+          const existingIds = existingDestinations.map(dest => dest.id);
+          const invalidIds = destinationIds.filter(id => !existingIds.includes(id));
+          
+          if (invalidIds.length > 0) {
+            console.error('Invalid destination IDs:', invalidIds);
+            throw new Error(`The following destination IDs do not exist: ${invalidIds.join(', ')}`);
+          }
+          
+          data.package_destinations = {
+            create: destinationsArray.map((dest: any) => ({
+              destination_id: dest.id
+            }))
+          };
+          console.log('Creating package_destinations:', destinationsArray);
+        }
+      }
+
+      // Handle trip_plans separately if provided
+      if (trip_plans) {
+        let tripPlansArray = [];
+        
+        // Parse trip_plans if it's a string
+        if (typeof trip_plans === 'string') {
+          try {
+            tripPlansArray = JSON.parse(trip_plans);
+          } catch (error) {
+            console.error('Failed to parse trip_plans JSON:', error);
+          }
+        } else if (Array.isArray(trip_plans)) {
+          tripPlansArray = trip_plans;
+        }
+        
+        // Create package_trip_plans relationship
+        if (tripPlansArray.length > 0) {
+          data.package_trip_plans = {
+            create: tripPlansArray.map((tripPlan: any, index: number) => ({
+              title: tripPlan.title || `Trip Plan ${index + 1}`,
+              description: tripPlan.description || '',
+              meting_points: tripPlan.meetingPoint || '', // Store meetingPoint in meting_points field
+              trip_plan: tripPlan.tripPlan || [], // Store tripPlan array in JSON field
+              sort_order: index,
+              package_trip_plan_images: {
+                create: [] // Images will be handled separately if needed
+              }
+            }))
+          };
+          console.log('Creating package_trip_plans:', tripPlansArray);
+        }
+      }
+
+      // If root trip-plan fields were provided and trip_plans was not provided, add a single trip plan
+      if (!('package_trip_plans' in data) && rootTripPlanPayload) {
+        data.package_trip_plans = {
+          create: [rootTripPlanPayload]
+        };
+        console.log('Creating package_trip_plans from root fields:', rootTripPlanPayload);
+      }
+
       // Add package room types if provided
       if (package_room_types && package_room_types.length > 0) {
         data.package_room_types = {
@@ -835,10 +1102,21 @@ export class VendorPackageService {
             
             console.log(`Room type ${index + 1} (${roomType.name}) will have ${roomPhotos.length} photos:`, roomPhotos);
             
+            // Parse bedrooms JSON for room type if provided
+            let parsedBedrooms = roomType.bedrooms;
+            if (roomType.bedrooms && typeof roomType.bedrooms === 'string') {
+              try {
+                parsedBedrooms = JSON.parse(roomType.bedrooms);
+              } catch (error) {
+                console.error('Failed to parse room type bedrooms JSON:', error);
+                // Keep as string if parsing fails
+              }
+            }
+            
             return {
               name: roomType.name,
               description: roomType.description,
-              bedrooms: roomType.bedrooms,
+              bedrooms: parsedBedrooms,
               bathrooms: roomType.bathrooms,
               max_guests: roomType.max_guests,
               size_sqm: roomType.size_sqm,
@@ -934,6 +1212,7 @@ export class VendorPackageService {
       });
 
       // Create package with nested data
+      console.log('Final data being sent to Prisma:', JSON.stringify(data, null, 2));
       const result = await this.prisma.package.create({
         data,
         include: {
@@ -941,6 +1220,11 @@ export class VendorPackageService {
           package_room_types: true,
           package_availabilities: true,
           package_extra_services: true,
+          package_trip_plans: {
+            include: {
+              package_trip_plan_images: true
+            }
+          },
           user: true,
         },
       });
@@ -1084,30 +1368,48 @@ export class VendorPackageService {
       // Upload package files
       if (files?.package_files) {
         for (const file of files.package_files) {
-          const randomName = Array(32)
+          // Generate unique filename with timestamp and clean name (consistent with package controller)
+          const timestamp = Date.now();
+          const randomName = Array(16)
             .fill(null)
             .map(() => Math.round(Math.random() * 16).toString(16))
             .join('');
-          const fileName = `${randomName}${file.originalname}`;
+          
+          // Clean the original filename to remove special characters and spaces
+          const cleanOriginalName = file.originalname
+            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
+            .replace(/_+/g, '_') // Replace multiple underscores with single
+            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+          
+          const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           package_files.push(fileName);
-          console.log(`Successfully uploaded package file: ${fileName}`);
+          console.log(`📁 Generated filename: ${fileName} from original: ${file.originalname}`);
         }
       }
       
       // Upload trip plans images
       if (files?.trip_plans_images) {
         for (const file of files.trip_plans_images) {
-          const randomName = Array(32)
+          // Generate unique filename with timestamp and clean name (consistent with package controller)
+          const timestamp = Date.now();
+          const randomName = Array(16)
             .fill(null)
             .map(() => Math.round(Math.random() * 16).toString(16))
             .join('');
-          const fileName = `${randomName}${file.originalname}`;
+          
+          // Clean the original filename to remove special characters and spaces
+          const cleanOriginalName = file.originalname
+            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
+            .replace(/_+/g, '_') // Replace multiple underscores with single
+            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+          
+          const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           trip_plans_images.push(fileName);
-          console.log(`Successfully uploaded trip plan image: ${fileName}`);
+          console.log(`📁 Generated filename: ${fileName} from original: ${file.originalname}`);
         }
       }
       
@@ -1116,11 +1418,20 @@ export class VendorPackageService {
         console.log(`PUT Update - Found ${files.room_photos.length} room_photos files to upload`);
         for (const file of files.room_photos) {
           console.log(`PUT Update - Uploading room photo: ${file.originalname} (${file.size} bytes)`);
-          const randomName = Array(32)
+          // Generate unique filename with timestamp and clean name (consistent with package controller)
+          const timestamp = Date.now();
+          const randomName = Array(16)
             .fill(null)
             .map(() => Math.round(Math.random() * 16).toString(16))
             .join('');
-          const fileName = `${randomName}${file.originalname}`;
+          
+          // Clean the original filename to remove special characters and spaces
+          const cleanOriginalName = file.originalname
+            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
+            .replace(/_+/g, '_') // Replace multiple underscores with single
+            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+          
+          const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           room_photos.push(fileName);
@@ -1139,10 +1450,53 @@ export class VendorPackageService {
       // Extract nested data from DTO
       const { package_room_types, package_availabilities, ...packageData } = updateVendorPackageDto;
       
-      // Normalize the type field to ensure consistent formatting
+      // Clean string values by removing extra quotes
+      const cleanStringValue = (value: any): any => {
+        if (typeof value === 'string') {
+          // Remove surrounding quotes if they exist
+          return value.replace(/^"(.*)"$/, '$1');
+        }
+        return value;
+      };
+      
+      // Clean string fields
       if (packageData.type) {
-        // Convert to lowercase for consistency
-        packageData.type = packageData.type.toLowerCase();
+        packageData.type = cleanStringValue(packageData.type).toLowerCase();
+      }
+      if (packageData.duration_type) {
+        packageData.duration_type = cleanStringValue(packageData.duration_type);
+      }
+      if (packageData.name) {
+        packageData.name = cleanStringValue(packageData.name);
+      }
+      if (packageData.description) {
+        packageData.description = cleanStringValue(packageData.description);
+      }
+      if (packageData.price) {
+        packageData.price = cleanStringValue(packageData.price);
+      }
+      
+      // Clean other string fields that might have quotes
+      const stringFieldsToClean = [
+        'address', 'city', 'country', 'postal_code', 'unit_number',
+        'cancellation_policy_id', 'booking_method', 'commission_rate',
+        'host_earnings'
+      ];
+      
+      stringFieldsToClean.forEach(field => {
+        if (packageData[field]) {
+          packageData[field] = cleanStringValue(packageData[field]);
+        }
+      });
+      
+      // Parse bedrooms JSON if provided
+      if (packageData.bedrooms && typeof packageData.bedrooms === 'string') {
+        try {
+          packageData.bedrooms = JSON.parse(packageData.bedrooms);
+        } catch (error) {
+          console.error('Failed to parse bedrooms JSON in updateWithFiles:', error);
+          // Keep as string if parsing fails
+        }
       }
       
       console.log('PUT Update - Extracted DTO data:', {
@@ -1198,10 +1552,21 @@ export class VendorPackageService {
             
             console.log(`PUT Update - Room type ${index + 1} (${roomType.name}) will have ${roomPhotos.length} photos:`, roomPhotos);
             
+            // Parse bedrooms JSON for room type if provided
+            let parsedBedrooms = roomType.bedrooms;
+            if (roomType.bedrooms && typeof roomType.bedrooms === 'string') {
+              try {
+                parsedBedrooms = JSON.parse(roomType.bedrooms);
+              } catch (error) {
+                console.error('Failed to parse room type bedrooms JSON in update:', error);
+                // Keep as string if parsing fails
+              }
+            }
+            
             return {
               name: roomType.name,
               description: roomType.description,
-              bedrooms: roomType.bedrooms,
+              bedrooms: parsedBedrooms,
               bathrooms: roomType.bathrooms,
               max_guests: roomType.max_guests,
               size_sqm: roomType.size_sqm,

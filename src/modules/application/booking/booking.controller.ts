@@ -26,10 +26,9 @@ import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
 @ApiBearerAuth()
 @ApiTags('Booking')
 @Controller('booking')
+@UseGuards(JwtAuthGuard)
 export class BookingController {
   constructor(private readonly bookingService: BookingService) { }
-
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create booking with dynamic ID processing' })
   @Post()
   async create(
@@ -42,6 +41,7 @@ export class BookingController {
       createBookingDto,
     );
   }
+
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all bookings' })
   @Get()
@@ -52,6 +52,7 @@ export class BookingController {
     try {      
 
       const user_id = req.user.userId;
+      console.log(user_id);
       
       if (!user_id) {
         console.error('No user_id found in request object');
