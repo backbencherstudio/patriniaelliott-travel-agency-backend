@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty,IsOptional, IsJSON } from 'class-validator';
+import { IsString, IsNotEmpty,IsOptional, IsJSON,IsNumber} from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export interface TripPlan {
@@ -21,6 +21,14 @@ export class CreatePackageDto {
     example: 'Package Name',
   })
   name: string;
+
+  @IsOptional()
+  @IsNumber()
+  @ApiProperty({
+    description: 'Package total bedrooms',
+    example: 1,
+  })
+  total_bedrooms?: number;
 
   @IsNotEmpty()
   @IsString()

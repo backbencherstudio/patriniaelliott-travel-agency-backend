@@ -370,6 +370,7 @@ model Package {
   address                String?
   amenities              Json?
   bathrooms              Int?
+  total_bedrooms         Int?
   bedrooms               Json?
   beds                   Json?
   booking_method         String?   @default("instant")

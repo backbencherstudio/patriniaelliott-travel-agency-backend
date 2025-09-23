@@ -233,12 +233,37 @@ export class PackageController {
       // Normalize bedrooms payload to expected JSON string
       if (createPackageDto && (createPackageDto as any).bedrooms !== undefined) {
         try {
+          let parsedBedrooms: any = null;
           if (typeof (createPackageDto as any).bedrooms === 'string') {
-            JSON.parse((createPackageDto as any).bedrooms as unknown as string);
+            parsedBedrooms = JSON.parse((createPackageDto as any).bedrooms as unknown as string);
           } else {
+            parsedBedrooms = (createPackageDto as any).bedrooms;
             (createPackageDto as any).bedrooms = JSON.stringify(
               (createPackageDto as any).bedrooms,
             );
+          }
+
+          // Compute total_bedrooms from bedrooms array when available
+          if (Array.isArray(parsedBedrooms)) {
+            const computedTotal = parsedBedrooms.length;
+
+            // Coerce incoming total_bedrooms to number if it came as string
+            if ((createPackageDto as any).total_bedrooms != null && typeof (createPackageDto as any).total_bedrooms === 'string') {
+              const coerced = Number((createPackageDto as any).total_bedrooms);
+              if (!Number.isNaN(coerced)) {
+                (createPackageDto as any).total_bedrooms = coerced as any;
+              }
+            }
+
+            // If not provided or mismatch, set the correct value
+            if (
+              (createPackageDto as any).total_bedrooms == null ||
+              (createPackageDto as any).total_bedrooms !== computedTotal
+            ) {
+              (createPackageDto as any).total_bedrooms = computedTotal as any;
+            }
+          } else {
+            throw new Error('bedrooms must be an array');
           }
         } catch (err) {
           throw new BadRequestException(
@@ -265,11 +290,15 @@ export class PackageController {
       }
 
       const user_id = req.user.userId;
-      const record = await this.packageService.create(
+      let record = await this.packageService.create(
         user_id,
         createPackageDto,
         files,
       );
+      // Enrich with image URLs like in findOne/findAll
+      if (record && record.success && record.data) {
+        record.data = this.addImageUrls(record.data);
+      }
       return record;
     } catch (error) {
       console.error('Package creation error:', error);

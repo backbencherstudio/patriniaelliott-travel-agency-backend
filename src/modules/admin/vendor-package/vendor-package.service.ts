@@ -610,6 +610,31 @@ export class VendorPackageService {
       approved_at: null,
     };
 
+    // Normalize bedrooms and total_bedrooms
+    try {
+      if (typeof data.bedrooms === 'string') {
+        data.bedrooms = JSON.parse(data.bedrooms);
+      }
+      if (Array.isArray(data.bedrooms)) {
+        const computedTotal = data.bedrooms.length;
+        if (data.total_bedrooms == null) {
+          data.total_bedrooms = computedTotal;
+        } else if (typeof data.total_bedrooms === 'string') {
+          const coerced = Number(data.total_bedrooms);
+          data.total_bedrooms = Number.isNaN(coerced) ? computedTotal : coerced;
+        }
+      } else if (data.total_bedrooms != null && typeof data.total_bedrooms === 'string') {
+        const coerced = Number(data.total_bedrooms);
+        data.total_bedrooms = Number.isNaN(coerced) ? undefined : coerced;
+      }
+    } catch (_) {
+      // If parsing fails, drop bedrooms and ensure total_bedrooms is numeric
+      if (typeof data.total_bedrooms === 'string') {
+        const coerced = Number(data.total_bedrooms);
+        data.total_bedrooms = Number.isNaN(coerced) ? undefined : coerced;
+      }
+    }
+
     const vendorPackage = await this.prisma.package.create({ data });
 
     return {
@@ -975,6 +1000,30 @@ export class VendorPackageService {
           ]
         }
       };
+
+      // Normalize bedrooms and total_bedrooms for createWithFiles flow
+      try {
+        if (typeof data.bedrooms === 'string') {
+          data.bedrooms = JSON.parse(data.bedrooms);
+        }
+        if (Array.isArray(data.bedrooms)) {
+          const computedTotal = data.bedrooms.length;
+          if (data.total_bedrooms == null) {
+            data.total_bedrooms = computedTotal;
+          } else if (typeof data.total_bedrooms === 'string') {
+            const coerced = Number(data.total_bedrooms);
+            data.total_bedrooms = Number.isNaN(coerced) ? computedTotal : coerced;
+          }
+        } else if (data.total_bedrooms != null && typeof data.total_bedrooms === 'string') {
+          const coerced = Number(data.total_bedrooms);
+          data.total_bedrooms = Number.isNaN(coerced) ? undefined : coerced;
+        }
+      } catch (_) {
+        if (typeof data.total_bedrooms === 'string') {
+          const coerced = Number(data.total_bedrooms);
+          data.total_bedrooms = Number.isNaN(coerced) ? undefined : coerced;
+        }
+      }
 
       // Explicitly handle country field - set as string to avoid relationship issues
       if (createVendorPackageDto.country) {

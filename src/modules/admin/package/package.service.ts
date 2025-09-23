@@ -32,6 +32,9 @@ export class PackageService {
       if (createPackageDto.description) {
         data.description = createPackageDto.description;
       }
+      if (createPackageDto.total_bedrooms) {
+        data.total_bedrooms = createPackageDto.total_bedrooms;
+      }
       if (createPackageDto.price) {
         data.price = createPackageDto.price;
       }
@@ -327,9 +330,11 @@ export class PackageService {
         });
       }
 
+      const detailed = await this.findOne(record.id, user_id);
       return {
         success: true,
         message: 'Package created successfully',
+        data: detailed.success ? detailed.data : { id: record.id },
       };
     } catch (error) {
       // delete package images from storage
