@@ -148,10 +148,15 @@ export class PackageRoomTypeDto {
   @IsString()
   description?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, description: 'Bedrooms as JSON string or array/object' })
   @IsOptional()
-  @IsNumber()
-  bedrooms?: number;
+  @Transform(({ value }) => {
+    if (value == null || value === '') return undefined;
+    if (typeof value === 'string') return value;
+    try { return JSON.stringify(value); } catch { return value; }
+  })
+  @IsString()
+  bedrooms?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -306,10 +311,15 @@ export class CreateVendorPackageDto {
   @IsNumber()
   longitude?: number;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, description: 'Bedrooms as JSON string or array/object' })
   @IsOptional()
-  @IsNumber()
-  bedrooms?: number;
+  @Transform(({ value }) => {
+    if (value == null || value === '') return undefined;
+    if (typeof value === 'string') return value;
+    try { return JSON.stringify(value); } catch { return value; }
+  })
+  @IsString()
+  bedrooms?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

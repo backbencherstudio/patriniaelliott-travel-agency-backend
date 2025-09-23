@@ -8,13 +8,15 @@ import appConfig from '../../../config/app.config';
 export class PaymentTransactionService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll() {
+  async findAll(user_id?: string) {
     try {
-      const userDetails = await UserRepository.getUserDetails(user_id);
-
+      let userDetails: any = null;
       const whereClause = {};
-      if (userDetails.type == 'vendor') {
-        whereClause['user_id'] = user_id;
+      if (user_id) {
+        userDetails = await UserRepository.getUserDetails(user_id);
+        if (userDetails && userDetails.type == 'vendor') {
+          whereClause['user_id'] = user_id;
+        }
       }
 
       const paymentTransactions = await this.prisma.paymentTransaction.findMany(

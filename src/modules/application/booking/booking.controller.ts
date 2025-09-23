@@ -42,7 +42,7 @@ export class BookingController {
       createBookingDto,
     );
   }
-
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all bookings' })
   @Get()
   async findAll(

@@ -111,12 +111,12 @@ model UserDocument {
   updated_at DateTime  @default(now())
   deleted_at DateTime?
 
-  status    String? @default("pending")// pending, approved, rejected
-  user_id   String?
-  type      String?
-  image     String?
-  number    String?
-  user      User?   @relation(fields: [user_id], references: [id])
+  status  String? @default("pending") // pending, approved, rejected
+  user_id String?
+  type    String?
+  image   String?
+  number  String?
+  user    User?   @relation(fields: [user_id], references: [id])
 
   @@map("user_documents")
 }
@@ -319,7 +319,12 @@ model Destination {
   approved_at          DateTime?
   user_id              String?
   name                 String?
+  tour_duration        Int?
+  duration_type        String?
   description          String?
+  tour_pice            Decimal?
+  cancellation_policy  Json?
+  language             String?
   country_id           String?
   destination_images   DestinationImage[]
   country              Country?             @relation(fields: [country_id], references: [id])
@@ -364,7 +369,7 @@ model Package {
   address                String?
   amenities              Json?
   bathrooms              Int?
-  bedrooms               Int?
+  bedrooms               Json?
   beds                   Json?
   booking_method         String?   @default("instant")
   breakfast_available    Boolean?  @default(false)
@@ -516,7 +521,9 @@ model PackageTripPlan {
   sort_order               Int?                   @default(0)
   package_id               String?
   title                    String?
+  meting_points            String?
   description              String?
+  trip_plan                Json?
   package_trip_plan_images PackageTripPlanImage[]
   package                  Package?               @relation(fields: [package_id], references: [id], onDelete: Cascade)
 
@@ -1128,7 +1135,7 @@ model PackageRoomType {
   package_id         String
   name               String
   description        String?
-  bedrooms           Int?
+  bedrooms           Json?
   bathrooms          Int?
   max_guests         Int?
   size_sqm           Float?

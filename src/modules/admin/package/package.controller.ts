@@ -94,10 +94,6 @@ export class PackageController {
     try {
       const baseUrl = process.env.APP_URL || 'http://localhost:4000';
       
-      console.log('🔍 Adding image URLs to package data...');
-      console.log('📦 Package files:', packageData.package_files?.length || 0);
-      console.log('📋 Trip plans:', packageData.package_trip_plans?.length || 0);
-      
       // Add URLs to package files
       if (packageData.package_files && packageData.package_files.length > 0) {
         packageData.package_files.forEach((file, index) => {
@@ -118,8 +114,6 @@ export class PackageController {
             // Encode the filename to handle special characters and spaces
             const encodedFilename = encodeURIComponent(file.file);
             file.file_url = `${baseUrl}/storage/package/${encodedFilename}`;
-            console.log(`🖼️  Generated URL for package file: ${file.file} -> ${file.file_url}`);
-            console.log(`🔗 Full URL length: ${file.file_url.length}`);
           } else {
             console.log(`⚠️  File ${index + 1} missing file property:`, file);
           }

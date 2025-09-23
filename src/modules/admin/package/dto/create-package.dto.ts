@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsString, IsNotEmpty,IsOptional, IsJSON } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export interface TripPlan {
   title: string;
@@ -53,6 +54,8 @@ export class CreatePackageDto {
   })
   duration_type?: string;
 
+  
+
   @IsString()
   @ApiProperty({
     description: 'Package type. e.g. tour, cruise',
@@ -74,6 +77,33 @@ export class CreatePackageDto {
   @IsString()
   @ApiProperty()
   cancellation_policy_id?: string;
+
+  @ApiProperty({ 
+    required: false,
+    description: 'Bedrooms as JSON string or raw array/object (will be stringified)',
+    examples: {
+      asString: {
+        summary: 'As JSON string (multipart/form-data friendly)',
+        value: '[{"title":"Master Bedroom","beds":{"single_bed":1,"double_bed":1,"large_bed":0,"extra_large_bed":0}}]'
+      },
+      asArray: {
+        summary: 'As raw array (application/json body)',
+        value: [{"title":"Master Bedroom","beds":{"single_bed":1,"double_bed":1,"large_bed":0,"extra_large_bed":0}}]
+      }
+    }
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value == null || value === '') return undefined;
+    if (typeof value === 'string') return value;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return value;
+    }
+  })
+  @IsJSON()
+  bedrooms?: string;
 
   @ApiProperty({
     description: 'Destination array object with stringyfied ids',

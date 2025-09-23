@@ -53,6 +53,9 @@ export class PackageService {
       if (createPackageDto.cancellation_policy_id) {
         data.cancellation_policy_id = createPackageDto.cancellation_policy_id;
       }
+      if (createPackageDto.bedrooms) {
+        data.bedrooms = JSON.parse(createPackageDto.bedrooms);
+      }
       // add vendor id if the package is from vendor
       const userDetails = await UserRepository.getUserDetails(user_id);
       if (userDetails && userDetails.type != 'vendor') {
@@ -666,6 +669,9 @@ export class PackageService {
       }
       if (updatePackageDto.cancellation_policy_id) {
         data.cancellation_policy_id = updatePackageDto.cancellation_policy_id;
+      }
+      if (updatePackageDto.bedrooms) {
+        data.bedrooms = JSON.parse(updatePackageDto.bedrooms);
       }
 
       // existing package record
