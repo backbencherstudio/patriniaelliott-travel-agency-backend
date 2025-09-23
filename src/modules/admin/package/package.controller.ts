@@ -113,7 +113,7 @@ export class PackageController {
             
             // Encode the filename to handle special characters and spaces
             const encodedFilename = encodeURIComponent(file.file);
-            file.file_url = `${baseUrl}/storage/package/${encodedFilename}`;
+            file.file_url = `${baseUrl}/public/storage/package/${encodedFilename}`;
           } else {
             console.log(`⚠️  File ${index + 1} missing file property:`, file);
           }
@@ -134,7 +134,7 @@ export class PackageController {
                 
                 // Encode the filename to handle special characters and spaces
                 const encodedFilename = encodeURIComponent(image.image);
-                image.image_url = `${baseUrl}/storage/package/${encodedFilename}`;
+                image.image_url = `${baseUrl}/public/storage/package/${encodedFilename}`;
                 console.log(`🖼️  Generated URL for trip plan image: ${image.image} -> ${image.image_url}`);
               } else {
                 console.log(`⚠️  Trip plan ${tripIndex + 1} image ${imgIndex + 1} missing image property:`, image);
