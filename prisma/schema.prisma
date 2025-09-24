@@ -249,7 +249,7 @@ model PaymentTransaction {
   type             String?   @default("order")
   withdraw_via     String?   @default("wallet")
   provider         String?
-  reference_number String?
+  reference_number String?   @unique
   status           String?   @default("pending")
   raw_status       String?
   amount           Decimal?
@@ -259,6 +259,7 @@ model PaymentTransaction {
   booking          Booking?  @relation(fields: [booking_id], references: [id])
   user             User?     @relation(fields: [user_id], references: [id])
 
+  @@unique([reference_number, type, status])
   @@map("payment_transactions")
 }
 
@@ -757,12 +758,12 @@ model BookingItem {
   created_at        DateTime         @default(now())
   updated_at        DateTime         @default(now())
   deleted_at        DateTime?
-  booking_id        String?
+  booking_id        String           @unique
   package_id        String?
   start_date        DateTime?
   end_date          DateTime?
   quantity          Int?             @default(1)
-  price             Decimal?
+  price             Float
   packageRoomTypeId String?
   booking           Booking?         @relation(fields: [booking_id], references: [id])
   PackageRoomType   PackageRoomType? @relation(fields: [packageRoomTypeId], references: [id])
@@ -1161,7 +1162,7 @@ model PackageRoomType {
 model Withdrawal {
   id               String    @id @default(cuid())
   user_id          String
-  amount           Decimal
+  amount           Float
   currency         String    @default("USD")
   status           String    @default("pending")
   method           String
