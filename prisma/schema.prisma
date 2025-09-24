@@ -280,6 +280,7 @@ model RefundTransaction {
   processing_at DateTime?
   completed_at  DateTime?
   failed_at     DateTime?
+  canceled_at   DateTime?
 
   paymentTransaction PaymentTransaction @relation(fields: [payment_transaction_id], references: [id])
 }

@@ -157,6 +157,7 @@ export class PaymentsService {
                 { step: "under_review", time: refund.reviewed_at },
                 { step: "processing", time: refund.processing_at },
                 { step: "completed", time: refund.completed_at },
+                { step: "canceled", time: refund.canceled_at },
             ];
 
             const firstPendingIndex = steps.findIndex(s => !s.time);
@@ -205,18 +206,63 @@ export class PaymentsService {
                     reference_number: `${booking.payment_reference_number}_refund`,
                     type: "refund",
                 },
+                include: {
+                    RefundTransaction: {
+                        select: {
+                            id: true
+                        }
+                    }
+                }
             });
 
             if (!payment) {
                 throw new NotFoundException("Refund transaction not found.");
             }
 
-            let refundAmount = Number(payment.amount);
+            if (payment.status !== 'pending') {
+                throw new BadRequestException('Already review the request.')
+            }
+
+            if (status === 'canceled') {
+                await this.prisma.paymentTransaction.update({
+                    where: { id: payment.id },
+                    data: {
+                        status,
+                    },
+                });
+                await this.prisma.refundTransaction.update({
+                    where: {
+                        id: payment.RefundTransaction[0].id
+                    },
+                    data: {
+                        reviewed_at: new Date(),
+                        canceled_at: new Date()
+                    }
+                })
+                return {
+                    success: true,
+                    message: `Refund request ${status.toLowerCase()} successfully.`,
+                };
+            }
+
+            const paymentIntent = await StripePayment.retrievePaymentIntent(
+                booking.payment_reference_number
+            );
+
+            const chargeId = paymentIntent.latest_charge as string;
+            const charge = await StripePayment.RefundableAmount(chargeId)
+            const refundableAmount = charge.amount - charge.amount_refunded;
+
+            let refundAmount = refundableAmount;
             if (partial_refund) {
-                refundAmount = refundAmount * 0.85;
+                refundAmount = Math.floor(refundableAmount * 0.85)
+            }
+
+            if (refundAmount <= 0) {
+                throw new BadRequestException("No refundable amount left.");
             }
             await StripePayment.createRefund({
-                amount: refundAmount * 100,
+                amount: refundAmount,
                 payment_intent: booking.payment_reference_number,
             });
             await this.prisma.paymentTransaction.update({
@@ -226,14 +272,18 @@ export class PaymentsService {
                     paid_amount: partial_refund ? refundAmount : payment.amount,
                 },
             });
+            await this.prisma.refundTransaction.update({
+                where: {
+                    id: payment.RefundTransaction[0].id
+                },
+                data: {
+                    reviewed_at: new Date()
+                }
+            })
 
             return {
                 success: true,
                 message: `Refund request ${status.toLowerCase()} successfully.`,
-                data: {
-                    refund_amount: refundAmount,
-                    partial_refund,
-                },
             };
         } catch (error) {
             if (error instanceof HttpException) throw error;

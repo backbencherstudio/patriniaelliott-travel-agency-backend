@@ -5,7 +5,7 @@ import { TransactionRepository } from '../../../common/repository/transaction/tr
 
 @Controller('payment/stripe')
 export class StripeController {
-  constructor(private readonly stripeService: StripeService) {}
+  constructor(private readonly stripeService: StripeService) { }
 
   @Post('webhook')
   async handleWebhook(
@@ -80,7 +80,9 @@ export class StripeController {
 
       return { received: true };
     } catch (error) {
-      console.error('Webhook error', error);
+      console.log('==========Webhook error==========================');
+      console.log(error);
+      console.log('====================================');
       return { received: false };
     }
   }
