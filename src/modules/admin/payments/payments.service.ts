@@ -95,6 +95,7 @@ export class PaymentsService {
                         amount: true,
                         provider: true,
                         status: true,
+                        reference_number: true,
                         created_at: true,
                     },
                     skip: (page - 1) * perPage,
@@ -137,6 +138,51 @@ export class PaymentsService {
         }
     }
 
+
+    async getTransactionByID(id: string) {
+        try {
+            const transaction = await this.prisma.paymentTransaction.findUnique({
+                where: { id },
+                include: { RefundTransaction: true, user: { select: { name: true } } },
+            });
+
+            if (!transaction) {
+                throw new HttpException("Transaction not found", 404);
+            }
+
+            const refund = transaction.RefundTransaction[0];
+
+            const steps = [
+                { step: "requested", time: refund.requested_at },
+                { step: "under_review", time: refund.reviewed_at },
+                { step: "processing", time: refund.processing_at },
+                { step: "completed", time: refund.completed_at },
+            ];
+
+            const firstPendingIndex = steps.findIndex(s => !s.time);
+
+            const timeline = steps.map((s, index) => ({
+                ...s,
+                isCompleted: !!s.time,
+                current: index === firstPendingIndex,
+            }));
+
+            const { RefundTransaction, ...transactionData } = transaction;
+
+            return {
+                success: true,
+                message: "Successfully fetched transaction.",
+                data: { ...transactionData, timeline },
+            };
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            console.error("Error fetching transaction:", error?.message);
+            throw new InternalServerErrorException(
+                `Error fetching transaction: ${error?.message}`
+            );
+        }
+    }
+
     async refundRequest(booking_id: string) {
         try {
             const booking = await this.prisma.booking.findUnique({
@@ -169,9 +215,8 @@ export class PaymentsService {
                 message: "Refund request approved.",
             };
         } catch (error) {
-            console.error("Error review refund:", error?.message);
             if (error instanceof HttpException) throw error;
-
+            console.error("Error review refund:", error?.message);
             throw new InternalServerErrorException(
                 `Error review refund: ${error?.message}`
             );

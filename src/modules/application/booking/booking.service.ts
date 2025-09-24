@@ -709,6 +709,22 @@ export class BookingService {
         }
       }))
 
+      if (!booking.payment_reference_number) {
+        throw new BadRequestException('Payment not confirm yet.')
+      }
+
+      const isPaymentConfirm = await this.prisma.paymentTransaction.findFirst({
+        where: {
+          type: 'booking',
+          status: 'succeeded',
+          booking_id
+        }
+      })
+
+      if (!isPaymentConfirm) {
+        throw new BadRequestException('Payment not confirm yet.')
+      }
+
       if (alreadyRequested) {
         throw new BadRequestException('Duplicate refund request.')
       }
@@ -722,6 +738,11 @@ export class BookingService {
           booking_id,
           user_id,
           reference_number: `${booking.payment_reference_number}_refund`
+        }
+      })
+      await this.prisma.refundTransaction.create({
+        data: {
+          payment_transaction_id: refundReq.id,
         }
       })
       return {

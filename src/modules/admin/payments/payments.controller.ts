@@ -21,6 +21,12 @@ export class PaymentsController {
     }
 
     @ApiOperation({ summary: 'Get transactions by user' })
+    @Get('/transactions/:id')
+    async getTransactionByID(@Req() req: Request, @Param('id') id: string) {
+        return this.paymentService.getTransactionByID(id)
+    }
+
+    @ApiOperation({ summary: 'Get transactions by user' })
     @Post('/transactions/refund-request/:booking_id')
     async approveOrCancelRefundRequest(@Req() req: Request, @Param('booking_id') booking_id: string,) {
         return this.paymentService.refundRequest(booking_id)
