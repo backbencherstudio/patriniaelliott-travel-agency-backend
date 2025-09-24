@@ -47,6 +47,40 @@ export class TransactionRepository {
    * Update transaction
    * @returns
    */
+
+  static async refunded(id: string, status: string) {
+    const payment = await prisma.paymentTransaction.findUnique({
+      where: {
+        reference_number: `${id}_refund`,
+        type: "refund",
+      },
+      include: {
+        RefundTransaction: {
+          select: {
+            id: true
+          }
+        }
+      }
+    });
+
+    const payload: any = {}
+
+    if (status === 'processing') {
+      payload.processing_at = new Date()
+    } else if (status === 'success') {
+      payload.completed_at = new Date()
+    } else {
+      payload.failed_at = new Date()
+    }
+
+    await prisma.refundTransaction.update({
+      where: {
+        id: payment.RefundTransaction[0].id
+      },
+      data: payload
+    })
+  }
+
   static async updateTransaction({
     reference_number,
     status = 'pending',

@@ -1,4 +1,4 @@
-import { Controller, Post, Req, Headers } from '@nestjs/common';
+import { Controller, Post, Req, Headers, Get } from '@nestjs/common';
 import { StripeService } from './stripe.service';
 import { Request } from 'express';
 import { TransactionRepository } from '../../../common/repository/transaction/transaction.repository';
@@ -13,29 +13,31 @@ export class StripeController {
     @Req() req: Request,
   ) {
     try {
-      console.log('====================================');
-      console.log('web hook init');
-      console.log('====================================');
       const payload = req.rawBody.toString();
       const event = await this.stripeService.handleWebhook(payload, signature);
 
       // Handle events
       switch (event.type) {
+        case 'refund.created':
+          const paymentIntent = event.data.object;
+          await TransactionRepository.refunded(paymentIntent.id, 'processing')
+          break;
+        case 'charge.refunded':
+          await TransactionRepository.refunded(paymentIntent.id, 'success')
+          break;
+        case 'customer.created':
+        case 'charge.failed':
+          await TransactionRepository.refunded(paymentIntent.id, 'failed')
+          break;
         case 'customer.created':
           break;
         case 'payment_intent.created':
           break;
         case 'payment_intent.succeeded':
-          const paymentIntent = event.data.object;
-          // create tax transaction
-          // await StripePayment.createTaxTransaction(
-          //   paymentIntent.metadata['tax_calculation'],
-          // );
-          // Update transaction status in database
           await TransactionRepository.updateTransaction({
             reference_number: paymentIntent.id,
             status: 'succeeded',
-            paid_amount: paymentIntent.amount / 100, // amount in dollars
+            paid_amount: paymentIntent.amount / 100,
             paid_currency: paymentIntent.currency,
             raw_status: paymentIntent.status,
           });
@@ -80,9 +82,6 @@ export class StripeController {
 
       return { received: true };
     } catch (error) {
-      console.log('==========Webhook error==========================');
-      console.log(error);
-      console.log('====================================');
       return { received: false };
     }
   }
