@@ -183,42 +183,63 @@ export class PaymentsService {
         }
     }
 
-    async refundRequest(booking_id: string) {
+    async refundRequest({
+        booking_id,
+        partial_refund,
+        status,
+    }: {
+        booking_id: string;
+        status: string;
+        partial_refund: boolean;
+    }) {
         try {
             const booking = await this.prisma.booking.findUnique({
-                where: {
-                    id: booking_id
-                }
-            })
+                where: { id: booking_id },
+            });
             if (!booking) {
-                throw new NotFoundException('Booking not found.')
+                throw new NotFoundException("Booking not found.");
             }
 
             const payment = await this.prisma.paymentTransaction.findUnique({
                 where: {
                     reference_number: `${booking.payment_reference_number}_refund`,
-                    type: 'refund'
-                }
-            })
-
-            await StripePayment.createRefund({ amount: Number(payment.amount), payment_intent: booking.payment_reference_number, })
-            await this.prisma.paymentTransaction.update({
-                where: {
-                    id: payment.id
+                    type: "refund",
                 },
+            });
+
+            if (!payment) {
+                throw new NotFoundException("Refund transaction not found.");
+            }
+
+            let refundAmount = Number(payment.amount);
+            if (partial_refund) {
+                refundAmount = refundAmount * 0.85;
+            }
+            await StripePayment.createRefund({
+                amount: refundAmount * 100,
+                payment_intent: booking.payment_reference_number,
+            });
+            await this.prisma.paymentTransaction.update({
+                where: { id: payment.id },
                 data: {
-                    status: 'approved'
-                }
-            })
+                    status,
+                    paid_amount: partial_refund ? refundAmount : payment.amount,
+                },
+            });
+
             return {
                 success: true,
-                message: "Refund request approved.",
+                message: `Refund request ${status.toLowerCase()} successfully.`,
+                data: {
+                    refund_amount: refundAmount,
+                    partial_refund,
+                },
             };
         } catch (error) {
             if (error instanceof HttpException) throw error;
-            console.error("Error review refund:", error?.message);
+            console.error("Error processing refund:", error?.message);
             throw new InternalServerErrorException(
-                `Error review refund: ${error?.message}`
+                `Error processing refund: ${error?.message}`
             );
         }
     }
