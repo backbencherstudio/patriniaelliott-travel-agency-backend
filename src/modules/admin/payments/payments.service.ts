@@ -153,11 +153,11 @@ export class PaymentsService {
             const refund = transaction.RefundTransaction[0];
 
             const steps = [
-                { step: "requested", time: refund.requested_at },
-                { step: "under_review", time: refund.reviewed_at },
-                { step: "processing", time: refund.processing_at },
-                { step: "completed", time: refund.completed_at },
-                { step: "canceled", time: refund.canceled_at },
+                { step: "requested", time: refund?.requested_at },
+                { step: "under_review", time: refund?.reviewed_at },
+                { step: "processing", time: refund?.processing_at },
+                { step: "completed", time: refund?.completed_at },
+                { step: "canceled", time: refund?.canceled_at },
             ];
 
             const firstPendingIndex = steps.findIndex(s => !s.time);
