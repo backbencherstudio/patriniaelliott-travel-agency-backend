@@ -53,11 +53,58 @@ export class PackageService {
       if (createPackageDto.max_capacity) {
         data.max_capacity = Number(createPackageDto.max_capacity);
       }
-      if (createPackageDto.cancellation_policy_id) {
-        data.cancellation_policy_id = createPackageDto.cancellation_policy_id;
+      if (createPackageDto.cancellation_policy) {
+        data.cancellation_policy = JSON.parse(createPackageDto.cancellation_policy);
       }
       if (createPackageDto.bedrooms) {
         data.bedrooms = JSON.parse(createPackageDto.bedrooms);
+      }
+      if (createPackageDto.address) {
+        data.address = createPackageDto.address;
+      }
+      if (createPackageDto.amenities) {
+        data.amenities = JSON.parse(createPackageDto.amenities);
+      }
+      if (createPackageDto.bathrooms) {
+        data.bathrooms = Number(createPackageDto.bathrooms);
+      }
+      if (createPackageDto.city) {
+        data.city = createPackageDto.city;
+      }
+      if (createPackageDto.country) {
+        data.country = createPackageDto.country;
+      }
+      if (createPackageDto.latitude) {
+        data.latitude = Number(createPackageDto.latitude);
+      }
+      if (createPackageDto.longitude) {
+        data.longitude = Number(createPackageDto.longitude);
+      }
+      if (createPackageDto.postal_code) {
+        data.postal_code = createPackageDto.postal_code;
+      }
+      if (createPackageDto.unit_number) {
+        data.unit_number = createPackageDto.unit_number;
+      }
+      if (createPackageDto.size_sqm) {
+        data.size_sqm = Number(createPackageDto.size_sqm);
+      }
+      if (createPackageDto.max_guests) {
+        data.max_guests = Number(createPackageDto.max_guests);
+      }
+      if (createPackageDto.tour_type) {
+        data.tour_type = createPackageDto.tour_type;
+      }
+      if (createPackageDto.meting_points) {
+        data.meting_points = createPackageDto.meting_points;
+      }
+      // extra_services JSON saved directly on Package (in addition to relations if used)
+      if ((createPackageDto as any).extra_services !== undefined) {
+        try {
+          const raw = (createPackageDto as any).extra_services;
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          data.extra_services = parsed;
+        } catch {}
       }
       // add vendor id if the package is from vendor
       const userDetails = await UserRepository.getUserDetails(user_id);
@@ -95,8 +142,12 @@ export class PackageService {
           const trip_plan_data = {
             title: trip_plan.title,
             description: trip_plan.description,
-            meting_points: trip_plan.meetingPoint, // Store meetingPoint in meting_points field
-            trip_plan: trip_plan.tripPlan, // Store tripPlan array in JSON field
+            time: trip_plan.time, // Store time in time field
+            // ticket_free is String? in schema; store as string
+            ticket_free: (() => {
+              const tf = (trip_plan as any).ticket_free ?? (trip_plan as any).tripPlan ?? [];
+              return typeof tf === 'string' ? tf : JSON.stringify(tf);
+            })(),
             package_id: record.id,
           };
           console.log('Creating trip_plan with data:', trip_plan_data);
@@ -446,7 +497,7 @@ export class PackageService {
               },
             },
           },
-          cancellation_policy_id: true,
+          // cancellation_policy_id: true,
           package_categories: {
             select: {
               category: {
@@ -555,13 +606,13 @@ export class PackageService {
               },
             },
           },
-          cancellation_policy: {
-            select: {
-              id: true,
-              policy: true,
-              description: true,
-            },
-          },
+          // cancellation_policy: {
+          //   select: {
+          //     id: true,
+          //     policy: true,
+          //     description: true,
+          //   },
+          // },
           package_categories: {
             select: {
               category: {
@@ -708,9 +759,9 @@ export class PackageService {
       if (updatePackageDto.max_capacity) {
         data.max_capacity = Number(updatePackageDto.max_capacity);
       }
-      if (updatePackageDto.cancellation_policy_id) {
-        data.cancellation_policy_id = updatePackageDto.cancellation_policy_id;
-      }
+      // if (updatePackageDto.cancellation_policy_id) {
+      //   data.cancellation_policy_id = updatePackageDto.cancellation_policy_id;
+      // }
       if (updatePackageDto.bedrooms) {
         data.bedrooms = JSON.parse(updatePackageDto.bedrooms);
       }

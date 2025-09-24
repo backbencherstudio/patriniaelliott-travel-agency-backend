@@ -390,31 +390,31 @@ export class PackageController {
         trip_plan_images: []
       };
       
-      if (record.data.package_files && record.data.package_files.length > 0) {
-        images.package_files = record.data.package_files.map((file: any) => ({
-          id: file.id,
-          filename: file.file,
-          original_name: file.file_alt || file.originalname || 'Unknown',
-          type: file.type || 'image',
-          url: `${process.env.APP_URL || 'http://localhost:4000'}/storage/package/${encodeURIComponent(file.file)}`
-        }));
-      }
+      // if (record.data.package_files && record.data.package_files.length > 0) {
+      //   images.package_files = record.data.package_files.map((file: any) => ({
+      //     id: file.id,
+      //     filename: file.file,
+      //     original_name: file.file_alt || file.originalname || 'Unknown',
+      //     type: file.type || 'image',
+      //     url: `${process.env.APP_URL || 'http://localhost:4000'}/storage/package/${encodeURIComponent(file.file)}`
+      //   }));
+      // }
       
-      if (record.data.package_trip_plans && record.data.package_trip_plans.length > 0) {
-        record.data.package_trip_plans.forEach((tripPlan: any) => {
-          if (tripPlan.package_trip_plan_images && tripPlan.package_trip_plan_images.length > 0) {
-            tripPlan.package_trip_plan_images.forEach((image: any) => {
-              images.trip_plan_images.push({
-                id: image.id,
-                filename: image.image,
-                original_name: image.image_alt || image.originalname || 'Unknown',
-                trip_plan_title: tripPlan.title,
-                url: `${process.env.APP_URL || 'http://localhost:4000'}/storage/package/${encodeURIComponent(image.image)}`
-              });
-            });
-          }
-        });
-      }
+      // if (record.data.package_trip_plans && record.data.package_trip_plans.length > 0) {
+      //   record.data.package_trip_plans.forEach((tripPlan: any) => {
+      //     if (tripPlan.package_trip_plan_images && tripPlan.package_trip_plan_images.length > 0) {
+      //       tripPlan.package_trip_plan_images.forEach((image: any) => {
+      //         images.trip_plan_images.push({
+      //           id: image.id,
+      //           filename: image.image,
+      //           original_name: image.image_alt || image.originalname || 'Unknown',
+      //           trip_plan_title: tripPlan.title,
+      //           url: `${process.env.APP_URL || 'http://localhost:4000'}/storage/package/${encodeURIComponent(image.image)}`
+      //         });
+      //       });
+      //     }
+      //   });
+      // }
       
       return {
         success: true,

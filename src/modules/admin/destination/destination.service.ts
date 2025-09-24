@@ -21,32 +21,11 @@ export class DestinationService {
       if (createDestinationDto.name) {
         data.name = createDestinationDto.name;
       }
-      if (createDestinationDto.description) {
-        data.description = createDestinationDto.description;
-      }
       if (createDestinationDto.country_name) {
         data.country_name = createDestinationDto.country_name;
       }
-      if (createDestinationDto.tour_duration !== undefined) {
-        data.tour_duration = Number(createDestinationDto.tour_duration);
-      }
-      if (createDestinationDto.duration_type) {
-        data.duration_type = createDestinationDto.duration_type;
-      }
-      if (createDestinationDto.tour_pice !== undefined) {
-        data.tour_pice = Number(createDestinationDto.tour_pice);
-      }
-      if (createDestinationDto.cancellation_policy) {
-        try {
-          data.cancellation_policy = JSON.parse(
-            createDestinationDto.cancellation_policy,
-          );
-        } catch (err) {
-          throw new Error('Invalid cancellation_policy JSON');
-        }
-      }
-      if (createDestinationDto.language) {
-        data.language = createDestinationDto.language;
+      if (createDestinationDto.state) {
+        data.state = createDestinationDto.state;
       }
       const destination = await this.prisma.destination.create({
         data: {
@@ -55,21 +34,12 @@ export class DestinationService {
         },
       });
 
-      // save destination images
-      if (images) {
-        const destination_images_data = images.map((image) => ({
-          image: image.filename,
-          // image_alt: image.originalname,
-          destination_id: destination.id,
-        }));
-        await this.prisma.destinationImage.createMany({
-          data: destination_images_data,
-        });
-      }
+      
 
       return {
         success: true,
         message: 'Destination created successfully',
+        data: destination,
       };
     } catch (error) {
       return {
@@ -95,7 +65,7 @@ export class DestinationService {
         select: {
           id: true,
           name: true,
-          description: true,
+          state:true,
           country_name: true,
           country: {
             select: {
@@ -162,7 +132,8 @@ export class DestinationService {
         select: {
           id: true,
           name: true,
-          description: true,
+          state: true,
+          country_name: true,
           country: {
             select: {
               id: true,
@@ -238,8 +209,8 @@ export class DestinationService {
       if (updateDestinationDto.name) {
         data.name = updateDestinationDto.name;
       }
-      if (updateDestinationDto.description) {
-        data.description = updateDestinationDto.description;
+      if (updateDestinationDto.state) {
+        data.description = updateDestinationDto.state;
       }
       if (updateDestinationDto.country_name) {
         const country = await this.prisma.country.findFirst({
@@ -258,34 +229,7 @@ export class DestinationService {
         },
       });
 
-      // save destination images
-      if (images) {
-        // delete images from storage
-        const destinationImages = await this.prisma.destinationImage.findMany({
-          where: { destination_id: id },
-        });
-        if (destinationImages.length > 0) {
-          for (const image of destinationImages) {
-            await SojebStorage.delete(
-              appConfig().storageUrl.destination + image.image,
-            );
-          }
-        }
-        await this.prisma.destinationImage.deleteMany({
-          where: { destination_id: id },
-        });
-
-        // save destination images
-        const destination_images_data = images.map((image) => ({
-          image: image.filename,
-          image_alt: image.originalname,
-          destination_id: id,
-        }));
-        // create new images
-        await this.prisma.destinationImage.createMany({
-          data: destination_images_data,
-        });
-      }
+     
 
       return {
         success: true,

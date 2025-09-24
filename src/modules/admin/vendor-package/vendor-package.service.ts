@@ -203,9 +203,6 @@ export class VendorPackageService {
             orderBy: { date: 'asc' },
             select: { id: true, date: true, status: true },
           },
-          cancellation_policy: {
-            select: { id: true, policy: true, description: true },
-          },
           package_languages: {
             include: { language: { select: { id: true, name: true, code: true } } },
           },
@@ -224,8 +221,8 @@ export class VendorPackageService {
             id: true, 
             title: true, 
             description: true, 
-            meting_points: true, 
-            trip_plan: true, 
+            time: true, 
+            ticket_free: true, 
             sort_order: true,
             package_trip_plan_images: {
               where: { deleted_at: null },
@@ -434,9 +431,6 @@ export class VendorPackageService {
             avatar: true,
             created_at: true,
           }
-        },
-        cancellation_policy: {
-          select: { id: true, policy: true, description: true },
         },
         package_languages: {
           include: { language: { select: { id: true, name: true, code: true } } },
@@ -860,14 +854,44 @@ export class VendorPackageService {
         }
       }
       
-      // Filter out room_photos, country_id, countryId, and country from packageData to prevent them from being included in the main package
-      const { room_photos: _, country_id: __, countryId: ___, country: ____, ...cleanPackageData } = packageData as any
+      // Filter out room_photos, country_id, countryId, country, and total_bedrooms from packageData to prevent them from being included in the main package
+      const { room_photos: _, country_id: __, countryId: ___, country: ____, total_bedrooms: _____, ...cleanPackageData } = packageData as any
+      
+      // Normalize keys to avoid issues like "  tour_type"
+      const trimmedOnce = this.trimObjectKeys(cleanPackageData);
+      // Remove original keys that had whitespace
+      Object.keys(cleanPackageData).forEach((key) => {
+        if (typeof key === 'string' && key !== key.trim()) {
+          delete (cleanPackageData as any)[key];
+        }
+      });
+      Object.assign(cleanPackageData, trimmedOnce);
       
       // Remove trip-plan-only fields that do not exist on Package
       const forbiddenRootTripFields = ['title', 'meetingPoint', 'tripPlan'];
       for (const key of forbiddenRootTripFields) {
         if (key in cleanPackageData) {
           delete cleanPackageData[key];
+        }
+      }
+
+      // Remove any other fields that don't exist in the Package schema
+      const invalidPackageFields = ['total_bedrooms', 'room_photos', 'country_id', 'countryId'];
+      for (const key of invalidPackageFields) {
+        if (key in cleanPackageData) {
+          delete cleanPackageData[key];
+          console.log(`Removed invalid field: ${key}`);
+        }
+      }
+
+      // Normalize and persist extra_services JSON from DTO onto package
+      if (extra_services !== undefined) {
+        try {
+          const parsedExtra = typeof extra_services === 'string' ? JSON.parse(extra_services) : extra_services;
+          (cleanPackageData as any).extra_services = parsedExtra;
+        } catch (e) {
+          console.warn('Failed to parse extra_services JSON. Leaving as-is.');
+          (cleanPackageData as any).extra_services = extra_services as any;
         }
       }
 
@@ -882,16 +906,16 @@ export class VendorPackageService {
           rootTripPlanPayload = {
             title: rawPackageData.title || 'Trip Plan 1',
             description: '',
-            meting_points: rawPackageData.meetingPoint || '',
-            trip_plan: parsedTripPlan || [],
+            time: rawPackageData.time || rawPackageData.meetingPoint || '',
+            ticket_free: parsedTripPlan || [],
             sort_order: 0,
           };
         } catch {
           rootTripPlanPayload = {
             title: rawPackageData.title || 'Trip Plan 1',
             description: '',
-            meting_points: rawPackageData.meetingPoint || '',
-            trip_plan: [],
+            time: rawPackageData.time || rawPackageData.meetingPoint || '',
+            ticket_free: [],
             sort_order: 0,
           };
         }
@@ -975,6 +999,69 @@ export class VendorPackageService {
         roomPhotosLength: room_photos.length,
         packageData: Object.keys(cleanPackageData)
       });
+
+      // Collect nested relations before constructing final data
+      const nested: any = {};
+
+      // Handle trip_plans separately if provided
+      if (trip_plans) {
+        let tripPlansArray = [];
+        
+        // Parse trip_plans if it's a string
+        if (typeof trip_plans === 'string') {
+          try {
+            tripPlansArray = JSON.parse(trip_plans);
+          } catch (error) {
+            console.error('Failed to parse trip_plans JSON:', error);
+          }
+        } else if (Array.isArray(trip_plans)) {
+          tripPlansArray = trip_plans;
+        }
+        
+        // Create package_trip_plans relationship
+        if (tripPlansArray.length > 0) {
+          nested.package_trip_plans = {
+            create: tripPlansArray.map((tripPlan: any, index: number) => ({
+              title: tripPlan.title || `Trip Plan ${index + 1}`,
+              description: tripPlan.description || '',
+              time: tripPlan.time || tripPlan.meetingPoint || '',
+              ticket_free: (() => {
+                const tf = tripPlan.ticket_free ?? tripPlan.tripPlan ?? [];
+                return typeof tf === 'string' ? tf : JSON.stringify(tf);
+              })(),
+              sort_order: index,
+              package_trip_plan_images: {
+                create: [] // Images will be handled separately if needed
+              }
+            }))
+          };
+          console.log('Creating package_trip_plans:', tripPlansArray);
+        }
+      }
+
+      // If root trip-plan fields were provided and trip_plans was not provided, add a single trip plan
+      if (rootTripPlanPayload && !('package_trip_plans' in nested)) {
+        // Ensure ticket_free is a string here as well
+        const normalizedRoot = {
+          ...rootTripPlanPayload,
+          ticket_free: typeof rootTripPlanPayload.ticket_free === 'string' 
+            ? rootTripPlanPayload.ticket_free 
+            : JSON.stringify(rootTripPlanPayload.ticket_free ?? [])
+        };
+        nested.package_trip_plans = {
+          create: [normalizedRoot]
+        };
+        console.log('Creating package_trip_plans from root fields:', normalizedRoot);
+      }
+
+      // add extra services JSON directly on package if present
+      if ((cleanPackageData as any).extra_services !== undefined) {
+        try {
+          const raw = (cleanPackageData as any).extra_services;
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          (cleanPackageData as any).extra_services = parsed;
+        } catch {}
+      }
 
       // Build the data object for Prisma
       const data: any = {
@@ -1088,47 +1175,6 @@ export class VendorPackageService {
           };
           console.log('Creating package_destinations:', destinationsArray);
         }
-      }
-
-      // Handle trip_plans separately if provided
-      if (trip_plans) {
-        let tripPlansArray = [];
-        
-        // Parse trip_plans if it's a string
-        if (typeof trip_plans === 'string') {
-          try {
-            tripPlansArray = JSON.parse(trip_plans);
-          } catch (error) {
-            console.error('Failed to parse trip_plans JSON:', error);
-          }
-        } else if (Array.isArray(trip_plans)) {
-          tripPlansArray = trip_plans;
-        }
-        
-        // Create package_trip_plans relationship
-        if (tripPlansArray.length > 0) {
-          data.package_trip_plans = {
-            create: tripPlansArray.map((tripPlan: any, index: number) => ({
-              title: tripPlan.title || `Trip Plan ${index + 1}`,
-              description: tripPlan.description || '',
-              meting_points: tripPlan.meetingPoint || '', // Store meetingPoint in meting_points field
-              trip_plan: tripPlan.tripPlan || [], // Store tripPlan array in JSON field
-              sort_order: index,
-              package_trip_plan_images: {
-                create: [] // Images will be handled separately if needed
-              }
-            }))
-          };
-          console.log('Creating package_trip_plans:', tripPlansArray);
-        }
-      }
-
-      // If root trip-plan fields were provided and trip_plans was not provided, add a single trip plan
-      if (!('package_trip_plans' in data) && rootTripPlanPayload) {
-        data.package_trip_plans = {
-          create: [rootTripPlanPayload]
-        };
-        console.log('Creating package_trip_plans from root fields:', rootTripPlanPayload);
       }
 
       // Add package room types if provided
@@ -1498,6 +1544,9 @@ export class VendorPackageService {
 
       // Extract nested data from DTO
       const { package_room_types, package_availabilities, ...packageData } = updateVendorPackageDto;
+
+      // Normalize keys to avoid issues like "  tour_type"
+      const normalizedPackageData = this.trimObjectKeys(packageData as any);
       
       // Clean string values by removing extra quotes
       const cleanStringValue = (value: any): any => {
@@ -1509,20 +1558,20 @@ export class VendorPackageService {
       };
       
       // Clean string fields
-      if (packageData.type) {
-        packageData.type = cleanStringValue(packageData.type).toLowerCase();
+      if (normalizedPackageData.type) {
+        normalizedPackageData.type = cleanStringValue(normalizedPackageData.type).toLowerCase();
       }
-      if (packageData.duration_type) {
-        packageData.duration_type = cleanStringValue(packageData.duration_type);
+      if (normalizedPackageData.duration_type) {
+        normalizedPackageData.duration_type = cleanStringValue(normalizedPackageData.duration_type);
       }
-      if (packageData.name) {
-        packageData.name = cleanStringValue(packageData.name);
+      if (normalizedPackageData.name) {
+        normalizedPackageData.name = cleanStringValue(normalizedPackageData.name);
       }
-      if (packageData.description) {
-        packageData.description = cleanStringValue(packageData.description);
+      if (normalizedPackageData.description) {
+        normalizedPackageData.description = cleanStringValue(normalizedPackageData.description);
       }
-      if (packageData.price) {
-        packageData.price = cleanStringValue(packageData.price);
+      if (normalizedPackageData.price) {
+        normalizedPackageData.price = cleanStringValue(normalizedPackageData.price);
       }
       
       // Clean other string fields that might have quotes
@@ -1533,15 +1582,15 @@ export class VendorPackageService {
       ];
       
       stringFieldsToClean.forEach(field => {
-        if (packageData[field]) {
-          packageData[field] = cleanStringValue(packageData[field]);
+        if (normalizedPackageData[field]) {
+          normalizedPackageData[field] = cleanStringValue(normalizedPackageData[field]);
         }
       });
       
       // Parse bedrooms JSON if provided
-      if (packageData.bedrooms && typeof packageData.bedrooms === 'string') {
+      if (normalizedPackageData.bedrooms && typeof normalizedPackageData.bedrooms === 'string') {
         try {
-          packageData.bedrooms = JSON.parse(packageData.bedrooms);
+          normalizedPackageData.bedrooms = JSON.parse(normalizedPackageData.bedrooms);
         } catch (error) {
           console.error('Failed to parse bedrooms JSON in updateWithFiles:', error);
           // Keep as string if parsing fails
@@ -1552,12 +1601,12 @@ export class VendorPackageService {
         hasPackageRoomTypes: !!package_room_types,
         packageRoomTypesLength: package_room_types?.length || 0,
         roomPhotosLength: room_photos.length,
-        packageData: Object.keys(packageData)
+        packageData: Object.keys(normalizedPackageData)
       });
 
       // Build the data object for Prisma
       const data: any = {
-        ...packageData,
+        ...normalizedPackageData,
         // Update package files
         package_files: {
           deleteMany: {}, // Delete existing files
@@ -1636,7 +1685,7 @@ export class VendorPackageService {
           create: [{
             name: 'Default Room',
             description: 'Default room type with uploaded photos',
-            price: packageData.price || 0,
+            price: normalizedPackageData.price || 0,
             currency: 'USD',
             is_default: true,
             is_available: true,
@@ -2721,5 +2770,14 @@ export class VendorPackageService {
       });
       // Don't throw error to avoid breaking package creation
     }
+  }
+
+  private trimObjectKeys<T extends Record<string, any>>(obj: T): T {
+    const cleaned: any = {};
+    Object.keys(obj || {}).forEach((key) => {
+      const trimmedKey = typeof key === 'string' ? key.trim() : key;
+      cleaned[trimmedKey] = obj[key];
+    });
+    return cleaned as T;
   }
 }
