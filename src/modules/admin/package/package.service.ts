@@ -32,9 +32,6 @@ export class PackageService {
       if (createPackageDto.description) {
         data.description = createPackageDto.description;
       }
-      if (createPackageDto.total_bedrooms) {
-        data.total_bedrooms = createPackageDto.total_bedrooms;
-      }
       if (createPackageDto.price) {
         data.price = createPackageDto.price;
       }
