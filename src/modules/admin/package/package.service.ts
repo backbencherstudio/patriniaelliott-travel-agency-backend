@@ -50,8 +50,58 @@ export class PackageService {
       if (createPackageDto.max_capacity) {
         data.max_capacity = Number(createPackageDto.max_capacity);
       }
-      if (createPackageDto.cancellation_policy_id) {
-        data.cancellation_policy_id = createPackageDto.cancellation_policy_id;
+      if (createPackageDto.cancellation_policy) {
+        data.cancellation_policy = JSON.parse(createPackageDto.cancellation_policy);
+      }
+      if (createPackageDto.bedrooms) {
+        data.bedrooms = JSON.parse(createPackageDto.bedrooms);
+      }
+      if (createPackageDto.address) {
+        data.address = createPackageDto.address;
+      }
+      if (createPackageDto.amenities) {
+        data.amenities = JSON.parse(createPackageDto.amenities);
+      }
+      if (createPackageDto.bathrooms) {
+        data.bathrooms = Number(createPackageDto.bathrooms);
+      }
+      if (createPackageDto.city) {
+        data.city = createPackageDto.city;
+      }
+      if (createPackageDto.country) {
+        data.country = createPackageDto.country;
+      }
+      if (createPackageDto.latitude) {
+        data.latitude = Number(createPackageDto.latitude);
+      }
+      if (createPackageDto.longitude) {
+        data.longitude = Number(createPackageDto.longitude);
+      }
+      if (createPackageDto.postal_code) {
+        data.postal_code = createPackageDto.postal_code;
+      }
+      if (createPackageDto.unit_number) {
+        data.unit_number = createPackageDto.unit_number;
+      }
+      if (createPackageDto.size_sqm) {
+        data.size_sqm = Number(createPackageDto.size_sqm);
+      }
+      if (createPackageDto.max_guests) {
+        data.max_guests = Number(createPackageDto.max_guests);
+      }
+      if (createPackageDto.tour_type) {
+        data.tour_type = createPackageDto.tour_type;
+      }
+      if (createPackageDto.meting_points) {
+        data.meting_points = createPackageDto.meting_points;
+      }
+      // extra_services JSON saved directly on Package (in addition to relations if used)
+      if ((createPackageDto as any).extra_services !== undefined) {
+        try {
+          const raw = (createPackageDto as any).extra_services;
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          data.extra_services = parsed;
+        } catch {}
       }
       // add vendor id if the package is from vendor
       const userDetails = await UserRepository.getUserDetails(user_id);
@@ -81,16 +131,27 @@ export class PackageService {
 
       // add trip plan to package
       if (createPackageDto.trip_plans) {
+        console.log('Processing trip_plans:', createPackageDto.trip_plans);
         const trip_plans = JSON.parse(createPackageDto.trip_plans);
+        console.log('Parsed trip_plans:', trip_plans);
         for (const trip_plan of trip_plans) {
+          console.log('Processing trip_plan:', trip_plan);
           const trip_plan_data = {
             title: trip_plan.title,
             description: trip_plan.description,
+            time: trip_plan.time, // Store time in time field
+            // ticket_free is String? in schema; store as string
+            ticket_free: (() => {
+              const tf = (trip_plan as any).ticket_free ?? (trip_plan as any).tripPlan ?? [];
+              return typeof tf === 'string' ? tf : JSON.stringify(tf);
+            })(),
             package_id: record.id,
           };
+          console.log('Creating trip_plan with data:', trip_plan_data);
           const trip_plan_record = await this.prisma.packageTripPlan.create({
             data: trip_plan_data,
           });
+          console.log('Trip plan created successfully:', trip_plan_record.id);
           if (trip_plan_record) {
             // add trip plan images to trip plan
             if (files.trip_plans_images && files.trip_plans_images.length > 0) {
@@ -124,23 +185,52 @@ export class PackageService {
 
       // add destination to package
       if (createPackageDto.destinations) {
-        const destinations = JSON.parse(createPackageDto.destinations);
-        for (const destination of destinations) {
-          const existing_destination =
-            await this.prisma.packageDestination.findFirst({
-              where: {
-                destination_id: destination.id,
-                package_id: record.id,
-              },
-            });
-          if (!existing_destination) {
-            await this.prisma.packageDestination.create({
-              data: {
-                destination_id: destination.id,
-                package_id: record.id,
-              },
-            });
+        console.log('Processing destinations:', createPackageDto.destinations);
+        try {
+          const destinations = JSON.parse(createPackageDto.destinations);
+          console.log('Parsed destinations:', destinations);
+          
+          // Validate that destination IDs exist
+          const destinationIds = destinations.map((dest: any) => dest.id);
+          const existingDestinations = await this.prisma.destination.findMany({
+            where: { id: { in: destinationIds } },
+            select: { id: true, name: true }
+          });
+          
+          const existingIds = existingDestinations.map(dest => dest.id);
+          const invalidIds = destinationIds.filter(id => !existingIds.includes(id));
+          
+          if (invalidIds.length > 0) {
+            console.error('Invalid destination IDs:', invalidIds);
+            throw new Error(`The following destination IDs do not exist: ${invalidIds.join(', ')}`);
           }
+          
+          console.log('Valid destinations found:', existingDestinations);
+          
+          for (const destination of destinations) {
+            const existing_destination =
+              await this.prisma.packageDestination.findFirst({
+                where: {
+                  destination_id: destination.id,
+                  package_id: record.id,
+                },
+              });
+            if (!existing_destination) {
+              console.log(`Creating package destination for destination ID: ${destination.id}`);
+              await this.prisma.packageDestination.create({
+                data: {
+                  destination_id: destination.id,
+                  package_id: record.id,
+                },
+              });
+              console.log(`Package destination created successfully for: ${destination.id}`);
+            } else {
+              console.log(`Package destination already exists for: ${destination.id}`);
+            }
+          }
+        } catch (error) {
+          console.error('Error processing destinations:', error);
+          throw new Error(`Failed to process destinations: ${error.message}`);
         }
       }
 
@@ -288,9 +378,11 @@ export class PackageService {
         });
       }
 
+      const detailed = await this.findOne(record.id, user_id);
       return {
         success: true,
         message: 'Package created successfully',
+        data: detailed.success ? detailed.data : { id: record.id },
       };
     } catch (error) {
       // delete package images from storage
@@ -402,7 +494,7 @@ export class PackageService {
               },
             },
           },
-          cancellation_policy_id: true,
+          // cancellation_policy_id: true,
           package_categories: {
             select: {
               category: {
@@ -511,13 +603,13 @@ export class PackageService {
               },
             },
           },
-          cancellation_policy: {
-            select: {
-              id: true,
-              policy: true,
-              description: true,
-            },
-          },
+          // cancellation_policy: {
+          //   select: {
+          //     id: true,
+          //     policy: true,
+          //     description: true,
+          //   },
+          // },
           package_categories: {
             select: {
               category: {
@@ -664,8 +756,11 @@ export class PackageService {
       if (updatePackageDto.max_capacity) {
         data.max_capacity = Number(updatePackageDto.max_capacity);
       }
-      if (updatePackageDto.cancellation_policy_id) {
-        data.cancellation_policy_id = updatePackageDto.cancellation_policy_id;
+      // if (updatePackageDto.cancellation_policy_id) {
+      //   data.cancellation_policy_id = updatePackageDto.cancellation_policy_id;
+      // }
+      if (updatePackageDto.bedrooms) {
+        data.bedrooms = JSON.parse(updatePackageDto.bedrooms);
       }
 
       // existing package record

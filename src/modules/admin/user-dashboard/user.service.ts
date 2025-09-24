@@ -180,19 +180,7 @@ export class UserService {
       const user = await this.prisma.user.findUnique({
         where: {
           id: id,
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          type: true,
-          phone_number: true,
-          approved_at: true,
-          created_at: true,
-          updated_at: true,
-          avatar: true,
-          billing_id: true,
-        },
+        }
       });
 
       const user_reviews = await this.prisma.review.findMany({

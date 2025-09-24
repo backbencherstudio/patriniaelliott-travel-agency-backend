@@ -21,11 +21,11 @@ export class DestinationService {
       if (createDestinationDto.name) {
         data.name = createDestinationDto.name;
       }
-      if (createDestinationDto.description) {
-        data.description = createDestinationDto.description;
+      if (createDestinationDto.country_name) {
+        data.country_name = createDestinationDto.country_name;
       }
-      if (createDestinationDto.country_id) {
-        data.country_id = createDestinationDto.country_id;
+      if (createDestinationDto.state) {
+        data.state = createDestinationDto.state;
       }
       const destination = await this.prisma.destination.create({
         data: {
@@ -34,21 +34,12 @@ export class DestinationService {
         },
       });
 
-      // save destination images
-      if (images) {
-        const destination_images_data = images.map((image) => ({
-          image: image.filename,
-          // image_alt: image.originalname,
-          destination_id: destination.id,
-        }));
-        await this.prisma.destinationImage.createMany({
-          data: destination_images_data,
-        });
-      }
+      
 
       return {
         success: true,
         message: 'Destination created successfully',
+        data: destination,
       };
     } catch (error) {
       return {
@@ -74,7 +65,8 @@ export class DestinationService {
         select: {
           id: true,
           name: true,
-          description: true,
+          state:true,
+          country_name: true,
           country: {
             select: {
               id: true,
@@ -140,7 +132,8 @@ export class DestinationService {
         select: {
           id: true,
           name: true,
-          description: true,
+          state: true,
+          country_name: true,
           country: {
             select: {
               id: true,
@@ -216,11 +209,17 @@ export class DestinationService {
       if (updateDestinationDto.name) {
         data.name = updateDestinationDto.name;
       }
-      if (updateDestinationDto.description) {
-        data.description = updateDestinationDto.description;
+      if (updateDestinationDto.state) {
+        data.description = updateDestinationDto.state;
       }
-      if (updateDestinationDto.country_id) {
-        data.country_id = updateDestinationDto.country_id;
+      if (updateDestinationDto.country_name) {
+        const country = await this.prisma.country.findFirst({
+          where: { name: updateDestinationDto.country_name },
+          select: { id: true },
+        });
+        if (country) {
+          data.country_id = country.id;
+        }
       }
       await this.prisma.destination.update({
         where: { id, user_id, ...where_condition },
@@ -230,34 +229,7 @@ export class DestinationService {
         },
       });
 
-      // save destination images
-      if (images) {
-        // delete images from storage
-        const destinationImages = await this.prisma.destinationImage.findMany({
-          where: { destination_id: id },
-        });
-        if (destinationImages.length > 0) {
-          for (const image of destinationImages) {
-            await SojebStorage.delete(
-              appConfig().storageUrl.destination + image.image,
-            );
-          }
-        }
-        await this.prisma.destinationImage.deleteMany({
-          where: { destination_id: id },
-        });
-
-        // save destination images
-        const destination_images_data = images.map((image) => ({
-          image: image.filename,
-          image_alt: image.originalname,
-          destination_id: id,
-        }));
-        // create new images
-        await this.prisma.destinationImage.createMany({
-          data: destination_images_data,
-        });
-      }
+     
 
       return {
         success: true,

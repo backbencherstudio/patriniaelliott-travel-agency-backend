@@ -148,10 +148,24 @@ export class PackageRoomTypeDto {
   @IsString()
   description?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ 
+    required: false,
+    description: 'Bedrooms data as JSON array for this room type',
+    example: [
+      {
+        title: "Bedroom 1",
+        beds: {
+          single_bed: 2,
+          double_bed: 0,
+          large_bed: 0,
+          extra_large_bed: 0
+        }
+      }
+    ]
+  })
   @IsOptional()
-  @IsNumber()
-  bedrooms?: number;
+  @IsString()
+  bedrooms?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -228,6 +242,19 @@ export class CreateVendorPackageDto {
 
   @ApiProperty({ required: true })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value;
+    }
+    if (value === undefined || value === null) {
+      return value;
+    }
+    try {
+      return String(value);
+    } catch {
+      return value;
+    }
+  })
   @IsString()
   description?: string;
 
@@ -306,10 +333,24 @@ export class CreateVendorPackageDto {
   @IsNumber()
   longitude?: number;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ 
+    required: false,
+    description: 'Bedrooms data as JSON array',
+    example: [
+      {
+        title: "Master Bedroom",
+        beds: {
+          single_bed: 1,
+          double_bed: 1,
+          large_bed: 0,
+          extra_large_bed: 0
+        }
+      }
+    ]
+  })
   @IsOptional()
-  @IsNumber()
-  bedrooms?: number;
+  @IsString()
+  bedrooms?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -516,5 +557,15 @@ export class CreateVendorPackageDto {
     end_date: Date;
     reason?: string;
   }>;
+
+  @ApiProperty({ required: false, description: 'Destinations array' })
+  @IsOptional()
+  @IsString()
+  destinations?: string;
+
+  @ApiProperty({ required: false, description: 'Trip plans array' })
+  @IsOptional()
+  @IsString()
+  trip_plans?: string;
 }
 
