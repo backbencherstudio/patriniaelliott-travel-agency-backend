@@ -9,10 +9,14 @@ import {
   UploadedFile,
   UseInterceptors,
   Param,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { VendorUserVerificationService } from './vendor_user_verification.service';
 import { UserDocumentDto, VendorVerificationDto } from './dto/create-vendor-user-verification.dto/create-vendor-user-verification.dto';
 
@@ -24,13 +28,38 @@ export class VendorUserVerificationController {
   ) {}
 
   @ApiOperation({ summary: 'Upload a vendor verification document' })
+  @ApiConsumes('multipart/form-data')
   @UseGuards(JwtAuthGuard)
   @Post()
-  @UseInterceptors(FileInterceptor('image'))
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+      },
+      fileFilter: (req, file, cb) => {
+        // Allow only image files
+        if (file.mimetype.startsWith('image/')) {
+          cb(null, true);
+        } else {
+          cb(new Error('Only image files are allowed'), false);
+        }
+      },
+    }),
+  )
   async create(
     @Req() req: any,
     @Body() body: UserDocumentDto,
-    @UploadedFile() image?: Express.Multer.File,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }), // 10MB
+          new FileTypeValidator({ fileType: 'image/*' }),
+        ],
+        fileIsRequired: false,
+      }),
+    )
+    image?: Express.Multer.File,
   ) {
     try {
       const user_id = req.user.userId;
@@ -44,11 +73,36 @@ export class VendorUserVerificationController {
   }
 
   @ApiOperation({ summary: 'Register as a new vendor' })
+  @ApiConsumes('multipart/form-data')
   @Post('register')
-  @UseInterceptors(FileInterceptor('document'))
+  @UseInterceptors(
+    FileInterceptor('document', {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+      },
+      fileFilter: (req, file, cb) => {
+        // Allow only image files
+        if (file.mimetype.startsWith('image/')) {
+          cb(null, true);
+        } else {
+          cb(new Error('Only image files are allowed'), false);
+        }
+      },
+    }),
+  )
   async registerVendor(
     @Body() vendorData: VendorVerificationDto,
-    @UploadedFile() document?: Express.Multer.File,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }), // 10MB
+          new FileTypeValidator({ fileType: 'image/*' }),
+        ],
+        fileIsRequired: false,
+      }),
+    )
+    document?: Express.Multer.File,
   ) {
     try {
       return await this.vendorUserVerificationService.registerVendor(vendorData, document);
@@ -90,13 +144,38 @@ export class VendorUserVerificationController {
   }
 
   @ApiOperation({ summary: 'Update vendor verification details' })
+  @ApiConsumes('multipart/form-data')
   @UseGuards(JwtAuthGuard)
   @Patch()
-  @UseInterceptors(FileInterceptor('document'))
+  @UseInterceptors(
+    FileInterceptor('document', {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+      },
+      fileFilter: (req, file, cb) => {
+        // Allow only image files
+        if (file.mimetype.startsWith('image/')) {
+          cb(null, true);
+        } else {
+          cb(new Error('Only image files are allowed'), false);
+        }
+      },
+    }),
+  )
   async updateVendorVerification(
     @Req() req: any,
     @Body() vendorData: Partial<VendorVerificationDto>,
-    @UploadedFile() document?: Express.Multer.File,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }), // 10MB
+          new FileTypeValidator({ fileType: 'image/*' }),
+        ],
+        fileIsRequired: false,
+      }),
+    )
+    document?: Express.Multer.File,
   ) {
     const user_id = req.user.userId;
     console.log(user_id);
@@ -125,13 +204,38 @@ export class VendorUserVerificationController {
 
   // Update vendor verification by user id (application scope)
   @ApiOperation({ summary: 'Update vendor verification by user id' })
+  @ApiConsumes('multipart/form-data')
   @UseGuards(JwtAuthGuard)
   @Patch('vendor/:userId')
-  @UseInterceptors(FileInterceptor('document'))
+  @UseInterceptors(
+    FileInterceptor('document', {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+      },
+      fileFilter: (req, file, cb) => {
+        // Allow only image files
+        if (file.mimetype.startsWith('image/')) {
+          cb(null, true);
+        } else {
+          cb(new Error('Only image files are allowed'), false);
+        }
+      },
+    }),
+  )
   async updateVendorByUserId(
     @Param('userId') userId: string,
     @Body() vendorData: Partial<VendorVerificationDto>,
-    @UploadedFile() document?: Express.Multer.File,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }), // 10MB
+          new FileTypeValidator({ fileType: 'image/*' }),
+        ],
+        fileIsRequired: false,
+      }),
+    )
+    document?: Express.Multer.File,
   ) {
     try {
       const result = await this.vendorUserVerificationService.updateVendorVerification(userId, vendorData);

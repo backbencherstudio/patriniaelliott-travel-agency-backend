@@ -14,8 +14,8 @@ export class UserDocumentDto {
 
   @ApiProperty({ 
     required: false, 
-    description: 'Document number (passport number, license number, etc.)',
-    example: 'P123456789'
+    description: 'phone number',
+    example: '017483****4'
   })
   @IsOptional()
   @IsString()

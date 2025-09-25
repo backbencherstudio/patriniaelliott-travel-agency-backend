@@ -28,6 +28,17 @@ export class VendorUserVerificationService {
       let imageFileName: string | null = null;
 
       if (file) {
+        // Validate file
+        if (!file.buffer || file.buffer.length === 0) {
+          throw new Error('Invalid file: file buffer is empty');
+        }
+
+        if (!file.mimetype || !file.mimetype.startsWith('image/')) {
+          throw new Error('Invalid file type: only image files are allowed');
+        }
+        if (file.size > 10 * 1024 * 1024) { // 10MB limit
+          throw new Error('File too large: maximum size is 10MB');
+        }
         // Generate unique filename for the uploaded image
         const randomName = Array(32)
           .fill(null)
@@ -36,11 +47,15 @@ export class VendorUserVerificationService {
         const fileExtension = file.originalname.split('.').pop();
         imageFileName = `${randomName}.${fileExtension}`;
         
-        // Upload file using SojebStorage with the document path
-        const filePath = appConfig().storageUrl.package + imageFileName;
-        await SojebStorage.put(filePath, file.buffer);
-        
-        console.log(`Document uploaded successfully: ${imageFileName}`);
+        try {
+          // Upload file using SojebStorage with the correct path structure
+          const filePath = appConfig().storageUrl.package + imageFileName;
+          console.log(filePath);
+          await SojebStorage.put(filePath, file.buffer);
+        } catch (uploadError) {
+          console.error('File upload error:', uploadError);
+          throw new Error(`Failed to upload file: ${uploadError.message}`);
+        }
       }
 
       // Create UserDocument record following the schema
@@ -72,8 +87,8 @@ export class VendorUserVerificationService {
 
   // Helper method to generate file URLs
   private generateFileUrl(filename: string, type: string): string {
-    const baseUrl = process.env.APP_URL || 'http://localhost:3000';
-    return `${baseUrl}/storage/${type}/${filename}`;
+    const storagePath = appConfig().storageUrl[type] || appConfig().storageUrl.package;
+    return SojebStorage.url(storagePath + filename);
   }
 
   async registerVendor(vendorData: VendorVerificationDto, file?: Express.Multer.File) {
@@ -140,20 +155,44 @@ export class VendorUserVerificationService {
       // If file is provided, create user document using SojebStorage
       let document = null;
       if (file) {
-        // Upload file using SojebStorage
-        const fileName = file.originalname;
-        const fileBuffer = file.buffer;
-        
-        await SojebStorage.put(fileName, fileBuffer);
-        
-        document = await this.prisma.userDocument.create({
-          data: {
-            user_id: user.id,
-            type: 'vendor_verification',
-            image: fileName,
-            status: 'pending',
-          },
-        });
+        // Validate file
+        if (!file.buffer || file.buffer.length === 0) {
+          throw new Error('Invalid file: file buffer is empty');
+        }
+
+        if (!file.mimetype || !file.mimetype.startsWith('image/')) {
+          throw new Error('Invalid file type: only image files are allowed');
+        }
+
+        if (file.size > 10 * 1024 * 1024) { // 10MB limit
+          throw new Error('File too large: maximum size is 10MB');
+        }
+
+        try {
+          // Generate unique filename for the uploaded image
+          const randomName = Array(32)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          const fileExtension = file.originalname.split('.').pop();
+          const fileName = `${randomName}.${fileExtension}`;
+          
+          // Upload file using SojebStorage with the correct path structure
+          const filePath = appConfig().storageUrl.package + fileName;
+          await SojebStorage.put(filePath, file.buffer);
+          
+          document = await this.prisma.userDocument.create({
+            data: {
+              user_id: user.id,
+              type: 'vendor_verification',
+              image: fileName,
+              status: 'pending',
+            },
+          });
+        } catch (uploadError) {
+          console.error('File upload error:', uploadError);
+          throw new Error(`Failed to upload file: ${uploadError.message}`);
+        }
       }
 
       return {

@@ -68,6 +68,7 @@ export default () => ({
   storageUrl: {
     rootUrl: './public/storage',
     rootUrlPublic: '/public/storage',
+    swapan: '/public/storage',
     // storage directory
     package: '/package/',
     destination: '/destination/',
