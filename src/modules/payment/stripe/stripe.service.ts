@@ -11,16 +11,16 @@ export class StripeService {
       switch (event.type) {
         case 'refund.created':
           paymentIntent = event.data.object;
-          await TransactionRepository.refunded(paymentIntent.payment_intent, 'processing');
+          await TransactionRepository.refunded(paymentIntent.payment_intent, 'processing', paymentIntent.metadata);
           break;
         case 'charge.refunded':
           paymentIntent = event.data.object;
-          await TransactionRepository.refunded(paymentIntent.payment_intent, 'success');
+          await TransactionRepository.refunded(paymentIntent.payment_intent, 'success', paymentIntent.metadata, paymentIntent.amount_refunded, paymentIntent.amount);
           break;
         case 'customer.created':
         case 'charge.failed':
           paymentIntent = event.data.object;
-          await TransactionRepository.refunded(paymentIntent.payment_intent, 'failed');
+          await TransactionRepository.refunded(paymentIntent.payment_intent, 'failed', paymentIntent.metadata);
           break;
         case 'customer.created':
           break;
