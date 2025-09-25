@@ -715,7 +715,7 @@ export class PackageService {
         const packagesWithPolicies = await this.prisma.package.count({
           where: {
             cancellation_policy: {
-              not: null
+              isNot: null
             }
           }
         });
@@ -852,9 +852,7 @@ export class PackageService {
       ));
       console.log('Sample cancellation policies:', packages.slice(0, 3).map(p => ({
         package_id: p.id,
-        policy: (p.cancellation_policy as any)?.policy,
-        has_free_cancellation: (() => { const cp: any = p.cancellation_policy as any; return typeof cp?.policy === 'string' && cp.policy.toLowerCase().includes('free'); })() || false,
-        cancellation_policy_id: (p.cancellation_policy as any)?.id
+        cancellation_policy_id: (p as any)?.cancellation_policy_id
       })));
       
              // Log price range of returned packages
@@ -2205,7 +2203,7 @@ export class PackageService {
           deleted_at: null,
           status: 1,
           cancellation_policy: {
-            not: null
+            isNot: null
           }
         }
       });

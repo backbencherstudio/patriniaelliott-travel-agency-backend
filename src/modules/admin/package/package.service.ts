@@ -50,6 +50,20 @@ export class PackageService {
       if (createPackageDto.max_capacity) {
         data.max_capacity = Number(createPackageDto.max_capacity);
       }
+      // service_fee Decimal? on Package
+      if ((createPackageDto as any).service_fee != null) {
+        const fee = Number((createPackageDto as any).service_fee);
+        if (!Number.isNaN(fee)) {
+          data.service_fee = fee;
+        }
+      }
+      // numeric discounts on Package (schema: Package.discount Int?)
+      if ((createPackageDto as any).discount != null) {
+        const discountNum = Number((createPackageDto as any).discount);
+        if (!Number.isNaN(discountNum)) {
+          data.discount = discountNum;
+        }
+      }
       if (createPackageDto.cancellation_policy) {
         data.cancellation_policy = JSON.parse(createPackageDto.cancellation_policy);
       }
@@ -115,6 +129,40 @@ export class PackageService {
           user_id: user_id,
         },
       });
+
+      // create and link PackagePolicy if provided (schema: PackagePolicy { package_policies Json?, description String? })
+      try {
+        const policyItems = [
+          { title: 'transportation', description: (createPackageDto as any)?.transportation },
+          { title: 'meals', description: (createPackageDto as any)?.meals },
+          { title: 'guide_tours', description: (createPackageDto as any)?.guide },
+          { title: 'add_ons', description: (createPackageDto as any)?.addOns },
+          { title: 'cancellation_policy', description: (createPackageDto as any)?.cancellation_policy },
+        ].filter((i) => typeof i.description === 'string' && i.description.trim() !== '');
+
+        const policyDescription = (createPackageDto as any)?.policy_description;
+
+        if ((policyItems && policyItems.length > 0) || (typeof policyDescription === 'string' && policyDescription.trim() !== '')) {
+          const createdPolicy = await this.prisma.packagePolicy.create({
+            data: {
+              description: policyDescription ?? null,
+              package_policies: policyItems as any,
+            },
+          });
+
+          await this.prisma.package.update({
+            where: { id: record.id },
+            data: {
+              package_policies: {
+                connect: { id: createdPolicy.id },
+              },
+            },
+          });
+        }
+      } catch (e) {
+        // If policy creation fails, continue without blocking package creation
+        console.error('Failed to create/link PackagePolicy:', e?.message || e);
+      }
 
       // add package files to package
       if (files.package_files && files.package_files.length > 0) {
@@ -461,6 +509,7 @@ export class PackageService {
           min_capacity: true,
           max_capacity: true,
           type: true,
+          service_fee: true,
           user: {
             select: {
               id: true,
@@ -527,6 +576,13 @@ export class PackageService {
               },
             },
           },
+          package_policies: {
+            select: {
+              id: true,
+              description: true,
+              package_policies: true,
+            },
+          },
         },
       });
 
@@ -569,6 +625,7 @@ export class PackageService {
           min_capacity: true,
           max_capacity: true,
           type: true,
+          service_fee: true,
           package_languages: {
             select: {
               language: {
@@ -673,6 +730,13 @@ export class PackageService {
               },
             },
           },
+          package_policies: {
+            select: {
+              id: true,
+              description: true,
+              package_policies: true,
+            },
+          },
         },
       });
 
@@ -755,6 +819,13 @@ export class PackageService {
       }
       if (updatePackageDto.max_capacity) {
         data.max_capacity = Number(updatePackageDto.max_capacity);
+      }
+      // service_fee Decimal? on Package
+      if ((updatePackageDto as any).service_fee != null) {
+        const fee = Number((updatePackageDto as any).service_fee);
+        if (!Number.isNaN(fee)) {
+          data.service_fee = fee;
+        }
       }
       // if (updatePackageDto.cancellation_policy_id) {
       //   data.cancellation_policy_id = updatePackageDto.cancellation_policy_id;

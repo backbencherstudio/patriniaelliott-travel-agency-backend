@@ -711,6 +711,11 @@ export class VendorPackageService {
     }
   ) {
     try {
+      // Validate user exists to avoid failed nested connect
+      const existingUser = await this.prisma.user.findUnique({ where: { id: user_id } });
+      if (!existingUser) {
+        throw new Error('User not found');
+      }
       // Test URL generation using existing function
       console.log('=== URL Generation Test ===');
       console.log('APP_URL:', process.env.APP_URL);
@@ -957,6 +962,46 @@ export class VendorPackageService {
         description: cleanPackageData.description,
         price: cleanPackageData.price
       });
+
+      // Coerce numeric scalars to correct types where needed
+      const numericFields: Array<keyof typeof cleanPackageData> = [
+        'discount', 'bathrooms', 'max_guests', 'size_sqm', 'min_capacity', 'max_capacity', 'latitude', 'longitude'
+      ] as any;
+      numericFields.forEach((field) => {
+        if ((cleanPackageData as any)[field] != null && (cleanPackageData as any)[field] !== '') {
+          const n = Number((cleanPackageData as any)[field]);
+          if (!Number.isNaN(n)) {
+            (cleanPackageData as any)[field] = n;
+          } else {
+            // remove invalid numeric to avoid Prisma type errors
+            delete (cleanPackageData as any)[field];
+          }
+        }
+      });
+
+      // Normalize language JSON field on Package (language: Json?)
+      if ((cleanPackageData as any).language != null) {
+        const rawLang = (cleanPackageData as any).language;
+        try {
+          if (typeof rawLang === 'string') {
+            // Try strict JSON parse first
+            (cleanPackageData as any).language = JSON.parse(rawLang);
+          }
+        } catch {
+          // Fallback: convert formats like "{\"en\", \"bn\"}" to ["en","bn"]
+          if (typeof rawLang === 'string') {
+            const trimmed = rawLang.trim();
+            // Replace curly braces with square and remove stray quotes around items
+            const inner = trimmed.replace(/^\{/, '[').replace(/\}$/, ']');
+            const parts = inner
+              .replace(/^[\[]|[\]]$/g, '')
+              .split(',')
+              .map((s) => s.replace(/^\s*"|"\s*$/g, '').replace(/^\s*'|'\s*$/g, '').trim())
+              .filter((s) => s.length > 0);
+            (cleanPackageData as any).language = parts;
+          }
+        }
+      }
       
       console.log('Extracted fields:', {
         destinations: destinations,
@@ -1048,7 +1093,7 @@ export class VendorPackageService {
       // Build the data object for Prisma
       const data: any = {
         ...cleanPackageData,
-        user: { connect: { id: user_id } },
+        user_id: user_id,
         // Create package files
         package_files: {
           create: [
@@ -1069,6 +1114,20 @@ export class VendorPackageService {
           ]
         }
       };
+
+      // Merge nested relations (e.g., trip plans) built earlier
+      if (nested.package_trip_plans) {
+        data.package_trip_plans = nested.package_trip_plans;
+      }
+      if ('cancellation_policy' in data) {
+        delete data.cancellation_policy;
+      }
+      if ('package_policies' in data) {
+        delete data.package_policies;
+      }
+      if ('policy_description' in data) {
+        delete data.policy_description;
+      }
 
       // Normalize bedrooms only (do not use total_bedrooms scalar on Package)
       try {
@@ -1273,7 +1332,7 @@ export class VendorPackageService {
 
       // Create package with nested data
       console.log('Final data being sent to Prisma:', JSON.stringify(data, null, 2));
-      const result = await this.prisma.package.create({
+      let result = await this.prisma.package.create({
         data,
         include: {
           package_files: true,
@@ -1285,6 +1344,74 @@ export class VendorPackageService {
               package_trip_plan_images: true
             }
           },
+          user: true,
+        },
+      });
+
+      // After package creation, optionally create and link cancellation policy
+      try {
+        const cancellationPolicyRaw = (createVendorPackageDto as any)?.cancellation_policy;
+        const policyDescription = (createVendorPackageDto as any)?.policy_description;
+        if (cancellationPolicyRaw && typeof cancellationPolicyRaw === 'string') {
+          const createdCP = await this.prisma.packageCancellationPolicy.create({
+            data: {
+              user_id: user_id,
+              policy: cancellationPolicyRaw,
+              description: policyDescription ?? null,
+            },
+          });
+          await this.prisma.package.update({
+            where: { id: result.id },
+            data: { cancellation_policy_id: createdCP.id },
+          });
+        }
+      } catch (e) {
+        console.error('Failed to create/link PackageCancellationPolicy:', e?.message || e);
+      }
+
+      // After package creation, optionally create and link PackagePolicy built from dto items
+      try {
+        const items = [
+          { title: 'transportation', description: (createVendorPackageDto as any)?.transportation },
+          { title: 'meals', description: (createVendorPackageDto as any)?.meals },
+          { title: 'guide_tours', description: (createVendorPackageDto as any)?.guide },
+          { title: 'add_ons', description: (createVendorPackageDto as any)?.addOns },
+          { title: 'cancellation_policy', description: (createVendorPackageDto as any)?.cancellation_policy },
+        ].filter((i) => typeof i.description === 'string' && i.description.trim() !== '');
+
+        const policyDescription = (createVendorPackageDto as any)?.policy_description;
+        if (items.length > 0 || (typeof policyDescription === 'string' && policyDescription.trim() !== '')) {
+          const createdPolicy = await this.prisma.packagePolicy.create({
+            data: {
+              description: policyDescription ?? null,
+              package_policies: items as any,
+            },
+          });
+          await this.prisma.package.update({
+            where: { id: result.id },
+            data: {
+              package_policies: {
+                connect: { id: createdPolicy.id },
+              },
+            },
+          });
+        }
+      } catch (e) {
+        console.error('Failed to create/link PackagePolicy:', e?.message || e);
+      }
+
+      // Re-fetch the package to include newly linked relations (package_policies, trip plans)
+      result = await this.prisma.package.findUnique({
+        where: { id: result.id },
+        include: {
+          package_files: true,
+          package_room_types: true,
+          package_availabilities: true,
+          package_extra_services: true,
+          package_trip_plans: {
+            include: { package_trip_plan_images: true },
+          },
+          package_policies: true,
           user: true,
         },
       });

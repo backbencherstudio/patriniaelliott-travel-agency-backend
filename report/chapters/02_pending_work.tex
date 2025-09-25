@@ -1,0 +1,46 @@
+% Chapter 2: Pending Work (Operations Manager)
+\chapter{Pending Work}
+
+\section{Main gap: Notification system}
+The key item left is the notification system. This should help all users get timely updates about important actions. It should be simple, clear, and consistent.
+
+\section{Who should receive notifications}
+\begin{itemize}
+  \item Admin: New vendor requests, high-risk payments, refund requests, dispute flags.
+  \item Vendor: New bookings, payment received, payout status, new reviews, refunds.
+  \item Customer: Booking status, payment status, refund status, review confirmation.
+\end{itemize}
+
+\section{When notifications should be sent}
+\begin{itemize}
+  \item Booking created, confirmed, or cancelled.
+  \item Payment created, succeeded, or failed.
+  \item Refund requested, approved, or rejected.
+  \item Review submitted.
+  \item Vendor application submitted or decided.
+\end{itemize}
+
+\section{How notifications should appear}
+\begin{itemize}
+  \item In-app notifications: Visible in each user dashboard.
+  \item Email (optional): For key events like payment or booking confirmation.
+\end{itemize}
+
+\section{Simple acceptance checklist}
+The notification system is “done” when the following checks pass:
+\begin{itemize}
+  \item Clear list of events and recipients is documented.
+  \item In-app notifications show for Admin, Vendor, and Customer.
+  \item Emails (if used) send for payment and booking confirmations.
+  \item Notifications link back to the right record (booking, payment, review, vendor request).
+  \item A basic settings page exists to mark notifications as read.
+  \item Test cases run: create booking, payment success, refund request, review add, vendor approval.
+\end{itemize}
+
+\section{Small cleanups (if time allows)}
+\begin{itemize}
+  \item Final pass on labels and messages to keep wording simple.
+  \item Quick UI check for consistency in dashboards.
+\end{itemize}
+
+

@@ -362,7 +362,7 @@ model Package {
   min_capacity           Int?      @default(1)
   max_capacity           Int?      @default(1)
   type                   String?   @default("tour")
-  // cancellation_policy_id String?
+  cancellation_policy_id String?
   address                String?
   amenities              Json?
   bathrooms              Int?
@@ -373,11 +373,11 @@ model Package {
   breakfast_available    Boolean?  @default(false)
   check_in               Json?
   check_out              Json?
-  
-  cancellation_policy  Json?
-  language             Json?
-  tour_type            String?  
-  meting_points            String?
+  discount               Int?
+  // cancellation_policy  Json?
+  language               Json?
+  tour_type              String?
+  meting_points          String?
   city                   String?
   commission_rate        Decimal?  @default(15.0)
   country                String?
@@ -390,9 +390,10 @@ model Package {
   postal_code            String?
   rate_plans             Json?
   size_sqm               Float?
+  service_fee            Decimal?
   unit_number            String?
   non_refundable_days    Json?
-  extra_services        Json?
+  extra_services         Json?
 
   package_availabilities  PackageAvailability[]
   booking_items           BookingItem[]
@@ -407,10 +408,11 @@ model Package {
   package_tags            PackageTag[]
   package_traveller_types PackageTravellerType[]
   package_trip_plans      PackageTripPlan[]
-  // cancellation_policy     PackageCancellationPolicy? @relation(fields: [cancellation_policy_id], references: [id])
+  cancellation_policy     PackageCancellationPolicy? @relation(fields: [cancellation_policy_id], references: [id])
   user                    User?                      @relation(fields: [user_id], references: [id])
   property_calendars      PropertyCalendar[]
   reviews                 Review[]
+  package_policies        PackagePolicy[]
 
   @@map("packages")
 }
@@ -526,8 +528,8 @@ model PackageTripPlan {
   package_id               String?
   title                    String?
   description              String?
-  ticket_free                String?
-  time            String?
+  ticket_free              String?
+  time                     String?
   package_trip_plan_images PackageTripPlanImage[]
   package                  Package?               @relation(fields: [package_id], references: [id], onDelete: Cascade)
 
@@ -549,6 +551,19 @@ model PackageTripPlanImage {
   @@map("package_trip_plan_images")
 }
 
+model PackagePolicy {
+  id               String    @id @default(cuid())
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @default(now())
+  deleted_at       DateTime?
+  status           Int?      @default(1) @db.SmallInt
+  package_policies Json?
+  description      String?
+  packages         Package[]
+
+  @@map("package_policies")
+}
+
 model PackageCancellationPolicy {
   id          String    @id @default(cuid())
   created_at  DateTime  @default(now())
@@ -559,7 +574,7 @@ model PackageCancellationPolicy {
   policy      String?
   description String?
   user        User?     @relation(fields: [user_id], references: [id])
-  // packages    Package[]
+  packages    Package[]
 
   @@map("package_cancellation_policies")
 }
