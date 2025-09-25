@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -63,6 +64,10 @@ export class TransactionRepository {
       }
     });
 
+    if (!payment) {
+      throw new NotFoundException('Payment not found.')
+    }
+
     const payload: any = {}
 
     if (status === 'processing') {
@@ -73,9 +78,15 @@ export class TransactionRepository {
       payload.failed_at = new Date()
     }
 
+    const refund_id = payment.RefundTransaction?.[0].id
+
+    if (!refund_id) {
+      throw new NotFoundException('Refund transaction not found for this payment.');
+    }
+
     await prisma.refundTransaction.update({
       where: {
-        id: payment.RefundTransaction[0].id
+        id: refund_id
       },
       data: payload
     })
