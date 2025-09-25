@@ -5,7 +5,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { join } from 'path';
-// import express from 'express';
+
 // internal imports
 import { AppModule } from './app.module';
 import appConfig from './config/app.config';
@@ -18,55 +18,81 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('api');
-  app.enableCors();
+  app.enableCors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
   app.use(helmet());
-
   app.useStaticAssets(join(__dirname, '..', 'public'), {
     index: false,
     prefix: '/public',
-  });
-
-  // Serve storage files with proper configuration
-  app.useStaticAssets(join(__dirname, '..', 'public/storage'), {
-    index: false,
-    prefix: '/storage',
     setHeaders: (res, path) => {
       if (path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.png') || path.endsWith('.gif') || path.endsWith('.webp')) {
         res.setHeader('Content-Type', 'image/' + path.split('.').pop());
-        res.setHeader('Cache-Control', 'public, max-age=31536000');
+        res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
       }
     },
-    fallthrough: true,
   });
 
-  app.use('/storage/package/:filename', (req, res, next) => {
-    const filename = req.params.filename;
-    const filePath = join(__dirname, '..', 'public/storage/package', filename);
-    if (require('fs').existsSync(filePath)) {
-      console.log('File exists, serving...');
-      return res.sendFile(filePath);
-    } else {
-      const fs = require('fs');
-      const files = fs.readdirSync(join(__dirname, '..', 'public/storage/package'));
-      console.log('Available files:', files);
-
-      // Check if there's a file that starts with this name
-      const similarFiles = files.filter(f => f.startsWith(filename));
-      if (similarFiles.length > 0) {
-        console.log('🔍 Found similar files:', similarFiles);
-        return res.redirect(`/storage/package/${encodeURIComponent(similarFiles[0])}`);
+  app.use('/storage', (req, res, next) => {
+    try {
+      const filePath = join(__dirname, '..', 'public', req.path);
+     
+      console.log(`Static file requested: ${req.path}`);
+      console.log(`Full path: ${filePath}`);
+      console.log(`User-Agent: ${req.get('User-Agent')}`);
+      console.log(`Referer: ${req.get('Referer')}`);
+     
+      // Check if file exists
+      if (require('fs').existsSync(filePath)) {
+        console.log('File exists, serving...');
+       
+        // Set proper headers for images
+        if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg') || filePath.endsWith('.png') || filePath.endsWith('.gif') || filePath.endsWith('.webp')) {
+          const ext = filePath.split('.').pop()?.toLowerCase();
+          res.setHeader('Content-Type', `image/${ext}`);
+          res.setHeader('Cache-Control', 'public, max-age=31536000');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+         
+          // Handle preflight requests
+          if (req.method === 'OPTIONS') {
+            return res.status(200).end();
+          }
+        }
+       
+        return res.sendFile(filePath, (err) => {
+          if (err) {
+            console.error('❌ Error serving file:', err);
+            return res.status(500).json({
+              success: false,
+              message: 'Error serving file',
+              error: err.message
+            });
+          }
+        });
+      } else {
+        console.log('❌ File not found');
+        return res.status(404).json({
+          success: false,
+          message: 'File not found',
+          path: req.path,
+          fullPath: filePath
+        });
       }
-
-      return res.status(404).json({
+    } catch (error) {
+      console.error('Error in static file handler:', error);
+      return res.status(500).json({
         success: false,
-        message: 'Image not found',
-        filename: filename,
-        path: filePath,
-        availableFiles: files.slice(0, 10)
+        message: 'Internal server error',
+        error: error.message
       });
     }
   });
-
+ 
+ 
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,

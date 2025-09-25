@@ -62,7 +62,7 @@ export class DestinationController {
           // new MaxFileSizeValidator({ maxSize: 10485760 }), // 10mb
           // new FileTypeValidator({ fileType: 'image/*' }),
         ],
-        // fileIsRequired: false,
+        fileIsRequired: false,
       }),
     )
     images?: Express.Multer.File[],

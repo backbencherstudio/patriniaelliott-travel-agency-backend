@@ -27,10 +27,9 @@ import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
 @ApiTags('Booking')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('booking')
+@UseGuards(JwtAuthGuard)
 export class BookingController {
   constructor(private readonly bookingService: BookingService) { }
-
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create booking with dynamic ID processing' })
   @Post()
   async create(
@@ -44,6 +43,7 @@ export class BookingController {
     );
   }
 
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all bookings' })
   @Get()
   async findAll(

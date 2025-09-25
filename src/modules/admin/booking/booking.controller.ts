@@ -6,7 +6,6 @@ import {
   Param,
   Delete,
   UseGuards,
-  Req,
   Query,
 } from '@nestjs/common';
 import { BookingService } from './booking.service';
@@ -17,12 +16,11 @@ import { Role } from 'src/common/guard/role/role.enum';
 import { Roles } from 'src/common/guard/role/roles.decorator';
 import { RolesGuard } from 'src/common/guard/role/roles.guard';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
-import { Request } from 'express';
 
 @ApiBearerAuth()
 @ApiTags('Booking')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.VENDOR)
+@Roles(Role.ADMIN)
 @Controller('admin/booking')
 export class BookingController {
   constructor(private readonly bookingService: BookingService) {}
@@ -32,17 +30,14 @@ export class BookingController {
     description: 'Filter bookings by type: "all" (default), "hotel", "apartment", or "tour"'
   })
   @Get()
-  async findAll(
-    @Req() req: Request,
-    @Query() query: QueryBookingDto,
-  ) {
+  async findAll(@Query() query: QueryBookingDto) {
     try {
-      const user_id = req.user.userId;
       const {
         q,
         status,
         approve,
         type,
+        date_range,
         page,
         limit,
         sort_by,
@@ -54,16 +49,16 @@ export class BookingController {
       const sortBy = sort_by || 'created_at_desc';
 
       const bookings = await this.bookingService.findAll({
-        user_id,
         q,
         status,
         approve,
         type,
+        date_range,
         page: pageNumber,
         limit: limitNumber,
         sort_by: sortBy,
       });
-
+      
       return bookings;
     } catch (error) {
       return {
@@ -73,7 +68,10 @@ export class BookingController {
     }
   }
 
-  @ApiOperation({ summary: 'Get booking by id' })
+  @ApiOperation({ 
+    summary: 'Get detailed booking information',
+    description: 'Get comprehensive booking details including package info, guest details, reservation details, and payment information'
+  })
   @Get(':id')
   async findOne(@Param('id') id: string) {
     try {
@@ -123,6 +121,74 @@ export class BookingController {
         updateBookingDto,
       );
       return booking;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ 
+    summary: 'Get booking statistics by type',
+    description: 'Get count of bookings for each service type (All, Hotel, Apartment, Tour)'
+  })
+  @Get('statistics')
+  async getBookingStatistics() {
+    try {
+      const statistics = await this.bookingService.getBookingStatistics();
+      return statistics;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ 
+    summary: 'Export bookings as PDF',
+    description: 'Export filtered bookings to PDF format'
+  })
+  @Get('export/pdf')
+  async exportAsPdf(@Query() query: QueryBookingDto) {
+    try {
+      const {
+        q,
+        status,
+        approve,
+        type,
+        date_range,
+      } = query;
+
+      const bookings = await this.bookingService.findAll({
+        q,
+        status,
+        approve,
+        type,
+        date_range,
+        page: 1,
+        limit: 1000, // Export all matching records
+        sort_by: 'created_at_desc',
+      });
+
+      // For now, return the data in a format that can be used to generate PDF
+      // In a real implementation, you would use a PDF library like puppeteer or pdfkit
+      return {
+        success: true,
+        message: 'Bookings data ready for PDF export',
+        data: bookings.data,
+        export_info: {
+          total_records: bookings.pagination?.total_items || 0,
+          export_date: new Date().toISOString(),
+          filters_applied: {
+            search: q || 'none',
+            status: status || 'all',
+            approval: approve || 'all',
+            type: type || 'all'
+          }
+        }
+      };
     } catch (error) {
       return {
         success: false,

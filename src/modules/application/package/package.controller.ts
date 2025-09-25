@@ -46,7 +46,7 @@ export class PackageController {
     try {
       console.log('Enhanced search request:', searchDto);
       const result = await this.packageService.enhancedSearch(searchDto);
-      console.log('Enhanced search result count:', result.data?.packages?.length || 0);
+      // console.log('Enhanced search result count:', result.data?.packages?.length || 0);
       return result;
     } catch (error) {
       console.error('Enhanced search error:', error);
@@ -139,7 +139,7 @@ export class PackageController {
     const user_id = req.user?.userId || null;
     
     // Debug logging for rating parameter
-    console.log('Rating parameter received:', (query as any).rating);
+      console.log('Ratings parameter received:', (query as any).ratings);
     console.log('Query object:', query);
       
       // Handle multiple type parameters
@@ -162,7 +162,7 @@ export class PackageController {
           type: types,
           freeCancellation: query.free_cancellation,
           languages: query.languages,
-          ratings: (query as any).rating,
+          ratings: (query as any).ratings,
           budgetEnd: query.budget_end,
           budgetStart: query.budget_start,
           durationEnd: query.duration_end,

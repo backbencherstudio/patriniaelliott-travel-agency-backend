@@ -10,7 +10,7 @@ import { Request } from 'express';
 @ApiBearerAuth()
 @ApiTags('Payment transaction')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.VENDOR)
+@Roles(Role.ADMIN)
 @Controller('admin/payment-transaction')
 export class PaymentTransactionController {
   constructor(
@@ -21,10 +21,9 @@ export class PaymentTransactionController {
   @Get()
   async findAll(@Req() req: Request) {
     try {
-      const user_id = req.user.userId;
 
       const paymentTransactions =
-        await this.paymentTransactionService.findAll(user_id);
+        await this.paymentTransactionService.findAll();
 
       return paymentTransactions;
     } catch (error) {

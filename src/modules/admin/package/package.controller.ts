@@ -94,10 +94,6 @@ export class PackageController {
     try {
       const baseUrl = process.env.APP_URL || 'http://localhost:4000';
       
-      console.log('🔍 Adding image URLs to package data...');
-      console.log('📦 Package files:', packageData.package_files?.length || 0);
-      console.log('📋 Trip plans:', packageData.package_trip_plans?.length || 0);
-      
       // Add URLs to package files
       if (packageData.package_files && packageData.package_files.length > 0) {
         packageData.package_files.forEach((file, index) => {
@@ -117,9 +113,7 @@ export class PackageController {
             
             // Encode the filename to handle special characters and spaces
             const encodedFilename = encodeURIComponent(file.file);
-            file.file_url = `${baseUrl}/storage/package/${encodedFilename}`;
-            console.log(`🖼️  Generated URL for package file: ${file.file} -> ${file.file_url}`);
-            console.log(`🔗 Full URL length: ${file.file_url.length}`);
+            file.file_url = `${baseUrl}/public/storage/package/${encodedFilename}`;
           } else {
             console.log(`⚠️  File ${index + 1} missing file property:`, file);
           }
@@ -140,7 +134,7 @@ export class PackageController {
                 
                 // Encode the filename to handle special characters and spaces
                 const encodedFilename = encodeURIComponent(image.image);
-                image.image_url = `${baseUrl}/storage/package/${encodedFilename}`;
+                image.image_url = `${baseUrl}/public/storage/package/${encodedFilename}`;
                 console.log(`🖼️  Generated URL for trip plan image: ${image.image} -> ${image.image_url}`);
               } else {
                 console.log(`⚠️  Trip plan ${tripIndex + 1} image ${imgIndex + 1} missing image property:`, image);
@@ -236,6 +230,48 @@ export class PackageController {
       // Ensure storage directories exist
       this.ensureStorageDirectories();
       
+      // Normalize bedrooms payload to expected JSON string
+      if (createPackageDto && (createPackageDto as any).bedrooms !== undefined) {
+        try {
+          let parsedBedrooms: any = null;
+          if (typeof (createPackageDto as any).bedrooms === 'string') {
+            parsedBedrooms = JSON.parse((createPackageDto as any).bedrooms as unknown as string);
+          } else {
+            parsedBedrooms = (createPackageDto as any).bedrooms;
+            (createPackageDto as any).bedrooms = JSON.stringify(
+              (createPackageDto as any).bedrooms,
+            );
+          }
+
+          // Compute total_bedrooms from bedrooms array when available
+          if (Array.isArray(parsedBedrooms)) {
+            const computedTotal = parsedBedrooms.length;
+
+            // Coerce incoming total_bedrooms to number if it came as string
+            if ((createPackageDto as any).total_bedrooms != null && typeof (createPackageDto as any).total_bedrooms === 'string') {
+              const coerced = Number((createPackageDto as any).total_bedrooms);
+              if (!Number.isNaN(coerced)) {
+                (createPackageDto as any).total_bedrooms = coerced as any;
+              }
+            }
+
+            // If not provided or mismatch, set the correct value
+            if (
+              (createPackageDto as any).total_bedrooms == null ||
+              (createPackageDto as any).total_bedrooms !== computedTotal
+            ) {
+              (createPackageDto as any).total_bedrooms = computedTotal as any;
+            }
+          } else {
+            throw new Error('bedrooms must be an array');
+          }
+        } catch (err) {
+          throw new BadRequestException(
+            'Invalid bedrooms format. Provide valid JSON (array of bedroom objects).',
+          );
+        }
+      }
+
       // Validate uploaded files
       if (files.package_files) {
         for (const file of files.package_files) {
@@ -254,11 +290,15 @@ export class PackageController {
       }
 
       const user_id = req.user.userId;
-      const record = await this.packageService.create(
+      let record = await this.packageService.create(
         user_id,
         createPackageDto,
         files,
       );
+      // Enrich with image URLs like in findOne/findAll
+      if (record && record.success && record.data) {
+        record.data = this.addImageUrls(record.data);
+      }
       return record;
     } catch (error) {
       console.error('Package creation error:', error);
@@ -350,31 +390,31 @@ export class PackageController {
         trip_plan_images: []
       };
       
-      if (record.data.package_files && record.data.package_files.length > 0) {
-        images.package_files = record.data.package_files.map((file: any) => ({
-          id: file.id,
-          filename: file.file,
-          original_name: file.file_alt || file.originalname || 'Unknown',
-          type: file.type || 'image',
-          url: `${process.env.APP_URL || 'http://localhost:4000'}/storage/package/${encodeURIComponent(file.file)}`
-        }));
-      }
+      // if (record.data.package_files && record.data.package_files.length > 0) {
+      //   images.package_files = record.data.package_files.map((file: any) => ({
+      //     id: file.id,
+      //     filename: file.file,
+      //     original_name: file.file_alt || file.originalname || 'Unknown',
+      //     type: file.type || 'image',
+      //     url: `${process.env.APP_URL || 'http://localhost:4000'}/storage/package/${encodeURIComponent(file.file)}`
+      //   }));
+      // }
       
-      if (record.data.package_trip_plans && record.data.package_trip_plans.length > 0) {
-        record.data.package_trip_plans.forEach((tripPlan: any) => {
-          if (tripPlan.package_trip_plan_images && tripPlan.package_trip_plan_images.length > 0) {
-            tripPlan.package_trip_plan_images.forEach((image: any) => {
-              images.trip_plan_images.push({
-                id: image.id,
-                filename: image.image,
-                original_name: image.image_alt || image.originalname || 'Unknown',
-                trip_plan_title: tripPlan.title,
-                url: `${process.env.APP_URL || 'http://localhost:4000'}/storage/package/${encodeURIComponent(image.image)}`
-              });
-            });
-          }
-        });
-      }
+      // if (record.data.package_trip_plans && record.data.package_trip_plans.length > 0) {
+      //   record.data.package_trip_plans.forEach((tripPlan: any) => {
+      //     if (tripPlan.package_trip_plan_images && tripPlan.package_trip_plan_images.length > 0) {
+      //       tripPlan.package_trip_plan_images.forEach((image: any) => {
+      //         images.trip_plan_images.push({
+      //           id: image.id,
+      //           filename: image.image,
+      //           original_name: image.image_alt || image.originalname || 'Unknown',
+      //           trip_plan_title: tripPlan.title,
+      //           url: `${process.env.APP_URL || 'http://localhost:4000'}/storage/package/${encodeURIComponent(image.image)}`
+      //         });
+      //       });
+      //     }
+      //   });
+      // }
       
       return {
         success: true,

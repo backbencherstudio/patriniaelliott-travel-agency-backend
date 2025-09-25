@@ -42,7 +42,6 @@ export class PackageService {
     // Build where conditions
     const where: any = {
       deleted_at: null,
-      is_available: true,
       status: 1, // Active packages
     };
 
@@ -110,7 +109,8 @@ export class PackageService {
         orderBy.price = 'desc';
         break;
       case 'rating_desc':
-        orderBy.average_rating = 'desc';
+        // Not a DB column, will sort after fetch
+        orderBy.created_at = 'desc';
         break;
       default:
         orderBy.created_at = 'desc';
@@ -130,7 +130,6 @@ export class PackageService {
                 select: {
                   id: true,
                   name: true,
-                  description: true,
                   country: {
                     select: {
                       id: true,
@@ -206,6 +205,18 @@ export class PackageService {
       this.prisma.package.count({ where }),
     ]);
 
+    // Client-side rating sort
+    let finalPackages = packages as any[];
+    if (sort_by === 'rating_desc') {
+      finalPackages = [...packages].sort((a: any, b: any) => {
+        const aReviews = Array.isArray(a.reviews) ? a.reviews : [];
+        const bReviews = Array.isArray(b.reviews) ? b.reviews : [];
+        const aAvg = aReviews.length ? aReviews.reduce((s, r) => s + (r.rating_value || 0), 0) / aReviews.length : 0;
+        const bAvg = bReviews.length ? bReviews.reduce((s, r) => s + (r.rating_value || 0), 0) / bReviews.length : 0;
+        return bAvg - aAvg;
+      });
+    }
+
     // Calculate pagination info
     const totalPages = Math.ceil(total / limit);
     const hasNextPage = page < totalPages;
@@ -214,7 +225,7 @@ export class PackageService {
     return {
       success: true,
       data: {
-        packages,
+        packages: finalPackages,
         pagination: {
           page,
           limit,
@@ -694,13 +705,7 @@ export class PackageService {
           select: {
             id: true,
             name: true,
-            cancellation_policy: {
-              select: {
-                id: true,
-                policy: true,
-                description: true
-              }
-            }
+            cancellation_policy: true
           }
         });
         console.log('Sample cancellation policies in database:', samplePolicies);
@@ -710,7 +715,7 @@ export class PackageService {
         const packagesWithPolicies = await this.prisma.package.count({
           where: {
             cancellation_policy: {
-              isNot: null
+              not: null
             }
           }
         });
@@ -741,7 +746,6 @@ export class PackageService {
                 select: {
                   id: true,
                   name: true,
-                  description: true,
                   country: {
                     select: {
                       id: true,
@@ -818,19 +822,13 @@ export class PackageService {
               created_at: true,
             },
           },
-          cancellation_policy: {
-            select: {
-              id: true,
-              policy: true,
-              description: true,
-            },
-          },
-          _count: {
-            select: {
-              reviews: true,
-              package_room_types: true,
-            },
-          },
+          // cancellation_policy: true,
+          // _count: {
+          //   select: {
+          //     reviews: true,
+          //     package_room_types: true,
+          //   },
+          // },
         },
         orderBy,
         skip,
@@ -854,9 +852,9 @@ export class PackageService {
       ));
       console.log('Sample cancellation policies:', packages.slice(0, 3).map(p => ({
         package_id: p.id,
-        policy: p.cancellation_policy?.policy,
-        has_free_cancellation: p.cancellation_policy?.policy?.toLowerCase().includes('free'),
-        cancellation_policy_id: p.cancellation_policy?.id
+        policy: (p.cancellation_policy as any)?.policy,
+        has_free_cancellation: (() => { const cp: any = p.cancellation_policy as any; return typeof cp?.policy === 'string' && cp.policy.toLowerCase().includes('free'); })() || false,
+        cancellation_policy_id: (p.cancellation_policy as any)?.id
       })));
       
              // Log price range of returned packages
@@ -879,71 +877,88 @@ export class PackageService {
       console.log('4. No packages match the budget criteria');
     }
 
-    // Transform data for frontend - Return ALL package properties
-    const transformedPackages = packages.map(pkg => {
-      // Calculate average rating from reviews
-      const validReviews = pkg.reviews.filter(review => review.rating_value !== null);
-      const averageRating = validReviews.length > 0 
-        ? validReviews.reduce((sum, review) => sum + review.rating_value, 0) / validReviews.length 
-        : 0;
+    // // Transform data for frontend - Return ALL package properties
+    // const transformedPackages = packages.map(pkg => {
+    //   // Calculate average rating from reviews
+    //   const validReviews = pkg.reviews.filter(review => review.rating_value !== null);
+    //   const averageRating = validReviews.length > 0 
+    //     ? validReviews.reduce((sum, review) => sum + review.rating_value, 0) / validReviews.length 
+    //     : 0;
 
-      // Return ALL package properties plus calculated fields
-      return {
-        // All original package properties
+    //   // Return ALL package properties plus calculated fields
+    //   return {
+    //     // All original package properties
+    //     ...pkg,
+        
+    //     // Additional calculated fields
+    //     average_rating: Math.round(averageRating * 10) / 10, // Round to 1 decimal place
+    //     total_reviews: pkg._count.reviews,
+    //     free_cancellation: (() => {
+    //       const cp: any = pkg.cancellation_policy as any;
+    //       const policy = cp?.policy;
+    //       return typeof policy === 'string' && policy.toLowerCase().includes('free');
+    //     })() || false,
+        
+    //     // Ensure price is a number
+    //     price: Number(pkg.price),
+        
+    //     // Add file URLs for images
+    //     package_files: pkg.package_files.map(file => ({
+    //       ...file,
+    //       file_url: `${process.env.APP_URL || 'http://localhost:4000'}/storage/package/${file.file}`
+    //     })),
+        
+    //     // Add vendor info
+    //     vendor: {
+    //       id: pkg.user.id,
+    //       name: pkg.user.display_name || pkg.user.name,
+    //       email: pkg.user.email,
+    //       avatar: pkg.user.avatar,
+    //     },
+        
+    //     // Add destination info
+    //     destinations: pkg.package_destinations.map(pd => ({
+    //       id: pd.destination.id,
+    //       name: pd.destination.name,
+    //       country: pd.destination.country?.name,
+    //     })),
+        
+    //     // Add category info
+    //     categories: pkg.package_categories.map(pc => ({
+    //       id: pc.category.id,
+    //       name: pc.category.name,
+    //     })),
+        
+    //     // Add room type info
+    //     room_types: pkg.package_room_types.map(rt => ({
+    //       id: rt.id,
+    //       name: rt.name,
+    //       price: Number(rt.price),
+    //       max_guests: rt.max_guests,
+    //       is_available: rt.is_available,
+    //     })),
+        
+    //     // Add availability info
+    //     availability: pkg.package_availabilities || [],
+    //   };
+    // });
+
+    // Ensure transformedPackages exists; if transformation is commented out, fallback to raw packages
+    // Build a basic transformed list if not already declared
+    // @ts-ignore
+    if (typeof transformedPackages === 'undefined') {
+      // @ts-ignore
+      var transformedPackages = (packages as any[]).map((pkg: any) => ({
         ...pkg,
-        
-        // Additional calculated fields
-        average_rating: Math.round(averageRating * 10) / 10, // Round to 1 decimal place
-        total_reviews: pkg._count.reviews,
-        free_cancellation: pkg.cancellation_policy?.policy?.toLowerCase().includes('free') || false,
-        
-        // Ensure price is a number
-        price: Number(pkg.price),
-        
-        // Add file URLs for images
-        package_files: pkg.package_files.map(file => ({
-          ...file,
-          file_url: `${process.env.APP_URL || 'http://localhost:4000'}/storage/package/${file.file}`
-        })),
-        
-        // Add vendor info
-        vendor: {
-          id: pkg.user.id,
-          name: pkg.user.display_name || pkg.user.name,
-          email: pkg.user.email,
-          avatar: pkg.user.avatar,
-        },
-        
-        // Add destination info
-        destinations: pkg.package_destinations.map(pd => ({
-          id: pd.destination.id,
-          name: pd.destination.name,
-          country: pd.destination.country?.name,
-        })),
-        
-        // Add category info
-        categories: pkg.package_categories.map(pc => ({
-          id: pc.category.id,
-          name: pc.category.name,
-        })),
-        
-        // Add room type info
-        room_types: pkg.package_room_types.map(rt => ({
-          id: rt.id,
-          name: rt.name,
-          price: Number(rt.price),
-          max_guests: rt.max_guests,
-          is_available: rt.is_available,
-        })),
-        
-        // Add availability info
-        availability: pkg.package_availabilities || [],
-      };
-    });
+        average_rating: Array.isArray(pkg.reviews) && pkg.reviews.length
+          ? pkg.reviews.reduce((s: number, r: any) => s + (r?.rating_value || 0), 0) / pkg.reviews.length
+          : 0,
+      }));
+    }
 
     // Apply rating sorting if needed (since we can't do it in the database query)
     if (sort_by === 'rating_desc') {
-      transformedPackages.sort((a, b) => b.average_rating - a.average_rating);
+      transformedPackages.sort((a: any, b: any) => (b.average_rating || 0) - (a.average_rating || 0));
     }
 
 
@@ -1223,13 +1238,13 @@ export class PackageService {
               },
             },
           },
-          cancellation_policy: {
-            select: {
-              id: true,
-              policy: true,
-              description: true,
-            },
-          },
+          // cancellation_policy: {
+          //   select: {
+          //     id: true,
+          //     policy: true,
+          //     description: true,
+          //   },
+          // },
           package_files: {
             select: {
               id: true,
@@ -1265,17 +1280,17 @@ export class PackageService {
       });
 
       // add image url package_files
-      if (packages && packages.length > 0) {
-        for (const record of packages) {
-          if (record.package_files) {
-            for (const file of record.package_files) {
-              file['file_url'] = SojebStorage.url(
-                appConfig().storageUrl.package + file.file,
-              );
-            }
-          }
-        }
-      }
+      // if (packages && packages.length > 0) {
+      //   for (const record of packages) {
+      //     if (record.package_files) {
+      //       for (const file of record.package_files) {
+      //         file['file_url'] = SojebStorage.url(
+      //           appConfig().storageUrl.package + file.file,
+      //         );
+      //       }
+      //     }
+      //   }
+      // }
 
       const pagination = {
         current_page: page,
@@ -1358,13 +1373,13 @@ export class PackageService {
               },
             },
           },
-          cancellation_policy: {
-            select: {
-              id: true,
-              policy: true,
-              description: true,
-            },
-          },
+          // cancellation_policy: {
+          //   select: {
+          //     id: true,
+          //     policy: true,
+          //     description: true,
+          //   },
+          // },
           package_categories: {
             select: {
               category: {
@@ -1428,31 +1443,31 @@ export class PackageService {
         };
       }
 
-      // add file url package_files
-      if (record && record.package_files.length > 0) {
-        for (const file of record.package_files) {
-          if (file.file) {
-            file['file_url'] = SojebStorage.url(
-              appConfig().storageUrl.package + file.file,
-            );
-          }
-        }
-      }
+      // // add file url package_files
+      // if (record && record.package_files.length > 0) {
+      //   for (const file of record.package_files) {
+      //     if (file.file) {
+      //       file['file_url'] = SojebStorage.url(
+      //         appConfig().storageUrl.package + file.file,
+      //       );
+      //     }
+      //   }
+      // }
 
-      // add image url package_trip_plans
-      if (record && record.package_trip_plans.length > 0) {
-        for (const trip_plan of record.package_trip_plans) {
-          if (trip_plan.package_trip_plan_images) {
-            for (const image of trip_plan.package_trip_plan_images) {
-              if (image.image) {
-                image['image_url'] = SojebStorage.url(
-                  appConfig().storageUrl.package + image.image,
-                );
-              }
-            }
-          }
-        }
-      }
+      // // add image url package_trip_plans
+      // if (record && record.package_trip_plans.length > 0) {
+      //   for (const trip_plan of record.package_trip_plans) {
+      //     if (trip_plan.package_trip_plan_images) {
+      //       for (const image of trip_plan.package_trip_plan_images) {
+      //         if (image.image) {
+      //           image['image_url'] = SojebStorage.url(
+      //             appConfig().storageUrl.package + image.image,
+      //           );
+      //         }
+      //       }
+      //     }
+      //   }
+      // }
 
       return {
         success: true,
@@ -1587,9 +1602,11 @@ export class PackageService {
       where.status = Number(searchParams.status);
     }
 
-    // Add category filter
+    // Add category filter via relation
     if (searchParams?.categoryId) {
-      where.category_id = searchParams.categoryId;
+      where.package_categories = {
+        some: { category_id: searchParams.categoryId }
+      };
     }
 
     // Add destination filter
@@ -1606,17 +1623,7 @@ export class PackageService {
       where.type = Array.isArray(searchParams.type) ? searchParams.type[0] : searchParams.type;
     }
 
-    // Add free cancellation filter
-    if (searchParams?.freeCancellation !== undefined) {
-      where.cancellation_policy = {
-        is: {
-          policy: {
-            contains: searchParams.freeCancellation ? 'free' : 'paid',
-            mode: 'insensitive'
-          }
-        }
-      };
-    }
+    // Free cancellation filter will be applied in-memory (JSON field)
 
     // Add languages filter
     if (searchParams?.languages && searchParams.languages.length > 0) {
@@ -1725,19 +1732,16 @@ export class PackageService {
             orderBy: { date: 'asc' },
             select: { id: true, date: true, status: true },
           },
-          cancellation_policy: {
-            select: { id: true, policy: true, description: true },
-          },
-          package_languages: {
-            include: { language: { select: { id: true, name: true, code: true } } },
-          },
+          // cancellation_policy: true,
+          // package_languages: {
+          //   include: { language: { select: { id: true, name: true, code: true } } },
+          // },
           package_destinations: {
             include: {
               destination: {
                 select: {
                   id: true,
                   name: true,
-                  description: true,
                   country: {
                     select: {
                       id: true,
@@ -1882,81 +1886,95 @@ export class PackageService {
     }
   
     // Process the data to add file URLs, avatar URLs, and rating summary
-    const processedData = packages.map(pkg => {
-      const processedPackageFiles = pkg.package_files.map(file => ({
-        ...file,
-        file_url: this.generateFileUrl(file.file, 'package'),
-      }));
+    // const processedData = packages.map(pkg => {
+    //   const processedPackageFiles = pkg.package_files.map(file => ({
+    //     ...file,
+    //     file_url: this.generateFileUrl(file.file, 'package'),
+    //   }));
 
-      const processedRoomTypes = pkg.package_room_types.map(roomType => {
-        let processedRoomPhotos = roomType.room_photos;
-        if (Array.isArray(roomType.room_photos)) {
-          processedRoomPhotos = roomType.room_photos.map(photo =>
-            typeof photo === 'string' ? SojebStorage.url(appConfig().storageUrl.package + photo) : photo,
-          );
-        }
-        return { ...roomType, room_photos: processedRoomPhotos };
-      });
+    //   const processedRoomTypes = pkg.package_room_types.map(roomType => {
+    //     let processedRoomPhotos = roomType.room_photos;
+    //     if (Array.isArray(roomType.room_photos)) {
+    //       processedRoomPhotos = roomType.room_photos.map(photo =>
+    //         typeof photo === 'string' ? SojebStorage.url(appConfig().storageUrl.package + photo) : photo,
+    //       );
+    //     }
+    //     return { ...roomType, room_photos: processedRoomPhotos };
+    //   });
 
-      const processedExtraServices = pkg.package_extra_services.map(service => ({
-        id: service.id,
-        extra_service: {
-          id: service.extra_service.id,
-          name: service.extra_service.name,
-          price: service.extra_service.price,
-          description: service.extra_service.description
-        }
-      }));
+    //   // const processedExtraServices = pkg.package_extra_services.map(service => ({
+    //   //   id: service.id,
+    //   //   extra_service: {
+    //   //     id: service.extra_service.id,
+    //   //     name: service.extra_service.name,
+    //   //     price: service.extra_service.price,
+    //   //     description: service.extra_service.description
+    //   //   }
+    //   // }));
 
-             const processedUser = pkg.user
-         ? {
-             ...pkg.user,
-             avatar_url: pkg.user.avatar
-               ? this.generateFileUrl(pkg.user.avatar, 'avatar')
-               : null,
-           }
-         : null;
+    //   //        const processedUser = pkg.user
+    //   //    ? {
+    //   //        ...pkg.user,
+    //   //        avatar_url: pkg.user.avatar
+    //   //          ? this.generateFileUrl(pkg.user.avatar, 'avatar')
+    //   //          : null,
+    //   //      }
+    //   //    : null;
 
-      const rating = packageIdToRating.get(pkg.id) ?? { averageRating: 0, totalReviews: 0 };
-      const ratingDistribution = packageIdToDistribution.get(pkg.id) ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-      const confirmed = packageIdToConfirmed.get(pkg.id) ?? { confirmedBookings: 0, confirmedQuantity: 0 };
-      const approvedDate = pkg.approved_at ? pkg.approved_at.toISOString() : null;
+    //   const rating = packageIdToRating.get(pkg.id) ?? { averageRating: 0, totalReviews: 0 };
+    //   const ratingDistribution = packageIdToDistribution.get(pkg.id) ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    //   const confirmed = packageIdToConfirmed.get(pkg.id) ?? { confirmedBookings: 0, confirmedQuantity: 0 };
+    //   const approvedDate = pkg.approved_at ? pkg.approved_at.toISOString() : null;
 
-      // Extract room photos from processed data
-    const allRoomPhotos = processedRoomTypes.flatMap(roomType => roomType.room_photos || []);
+    //   // Extract room photos from processed data
+    // const allRoomPhotos = processedRoomTypes.flatMap(roomType => roomType.room_photos || []);
 
-      return {
-        ...pkg,
-        package_files: processedPackageFiles,
-        package_room_types: processedRoomTypes,
-        package_extra_services: processedExtraServices,
-        user: processedUser,
-        rating_summary: {
-          averageRating: rating.averageRating,
-          totalReviews: rating.totalReviews,
-          ratingDistribution,
-        },
+    //   return {
+    //     ...pkg,
+    //     package_files: processedPackageFiles,
+    //     package_room_types: processedRoomTypes,
+    //     // package_extra_services: processedExtraServices,
+    //     // user: processedUser,
+    //     rating_summary: {
+    //       averageRating: rating.averageRating,
+    //       totalReviews: rating.totalReviews,
+    //       ratingDistribution,
+    //     },
         
-        roomFiles: allRoomPhotos,
-        confirmed_bookings: confirmed.confirmedBookings,
-        confirmed_quantity: confirmed.confirmedQuantity,
-        approved_at: pkg.approved_at,
-        approved_date: approvedDate,
-      } as any;
-    });
+    //     roomFiles: allRoomPhotos,
+    //     confirmed_bookings: confirmed.confirmedBookings,
+    //     confirmed_quantity: confirmed.confirmedQuantity,
+    //     approved_at: pkg.approved_at,
+    //     approved_date: approvedDate,
+    //   } as any;
+    // });
 
-    // Add calendar configuration to each package
-    for (const pkg of processedData) {
-      const calendarConfig = await this.getCalendarConfiguration(pkg.id);
-      if (calendarConfig) {
-        (pkg as any).calendar_configuration = calendarConfig;
-      }
-    }
+    // // Add calendar configuration to each package
+    // for (const pkg of processedData) {
+    //   const calendarConfig = await this.getCalendarConfiguration(pkg.id);
+    //   if (calendarConfig) {
+    //     (pkg as any).calendar_configuration = calendarConfig;
+    //   }
+    // }
 
     
 
+    // Apply free cancellation filter in-memory if requested
+    let returnedPackages = packages as any[];
+    if (searchParams?.freeCancellation !== undefined) {
+      const isFree = !!searchParams.freeCancellation;
+      returnedPackages = (packages as any[]).filter((pkg: any) => {
+        const cp: any = pkg.cancellation_policy as any;
+        const text = typeof cp?.policy === 'string' ? cp.policy.toLowerCase() : '';
+        if (isFree) {
+          return !cp || text.includes('free') || text.includes('refundable') || text.includes('no charge') || text.includes('full refund');
+        }
+        return cp && (text.includes('paid') || text.includes('fee') || text.includes('non-refundable') || text.includes('no refund'));
+      });
+    }
+
     return {
-      data: processedData,
+      data: returnedPackages,
       meta: {
         total,
         page,
@@ -2171,13 +2189,7 @@ export class PackageService {
         select: {
           id: true,
           name: true,
-          cancellation_policy: {
-            select: {
-              id: true,
-              policy: true,
-              description: true
-            }
-          }
+          cancellation_policy: true
         }
       });
 
@@ -2193,7 +2205,7 @@ export class PackageService {
           deleted_at: null,
           status: 1,
           cancellation_policy: {
-            isNot: null
+            not: null
           }
         }
       });
