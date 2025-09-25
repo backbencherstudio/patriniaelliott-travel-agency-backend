@@ -585,12 +585,37 @@ export class BookingService {
               },
             });
             await this.updateVendorWallet(transaction.booking_id);
+            const booking = await this.prisma.booking.findUnique({
+              where: {
+                id: transaction.booking_id
+              },
+              include: {
+                booking_items: true
+              }
+            })
+            const package_data = await this.prisma.package.findUnique({
+              where: { id: booking.booking_items[0].package_id }
+            })
+            const payment_method = await this.prisma.userCard.findUnique({
+              where: {
+                stripe_payment_method_id: payment_method_id
+              }
+            })
+
+            const data = {
+              package_details: package_data,
+              booking_details: {
+                id: booking.id,
+                date: booking.created_at,
+                total: paymentIntent.amount / 100,
+                payment_method: payment_method.brand
+              }
+            }
 
             return {
               success: true,
               message: 'Payment confirmed successfully',
-              booking_id: transaction.booking_id,
-              amount_paid: paymentIntent.amount / 100,
+              data
             };
           } else {
             throw new Error(`PaymentIntent not ready to capture. Status: ${capturePayment.status}`);
