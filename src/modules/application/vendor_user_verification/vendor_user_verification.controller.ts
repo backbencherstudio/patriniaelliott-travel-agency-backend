@@ -63,7 +63,12 @@ export class VendorUserVerificationController {
   ) {
     try {
       const user_id = req.user.userId;
-      return await this.vendorUserVerificationService.create(body, user_id, image);
+      const docResp = await this.vendorUserVerificationService.create(body, user_id, image);
+      const userPackages = await this.vendorUserVerificationService.getUserPackages(user_id);
+      return {
+        ...docResp,
+        user_packages: userPackages,
+      };
     } catch (error) {
       return {
         success: false,

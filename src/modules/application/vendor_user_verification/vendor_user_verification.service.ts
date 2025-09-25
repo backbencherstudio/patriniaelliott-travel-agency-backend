@@ -85,6 +85,39 @@ export class VendorUserVerificationService {
     }
   }
 
+  async getUserPackages(userId: string) {
+    const packages = await this.prisma.package.findMany({
+      where: { user_id: userId, deleted_at: null },
+      orderBy: { created_at: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        approved_at: true,
+        price: true,
+        type: true,
+        created_at: true,
+        package_files: {
+          select: { id: true, file: true, type: true, sort_order: true },
+          orderBy: { sort_order: 'asc' },
+        },
+      },
+    });
+
+    // Attach file URLs
+    for (const pkg of packages) {
+      if (pkg.package_files && (pkg.package_files as any[]).length > 0) {
+        for (const f of pkg.package_files as any[]) {
+          if (f.file) {
+            f['file_url'] = SojebStorage.url(appConfig().storageUrl.package + f.file);
+          }
+        }
+      }
+    }
+
+    return packages;
+  }
+
   // Helper method to generate file URLs
   private generateFileUrl(filename: string, type: string): string {
     const storagePath = appConfig().storageUrl[type] || appConfig().storageUrl.package;
