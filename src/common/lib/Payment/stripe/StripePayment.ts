@@ -45,6 +45,10 @@ export class StripePayment {
     const account = await Stripe.accounts.retrieve(account_id);
     return account
   }
+  static async RefundableAmount(charge_id: string) {
+    const account = await Stripe.charges.retrieve(charge_id);
+    return account
+  }
 
   static async createPaymentMethod({
     card,
@@ -108,7 +112,9 @@ export class StripePayment {
   static async createRefund({ amount, payment_intent }: { payment_intent: string, amount: number }) {
     return await Stripe.refunds.create({
       payment_intent,
-      amount: amount * 100,
+      amount: amount,
+      reverse_transfer: true,
+      refund_application_fee: true,
       reason: 'requested_by_customer'
     })
   }
@@ -261,6 +267,12 @@ export class StripePayment {
       currency,
       destination: account_id
     });
+  }
+
+  static balance(account_id: string){
+    return Stripe.balance.retrieve({
+      stripeAccount: account_id
+    })
   }
 
   /**

@@ -238,29 +238,51 @@ model UserPaymentMethod {
 }
 
 model PaymentTransaction {
-  id               String    @id @default(cuid())
-  created_at       DateTime  @default(now())
-  updated_at       DateTime  @default(now())
-  deleted_at       DateTime?
-  store_id         String?
-  user_id          String?
-  booking_id       String?
-  order_id         String?
-  type             String?   @default("order")
-  withdraw_via     String?   @default("wallet")
-  provider         String?
-  reference_number String?   @unique
-  status           String?   @default("pending")
-  raw_status       String?
-  amount           Decimal?
-  currency         String?
-  paid_amount      Decimal?
-  paid_currency    String?
-  booking          Booking?  @relation(fields: [booking_id], references: [id])
-  user             User?     @relation(fields: [user_id], references: [id])
+  id                String              @id @default(cuid())
+  created_at        DateTime            @default(now())
+  updated_at        DateTime            @default(now())
+  deleted_at        DateTime?
+  store_id          String?
+  user_id           String?
+  booking_id        String?
+  order_id          String?
+  type              String?             @default("order")
+  withdraw_via      String?             @default("wallet")
+  provider          String?
+  reference_number  String?             @unique
+  status            String?             @default("pending")
+  raw_status        String?
+  amount            Decimal?
+  currency          String?
+  paid_amount       Decimal?
+  paid_currency     String?
+  booking           Booking?            @relation(fields: [booking_id], references: [id])
+  user              User?               @relation(fields: [user_id], references: [id])
+  RefundTransaction RefundTransaction[]
 
   @@unique([reference_number, type, status])
   @@map("payment_transactions")
+}
+
+model RefundTransaction {
+  id                     String  @id @default(cuid())
+  payment_transaction_id String
+  status                 String  @default("requested")
+  stripe_refund_id       String? @unique
+  amount                 Float?
+  currency               String?
+
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+  // Track when each status happened
+  requested_at  DateTime? @default(now())
+  reviewed_at   DateTime?
+  processing_at DateTime?
+  completed_at  DateTime?
+  failed_at     DateTime?
+  canceled_at   DateTime?
+
+  paymentTransaction PaymentTransaction @relation(fields: [payment_transaction_id], references: [id])
 }
 
 model Message {

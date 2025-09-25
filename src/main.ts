@@ -5,7 +5,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { join } from 'path';
-// import express from 'express';
+
 // internal imports
 import { AppModule } from './app.module';
 import appConfig from './config/app.config';
@@ -17,9 +17,6 @@ async function bootstrap() {
     rawBody: true,
   });
 
-  // Handle raw body for webhooks
-  // app.use('/payment/stripe/webhook', express.raw({ type: 'application/json' }));
-
   app.setGlobalPrefix('api');
   app.enableCors({
     origin: '*',
@@ -27,35 +24,30 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
   app.use(helmet());
-  // Serve static files from public directory with proper configuration
   app.useStaticAssets(join(__dirname, '..', 'public'), {
     index: false,
     prefix: '/public',
     setHeaders: (res, path) => {
-      // Set proper headers for images
       if (path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.png') || path.endsWith('.gif') || path.endsWith('.webp')) {
         res.setHeader('Content-Type', 'image/' + path.split('.').pop());
         res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
       }
     },
   });
-  
-  // Note: Static file serving for /storage routes is handled by the specific route below
-  
-  // Add specific route for static files to ensure they work with cloudflare tunnels
+
   app.use('/storage', (req, res, next) => {
     try {
       const filePath = join(__dirname, '..', 'public', req.path);
-      
-      console.log(`🔍 Static file requested: ${req.path}`);
-      console.log(`📁 Full path: ${filePath}`);
-      console.log(`🌐 User-Agent: ${req.get('User-Agent')}`);
-      console.log(`🔗 Referer: ${req.get('Referer')}`);
-      
+     
+      console.log(`Static file requested: ${req.path}`);
+      console.log(`Full path: ${filePath}`);
+      console.log(`User-Agent: ${req.get('User-Agent')}`);
+      console.log(`Referer: ${req.get('Referer')}`);
+     
       // Check if file exists
       if (require('fs').existsSync(filePath)) {
-        console.log('✅ File exists, serving...');
-        
+        console.log('File exists, serving...');
+       
         // Set proper headers for images
         if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg') || filePath.endsWith('.png') || filePath.endsWith('.gif') || filePath.endsWith('.webp')) {
           const ext = filePath.split('.').pop()?.toLowerCase();
@@ -64,13 +56,13 @@ async function bootstrap() {
           res.setHeader('Access-Control-Allow-Origin', '*');
           res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
           res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-          
+         
           // Handle preflight requests
           if (req.method === 'OPTIONS') {
             return res.status(200).end();
           }
         }
-        
+       
         return res.sendFile(filePath, (err) => {
           if (err) {
             console.error('❌ Error serving file:', err);
@@ -91,7 +83,7 @@ async function bootstrap() {
         });
       }
     } catch (error) {
-      console.error('❌ Error in static file handler:', error);
+      console.error('Error in static file handler:', error);
       return res.status(500).json({
         success: false,
         message: 'Internal server error',
@@ -99,8 +91,8 @@ async function bootstrap() {
       });
     }
   });
-  
-
+ 
+ 
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,
