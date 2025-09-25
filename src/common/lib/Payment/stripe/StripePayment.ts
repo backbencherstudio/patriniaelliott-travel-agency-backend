@@ -269,6 +269,12 @@ export class StripePayment {
     });
   }
 
+  static balance(account_id: string){
+    return Stripe.balance.retrieve({
+      stripeAccount: account_id
+    })
+  }
+
   /**
    * Create stripe hosted checkout session
    * @param customer

@@ -171,6 +171,16 @@ export class StripeService {
                 where: { user_id: user_id },
             });
 
+            // const vendorPaymentMethod = await this.prisma.vendorPaymentMethod.findFirst({
+            //     where: {
+            //         user_id: user_id,
+            //         payment_method: 'stripe'
+            //     }
+            // })
+
+            // await StripePayment.transferBalance({ account_id: vendorPaymentMethod.account_id, amount: 233750, currency: 'usd' })
+
+            // const stripe_balance = await StripePayment.balance(vendorPaymentMethod.account_id)
 
             if (!wallet) {
                 throw new NotFoundException('Wallet not found');
@@ -178,7 +188,7 @@ export class StripeService {
             return {
                 success: true,
                 message: 'Ballance fetched successfully.',
-                data: wallet
+                data: wallet,
             }
         } catch (error) {
             if (error instanceof HttpException) {
@@ -207,8 +217,6 @@ export class StripeService {
         if (!vendor || !vendor.account_id) {
             throw new BadRequestException("Vendor does not have a Stripe account linked.");
         }
-
-        // const transfer = await StripePayment.transferBalance({ account_id: vendor.account_id, amount: 1000, currency: 'usd' })
 
 
         const payout = await StripePayment.createPayout(vendor.account_id, amount, 'usd')
