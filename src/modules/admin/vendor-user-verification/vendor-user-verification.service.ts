@@ -16,7 +16,30 @@ export class VendorUserVerificationAdminService {
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          user: { select: { id: true, name: true, email: true, type: true } },
+          user: { 
+            select: { 
+              id: true, 
+              name: true, 
+              email: true, 
+              type: true,
+              packages: {
+                orderBy: { created_at: 'desc' },
+                select: {
+                  id: true,
+                  name: true,
+                  price: true,
+                  type: true,
+                  status: true,
+                  approved_at: true,
+                  created_at: true,
+                  package_files: {
+                    select: { id: true, file: true, type: true, sort_order: true },
+                    orderBy: { sort_order: 'asc' },
+                  },
+                },
+              },
+            } 
+          },
         },
       }),
       this.prisma.userDocument.count({ where }),
