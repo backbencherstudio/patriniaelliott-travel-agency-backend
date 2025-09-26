@@ -18,11 +18,7 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('api');
-  app.enableCors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  });
+  app.enableCors();
   app.use(helmet());
   app.useStaticAssets(join(__dirname, '..', 'public'), {
     index: false,
