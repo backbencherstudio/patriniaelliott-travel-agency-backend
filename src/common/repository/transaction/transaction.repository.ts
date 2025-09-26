@@ -1,6 +1,14 @@
+import { NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+
+type metadata = {
+  vendor_id: string;
+  user_id: string;
+  invoice_number: string;
+  booking_id: string;
+}
 
 export class TransactionRepository {
   /**
@@ -47,6 +55,67 @@ export class TransactionRepository {
    * Update transaction
    * @returns
    */
+
+  static async refunded(id: string, status: string, metadata: metadata, amount_refunded = 0, amount = 0) {
+    const payment = await prisma.paymentTransaction.findUnique({
+      where: {
+        reference_number: `${id}_refund`,
+        type: "refund",
+      },
+      include: {
+        RefundTransaction: {
+          select: {
+            id: true
+          }
+        }
+      }
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found.')
+    }
+
+    const payload: any = {}
+
+    if (status === 'processing') {
+      payload.processing_at = new Date()
+    } else if (status === 'success') {
+      let refund_amount = 0
+
+      if (amount !== amount_refunded) {
+        refund_amount = amount_refunded / 100
+      } else {
+        const commission_rate = 15;
+        const commission_amount = Number(amount_refunded * commission_rate) / 100;
+        refund_amount = (amount_refunded - commission_amount) / 100;
+      }
+      await prisma.vendorWallet.update({
+        where: { user_id: metadata.vendor_id },
+        data: {
+          balance: {
+            decrement: refund_amount,
+          },
+        },
+      });
+      payload.completed_at = new Date()
+    } else {
+      payload.failed_at = new Date()
+    }
+
+    const refund_id = payment.RefundTransaction?.[0].id
+
+    if (!refund_id) {
+      throw new NotFoundException('Refund transaction not found for this payment.');
+    }
+
+    await prisma.refundTransaction.update({
+      where: {
+        id: refund_id
+      },
+      data: payload
+    })
+  }
+
   static async updateTransaction({
     reference_number,
     status = 'pending',

@@ -585,12 +585,37 @@ export class BookingService {
               },
             });
             await this.updateVendorWallet(transaction.booking_id);
+            const booking = await this.prisma.booking.findUnique({
+              where: {
+                id: transaction.booking_id
+              },
+              include: {
+                booking_items: true
+              }
+            })
+            const package_data = await this.prisma.package.findUnique({
+              where: { id: booking.booking_items[0].package_id }
+            })
+            const payment_method = await this.prisma.userCard.findUnique({
+              where: {
+                stripe_payment_method_id: payment_method_id
+              }
+            })
+
+            const data = {
+              package_details: package_data,
+              booking_details: {
+                id: booking.id,
+                date: booking.created_at,
+                total: paymentIntent.amount / 100,
+                payment_method: payment_method.brand
+              }
+            }
 
             return {
               success: true,
               message: 'Payment confirmed successfully',
-              booking_id: transaction.booking_id,
-              amount_paid: paymentIntent.amount / 100,
+              data
             };
           } else {
             throw new Error(`PaymentIntent not ready to capture. Status: ${capturePayment.status}`);
@@ -709,6 +734,22 @@ export class BookingService {
         }
       }))
 
+      if (!booking.payment_reference_number) {
+        throw new BadRequestException('Payment not confirm yet.')
+      }
+
+      const isPaymentConfirm = await this.prisma.paymentTransaction.findFirst({
+        where: {
+          type: 'booking',
+          status: 'succeeded',
+          booking_id
+        }
+      })
+
+      if (!isPaymentConfirm) {
+        throw new BadRequestException('Payment not confirm yet.')
+      }
+
       if (alreadyRequested) {
         throw new BadRequestException('Duplicate refund request.')
       }
@@ -722,6 +763,11 @@ export class BookingService {
           booking_id,
           user_id,
           reference_number: `${booking.payment_reference_number}_refund`
+        }
+      })
+      await this.prisma.refundTransaction.create({
+        data: {
+          payment_transaction_id: refundReq.id,
         }
       })
       return {
