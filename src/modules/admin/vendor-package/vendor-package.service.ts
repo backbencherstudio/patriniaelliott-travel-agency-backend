@@ -613,6 +613,22 @@ export class VendorPackageService {
 
     const vendorPackage = await this.prisma.package.create({ data });
 
+    // Compute and persist computed_price for vendor-created package
+    try {
+      const basePrice = Number((createVendorPackageDto as any)?.price ?? 0);
+      const discountPercentRaw = (createVendorPackageDto as any)?.discount ?? 0;
+      const discountPercent = Math.max(0, Math.min(100, Number(discountPercentRaw) || 0));
+      const fee = Number((createVendorPackageDto as any)?.service_fee ?? 0) || 0;
+      const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+      const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+      await this.prisma.package.update({
+        where: { id: vendorPackage.id },
+        data: { computed_price },
+      });
+    } catch (e) {
+      console.error('Failed to compute/persist computed_price (vendor create):', e?.message || e);
+    }
+
     return {
       success: true,
       data: vendorPackage,
@@ -655,6 +671,19 @@ export class VendorPackageService {
         },
         data: updateVendorPackageDto
       });
+
+      // Recompute and persist computed_price after vendor update
+      try {
+        const basePrice = Number((updateVendorPackageDto?.price != null ? updateVendorPackageDto.price : (packageData as any).price) ?? 0);
+        const discountRaw = (updateVendorPackageDto?.discount != null ? updateVendorPackageDto.discount : (packageData as any).discount) ?? 0;
+        const discountPercent = Math.max(0, Math.min(100, Number(discountRaw) || 0));
+        const fee = Number((updateVendorPackageDto?.service_fee != null ? updateVendorPackageDto.service_fee : (packageData as any).service_fee) ?? 0) || 0;
+        const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+        const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+        await this.prisma.package.update({ where: { id: updatedPackage.id }, data: { computed_price } });
+      } catch (e) {
+        console.error('Failed to compute/persist computed_price (vendor update):', e?.message || e);
+      }
   
       return {
         success: true,
@@ -893,7 +922,7 @@ export class VendorPackageService {
           rootTripPlanPayload = {
             title: rawPackageData.title || 'Trip Plan 1',
             description: '',
-            time: rawPackageData.time || rawPackageData.meetingPoint || '',
+            time: rawPackageData.time ? String(rawPackageData.time) : rawPackageData.meetingPoint ? String(rawPackageData.meetingPoint) : '',
             ticket_free: parsedTripPlan || [],
             sort_order: 0,
           };
@@ -901,7 +930,7 @@ export class VendorPackageService {
           rootTripPlanPayload = {
             title: rawPackageData.title || 'Trip Plan 1',
             description: '',
-            time: rawPackageData.time || rawPackageData.meetingPoint || '',
+            time: rawPackageData.time ? String(rawPackageData.time) : rawPackageData.meetingPoint ? String(rawPackageData.meetingPoint) : '',
             ticket_free: [],
             sort_order: 0,
           };
@@ -965,7 +994,7 @@ export class VendorPackageService {
 
       // Coerce numeric scalars to correct types where needed
       const numericFields: Array<keyof typeof cleanPackageData> = [
-        'discount', 'bathrooms', 'max_guests', 'size_sqm', 'min_capacity', 'max_capacity', 'latitude', 'longitude'
+        'discount', 'service_fee', 'bathrooms', 'max_guests', 'size_sqm', 'min_capacity', 'max_capacity', 'latitude', 'longitude'
       ] as any;
       numericFields.forEach((field) => {
         if ((cleanPackageData as any)[field] != null && (cleanPackageData as any)[field] !== '') {
@@ -1051,7 +1080,7 @@ export class VendorPackageService {
             create: tripPlansArray.map((tripPlan: any, index: number) => ({
               title: tripPlan.title || `Trip Plan ${index + 1}`,
               description: tripPlan.description || '',
-              time: tripPlan.time || tripPlan.meetingPoint || '',
+              time: tripPlan.time ? String(tripPlan.time) : tripPlan.meetingPoint ? String(tripPlan.meetingPoint) : '',
               ticket_free: (() => {
                 const tf = tripPlan.ticket_free ?? tripPlan.tripPlan ?? [];
                 return typeof tf === 'string' ? tf : JSON.stringify(tf);
@@ -1329,6 +1358,18 @@ export class VendorPackageService {
         countryField: data.country,
         dataKeys: Object.keys(data)
       });
+
+      // Compute computed_price before create
+      try {
+        const basePrice = Number((cleanPackageData as any)?.price ?? 0);
+        const discountPercent = Math.max(0, Math.min(100, Number((cleanPackageData as any)?.discount ?? 0) || 0));
+        const fee = Number((cleanPackageData as any)?.service_fee ?? 0) || 0;
+        const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+        const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+        (data as any).computed_price = computed_price;
+      } catch (e) {
+        console.error('Failed to precompute computed_price (vendor createWithFiles):', e?.message || e);
+      }
 
       // Create package with nested data
       console.log('Final data being sent to Prisma:', JSON.stringify(data, null, 2));
@@ -1810,6 +1851,18 @@ export class VendorPackageService {
           user: true
         }
       });
+
+      // Recompute and persist computed_price after updateWithFiles
+      try {
+        const basePrice = Number((normalizedPackageData as any)?.price ?? (result as any).price ?? 0);
+        const discountPercent = Math.max(0, Math.min(100, Number((normalizedPackageData as any)?.discount ?? (result as any).discount ?? 0) || 0));
+        const fee = Number((normalizedPackageData as any)?.service_fee ?? (result as any).service_fee ?? 0) || 0;
+        const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+        const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+        await this.prisma.package.update({ where: { id: result.id }, data: { computed_price } });
+      } catch (e) {
+        console.error('Failed to compute/persist computed_price (vendor updateWithFiles):', e?.message || e);
+      }
 
       // Post-process to attach public URLs using existing image function
       const processedResult = {

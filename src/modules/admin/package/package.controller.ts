@@ -295,9 +295,16 @@ export class PackageController {
         createPackageDto,
         files,
       );
-      // Enrich with image URLs like in findOne/findAll
+      // Enrich with image URLs like in findOne/findAll and attach computed price
       if (record && record.success && record.data) {
         record.data = this.addImageUrls(record.data);
+        const pkg: any = record.data as any;
+        const basePrice = Number(pkg.price ?? 0);
+        const discountPercent = Number(pkg.discount ?? 0);
+        const fee = Number(pkg.service_fee ?? 0);
+        const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+        const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+        record.data = { ...pkg, computed_price } as any;
       }
       return record;
     } catch (error) {

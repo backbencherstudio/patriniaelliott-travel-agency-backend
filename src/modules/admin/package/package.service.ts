@@ -61,7 +61,9 @@ export class PackageService {
       if ((createPackageDto as any).discount != null) {
         const discountNum = Number((createPackageDto as any).discount);
         if (!Number.isNaN(discountNum)) {
-          data.discount = discountNum;
+          // Clamp discount to 0..100 as it represents percentage
+          const clamped = Math.max(0, Math.min(100, Math.trunc(discountNum)));
+          data.discount = clamped;
         }
       }
       if (createPackageDto.cancellation_policy) {
@@ -129,6 +131,21 @@ export class PackageService {
           user_id: user_id,
         },
       });
+
+      // Compute and persist computed_price
+      try {
+        const basePrice = Number(data.price ?? 0);
+        const discountPercent = Number(data.discount ?? 0);
+        const fee = Number(data.service_fee ?? 0);
+        const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+        const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+        await this.prisma.package.update({
+          where: { id: record.id },
+          data: { computed_price },
+        });
+      } catch (e) {
+        console.error('Failed to compute/persist computed_price on create:', e?.message || e);
+      }
 
       // create and link PackagePolicy if provided (schema: PackagePolicy { package_policies Json?, description String? })
       try {
@@ -505,6 +522,8 @@ export class PackageService {
           name: true,
           description: true,
           price: true,
+          computed_price: true,
+          discount: true,
           duration: true,
           min_capacity: true,
           max_capacity: true,
@@ -587,9 +606,19 @@ export class PackageService {
       });
 
       // Note: Image URLs are now generated in the controller using addImageUrls method
+      // Attach computed price per item: price - price*(discount/100) + service_fee
+      const withComputed = packages.map((pkg: any) => {
+        const basePrice = Number(pkg.price ?? 0);
+        const discountPercent = Number(pkg.discount ?? 0);
+        const fee = Number(pkg.service_fee ?? 0);
+        const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+        const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+        return { ...pkg, computed_price };
+      });
+
       return {
         success: true,
-        data: packages,
+        data: withComputed,
       };
     } catch (error) {
       return {
@@ -620,6 +649,8 @@ export class PackageService {
           name: true,
           description: true,
           price: true,
+          computed_price: true,
+          discount: true,
           duration: true,
           duration_type: true,
           min_capacity: true,
@@ -773,9 +804,16 @@ export class PackageService {
         }
       }
 
+      // Attach computed price: price - price*(discount/100) + service_fee
+      const basePrice = Number((record as any).price ?? 0);
+      const discountPercent = Number((record as any).discount ?? 0);
+      const fee = Number((record as any).service_fee ?? 0);
+      const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+      const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+
       return {
         success: true,
-        data: record,
+        data: { ...record, computed_price },
       };
     } catch (error) {
       return {
@@ -860,6 +898,21 @@ export class PackageService {
           updated_at: DateHelper.now(),
         },
       });
+
+      // Recompute and persist computed_price after update
+      try {
+        const basePrice = Number((data.price != null ? data.price : (existing_package as any).price) ?? 0);
+        const discountPercent = Number((data.discount != null ? data.discount : (existing_package as any).discount) ?? 0);
+        const fee = Number((data.service_fee != null ? data.service_fee : (existing_package as any).service_fee) ?? 0);
+        const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+        const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+        await this.prisma.package.update({
+          where: { id: record.id },
+          data: { computed_price },
+        });
+      } catch (e) {
+        console.error('Failed to compute/persist computed_price on update:', e?.message || e);
+      }
 
       // delete package images which is not included in updatePackageDto.package_files
       if (updatePackageDto.package_files) {

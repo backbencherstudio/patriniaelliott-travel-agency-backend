@@ -379,6 +379,7 @@ model Package {
   name                   String
   description            String
   price                  Decimal
+  computed_price         Decimal?
   duration               Int?
   duration_type          String?
   min_capacity           Int?      @default(1)
