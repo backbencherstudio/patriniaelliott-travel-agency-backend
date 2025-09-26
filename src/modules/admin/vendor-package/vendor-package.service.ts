@@ -2076,6 +2076,25 @@ export class VendorPackageService {
         },
       });
 
+      // Build rating distribution (1..5) with counts
+      const distributionAgg = await this.prisma.review.groupBy({
+        by: ['rating_value'],
+        where: {
+          package_id: packageId,
+          deleted_at: null,
+          status: 1,
+        },
+        _count: { rating_value: true },
+      });
+
+      const ratingDistribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      for (const stat of distributionAgg as any[]) {
+        const bucket = Math.round(stat.rating_value as number);
+        if (bucket >= 1 && bucket <= 5) {
+          ratingDistribution[bucket] = stat._count?.rating_value ?? 0;
+        }
+      }
+
              // Add avatar URLs
        for (const review of reviews) {
          if (review.user && review.user.avatar) {
@@ -2096,6 +2115,7 @@ export class VendorPackageService {
           summary: {
             averageRating: averageRating._avg.rating_value || 0,
             totalReviews: averageRating._count.rating_value || 0,
+            ratingDistribution,
           },
         },
       };
