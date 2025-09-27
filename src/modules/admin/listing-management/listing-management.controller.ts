@@ -130,4 +130,15 @@ export class ListingManagementController {
       };
     }
   }
+
+  // Update package status
+  // @Roles(Role.ADMIN)
+  // @ApiResponse({ description: 'Update a package' })
+  // @Patch('approve-property/')
+  // async update(@Param('id') id: string, @Body() updateListingManagementDto: UpdateListingManagementDto) {
+  //   try {
+  //     const result = await this.listingManagementService.update(id, updateListingManagementDto);
+  //     return result;
+  //   }
+  // }
 }
