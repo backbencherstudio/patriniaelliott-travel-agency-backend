@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { Request } from 'express';
@@ -13,12 +13,12 @@ import { WithdrawDto } from './dto/withdraw.dto';
 @ApiTags('Stripe')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN, Role.VENDOR)
-@Controller('/payments/stripe')
+@Controller('/')
 export class StripeController {
     constructor(private stripeService: StripeService) { }
 
     @ApiOperation({ summary: 'Create stripe account' })
-    @Post('/create-account')
+    @Post('/payments/stripe/create-account')
     async create(
         @Req() req: Request,
         @Body() body: CreateAccountDto,
@@ -28,24 +28,25 @@ export class StripeController {
     }
 
     @ApiOperation({ summary: 'Get stripe accounts' })
-    @Get()
+    @Get('/payments/accounts')
     async index(
         @Req() req: Request,
     ) {
         const user_id = req.user.userId;
         return this.stripeService.index(user_id)
     }
+
     @ApiOperation({ summary: 'Get stripe accounts' })
-    @Get('/ballance')
+    @Get('/payments/transactions/ballance')
     async getBallance(
-        @Req() req: Request,
-        @Param('id') id: string
+        @Req() req: Request
     ) {
         const user_id = req.user.userId;
         return this.stripeService.getBallance(user_id)
     }
-    @ApiOperation({ summary: 'Get stripe accounts' })
-    @Get('/:id')
+
+    @ApiOperation({ summary: 'Get account by id' })
+    @Get('/payments/accounts/:id')
     async getAccountByID(
         @Req() req: Request,
         @Param('id') id: string
@@ -55,7 +56,7 @@ export class StripeController {
     }
 
     @ApiOperation({ summary: 'Get Onboarding account' })
-    @Get('/onboarding-link/:stripe_account_id')
+    @Get('/payments/stripe/onboarding-link/:stripe_account_id')
     async onboarding(
         @Req() req: Request,
         @Param('stripe_account_id') stripe_account_id: string
@@ -65,7 +66,7 @@ export class StripeController {
     }
 
     @ApiOperation({ summary: 'Get stripe account status' })
-    @Get('/:id/status')
+    @Get('/payments/:id/status')
     async accountStatus(
         @Req() req: Request,
         @Param('id') id: string
@@ -74,14 +75,53 @@ export class StripeController {
         return this.stripeService.accountStatus(user_id, id)
     }
 
+    @ApiOperation({ summary: 'Get transactions' })
+    @Get('/payments/transactions')
+    async transactions(
+        @Req() req: Request,
+        @Query() query: any
+    ) {
+        const user_id = req.user.userId;
+        return this.stripeService.transactions(user_id, query)
+    }
+
     @ApiOperation({ summary: 'Create withdraw' })
-    @Post('/withdraw')
+    @Post('/payments/transactions/withdraw')
     async withdraw(
         @Req() req: Request,
-        @Param('id') id: string,
         @Body() body: WithdrawDto
     ) {
         const user_id = req.user.userId;
-        return this.stripeService.withdraw({ amount: body.amount, method: body.method, vendorId: user_id, })
+        return this.stripeService.withdraw({ amount: body.amount, method: body.method, vendor_id: user_id, })
+    }
+
+    @ApiOperation({ summary: 'Get withdraw' })
+    @Get('/payments/transactions/withdraw')
+    async withdrawal(
+        @Req() req: Request,
+        @Query() query: any
+    ) {
+        const user_id = req.user.userId;
+        return this.stripeService.withdrawal(user_id, query)
+    }
+
+    @ApiOperation({ summary: 'Get withdraw by ID' })
+    @Get('/payments/transactions/withdraw/:id')
+    async withdrawByID(
+        @Req() req: Request,
+        @Param('id') id: string
+    ) {
+        const user_id = req.user.userId;
+        return this.stripeService.withdrawByID(user_id, id)
+    }
+
+    @ApiOperation({ summary: 'Delete withdraw by ID' })
+    @Delete('/payments/transactions/withdraw/:id')
+    async deleteWithdraw(
+        @Req() req: Request,
+        @Param('id') id: string
+    ) {
+        const user_id = req.user.userId;
+        return this.stripeService.deleteWithdrawByID(user_id, id)
     }
 }
