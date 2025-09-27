@@ -5,11 +5,13 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { CreateUserCardDto } from './dto/create-user-card.dto';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
+import { SojebStorage } from 'src/common/lib/Disk/SojebStorage';
+import appConfig from 'src/config/app.config';
 
 @Injectable()
 export class UserProfileService {
   constructor(private prisma: PrismaService) { }
-  async update(id: string, updateUserProfileDto: UpdateUserProfileDto) {
+  async update(id: string, updateUserProfileDto: UpdateUserProfileDto, avatar?: Express.Multer.File) {
     try {
       // First check if user exists
       const existingUser = await this.prisma.user.findUnique({
@@ -24,35 +26,94 @@ export class UserProfileService {
         };
       }
 
+      let avatarFileName: string | null = null;
+
+      // Handle avatar upload if provided
+      if (avatar) {
+        try {
+          // Validate avatar file
+          if (!avatar.buffer || avatar.buffer.length === 0) {
+            throw new Error('Invalid avatar file: file buffer is empty');
+          }
+
+          if (!avatar.mimetype || !avatar.mimetype.startsWith('image/')) {
+            throw new Error('Invalid file type: only image files are allowed for avatar');
+          }
+
+          if (avatar.size > 5 * 1024 * 1024) { // 5MB limit for avatar
+            throw new Error('Avatar file too large: maximum size is 5MB');
+          }
+
+          // Generate unique filename for the avatar
+          const timestamp = Date.now();
+          const randomString = Array(8)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          const fileExtension = avatar.originalname.split('.').pop();
+          avatarFileName = `avatar_${timestamp}_${randomString}.${fileExtension}`;
+
+          // Upload avatar using SojebStorage
+          const filePath = appConfig().storageUrl.avatar + avatarFileName;
+          await SojebStorage.put(filePath, avatar.buffer);
+
+          console.log(`Avatar uploaded successfully: ${avatarFileName}`);
+        } catch (uploadError) {
+          console.error('Avatar upload error:', uploadError);
+          return {
+            success: false,
+            message: 'Failed to upload avatar',
+            error: uploadError.message
+          };
+        }
+      }
+
+      // Prepare update data
+      const updateData: any = {
+        first_name: updateUserProfileDto.first_name,
+        last_name: updateUserProfileDto.last_name,
+        display_name: updateUserProfileDto.display_name,
+        nationality: updateUserProfileDto.nationality,
+        email: updateUserProfileDto.email,
+        phone_number: updateUserProfileDto.phone_number,
+        gender: updateUserProfileDto.gender,
+        date_of_birth: updateUserProfileDto.date_of_birth ? new Date(updateUserProfileDto.date_of_birth) : undefined,
+        country: updateUserProfileDto.country,
+        street_address: updateUserProfileDto.street_address,
+        apt_suite_unit: updateUserProfileDto.apt_suite_unit,
+        city: updateUserProfileDto.city,
+        state: updateUserProfileDto.state,
+        zip_code: updateUserProfileDto.zip_code,
+        passport_first_name: updateUserProfileDto.passport_first_name,
+        passport_last_name: updateUserProfileDto.passport_last_name,
+        passport_number: updateUserProfileDto.passport_number,
+        passport_issuing_country: updateUserProfileDto.passport_issuing_country,
+        passport_expiry_date: updateUserProfileDto.passport_expiry_date ? new Date(updateUserProfileDto.passport_expiry_date) : undefined,
+      };
+
+      // Add avatar filename to update data if uploaded
+      if (avatarFileName) {
+        updateData.avatar = avatarFileName;
+      }
+
       const updatedUser = await this.prisma.user.update({
         where: { id },
-        data: {
-          first_name: updateUserProfileDto.first_name,
-          last_name: updateUserProfileDto.last_name,
-          display_name: updateUserProfileDto.display_name,
-          nationality: updateUserProfileDto.nationality,
-          email: updateUserProfileDto.email,
-          phone_number: updateUserProfileDto.phone_number,
-          gender: updateUserProfileDto.gender,
-          date_of_birth: updateUserProfileDto.date_of_birth ? new Date(updateUserProfileDto.date_of_birth) : undefined,
-          country: updateUserProfileDto.country,
-          street_address: updateUserProfileDto.street_address,
-          apt_suite_unit: updateUserProfileDto.apt_suite_unit,
-          city: updateUserProfileDto.city,
-          state: updateUserProfileDto.state,
-          zip_code: updateUserProfileDto.zip_code,
-          passport_first_name: updateUserProfileDto.passport_first_name,
-          passport_last_name: updateUserProfileDto.passport_last_name,
-          passport_number: updateUserProfileDto.passport_number,
-          passport_issuing_country: updateUserProfileDto.passport_issuing_country,
-          passport_expiry_date: updateUserProfileDto.passport_expiry_date ? new Date(updateUserProfileDto.passport_expiry_date) : undefined,
-        },
+        data: updateData,
       });
+
+      // Generate avatar URL if avatar was uploaded
+      let avatarUrl = null;
+      if (avatarFileName) {
+        avatarUrl = SojebStorage.url(appConfig().storageUrl.avatar + avatarFileName);
+      }
 
       return {
         success: true,
-        message: 'Profile updated successfully',
-        data: updatedUser
+        message: avatarFileName ? 'Profile and avatar updated successfully' : 'Profile updated successfully',
+        data: {
+          ...updatedUser,
+          avatar_url: avatarUrl
+        }
       };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {

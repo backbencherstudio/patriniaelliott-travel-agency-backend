@@ -46,6 +46,7 @@ export class VendorUserVerificationAdminController {
   @ApiOperation({ summary: 'Approve vendor verification for a user' })
   @Patch('vendor/:userId/approve')
   async approveVendor(@Param('userId') userId: string) {
+    console.log(userId);
     return this.service.approveVendor(userId);
   }
 

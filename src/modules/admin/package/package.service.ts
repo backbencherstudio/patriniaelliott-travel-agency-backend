@@ -50,6 +50,22 @@ export class PackageService {
       if (createPackageDto.max_capacity) {
         data.max_capacity = Number(createPackageDto.max_capacity);
       }
+      // service_fee Decimal? on Package
+      if ((createPackageDto as any).service_fee != null) {
+        const fee = Number((createPackageDto as any).service_fee);
+        if (!Number.isNaN(fee)) {
+          data.service_fee = fee;
+        }
+      }
+      // numeric discounts on Package (schema: Package.discount Int?)
+      if ((createPackageDto as any).discount != null) {
+        const discountNum = Number((createPackageDto as any).discount);
+        if (!Number.isNaN(discountNum)) {
+          // Clamp discount to 0..100 as it represents percentage
+          const clamped = Math.max(0, Math.min(100, Math.trunc(discountNum)));
+          data.discount = clamped;
+        }
+      }
       if (createPackageDto.cancellation_policy) {
         data.cancellation_policy = JSON.parse(createPackageDto.cancellation_policy);
       }
@@ -115,6 +131,55 @@ export class PackageService {
           user_id: user_id,
         },
       });
+
+      // Compute and persist computed_price
+      try {
+        const basePrice = Number(data.price ?? 0);
+        const discountPercent = Number(data.discount ?? 0);
+        const fee = Number(data.service_fee ?? 0);
+        const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+        const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+        await this.prisma.package.update({
+          where: { id: record.id },
+          data: { computed_price },
+        });
+      } catch (e) {
+        console.error('Failed to compute/persist computed_price on create:', e?.message || e);
+      }
+
+      // create and link PackagePolicy if provided (schema: PackagePolicy { package_policies Json?, description String? })
+      try {
+        const policyItems = [
+          { title: 'transportation', description: (createPackageDto as any)?.transportation },
+          { title: 'meals', description: (createPackageDto as any)?.meals },
+          { title: 'guide_tours', description: (createPackageDto as any)?.guide },
+          { title: 'add_ons', description: (createPackageDto as any)?.addOns },
+          { title: 'cancellation_policy', description: (createPackageDto as any)?.cancellation_policy },
+        ].filter((i) => typeof i.description === 'string' && i.description.trim() !== '');
+
+        const policyDescription = (createPackageDto as any)?.policy_description;
+
+        if ((policyItems && policyItems.length > 0) || (typeof policyDescription === 'string' && policyDescription.trim() !== '')) {
+          const createdPolicy = await this.prisma.packagePolicy.create({
+            data: {
+              description: policyDescription ?? null,
+              package_policies: policyItems as any,
+            },
+          });
+
+          await this.prisma.package.update({
+            where: { id: record.id },
+            data: {
+              package_policies: {
+                connect: { id: createdPolicy.id },
+              },
+            },
+          });
+        }
+      } catch (e) {
+        // If policy creation fails, continue without blocking package creation
+        console.error('Failed to create/link PackagePolicy:', e?.message || e);
+      }
 
       // add package files to package
       if (files.package_files && files.package_files.length > 0) {
@@ -457,10 +522,13 @@ export class PackageService {
           name: true,
           description: true,
           price: true,
+          computed_price: true,
+          discount: true,
           duration: true,
           min_capacity: true,
           max_capacity: true,
           type: true,
+          service_fee: true,
           user: {
             select: {
               id: true,
@@ -527,13 +595,30 @@ export class PackageService {
               },
             },
           },
+          package_policies: {
+            select: {
+              id: true,
+              description: true,
+              package_policies: true,
+            },
+          },
         },
       });
 
       // Note: Image URLs are now generated in the controller using addImageUrls method
+      // Attach computed price per item: price - price*(discount/100) + service_fee
+      const withComputed = packages.map((pkg: any) => {
+        const basePrice = Number(pkg.price ?? 0);
+        const discountPercent = Number(pkg.discount ?? 0);
+        const fee = Number(pkg.service_fee ?? 0);
+        const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+        const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+        return { ...pkg, computed_price };
+      });
+
       return {
         success: true,
-        data: packages,
+        data: withComputed,
       };
     } catch (error) {
       return {
@@ -564,11 +649,14 @@ export class PackageService {
           name: true,
           description: true,
           price: true,
+          computed_price: true,
+          discount: true,
           duration: true,
           duration_type: true,
           min_capacity: true,
           max_capacity: true,
           type: true,
+          service_fee: true,
           package_languages: {
             select: {
               language: {
@@ -673,6 +761,13 @@ export class PackageService {
               },
             },
           },
+          package_policies: {
+            select: {
+              id: true,
+              description: true,
+              package_policies: true,
+            },
+          },
         },
       });
 
@@ -709,9 +804,16 @@ export class PackageService {
         }
       }
 
+      // Attach computed price: price - price*(discount/100) + service_fee
+      const basePrice = Number((record as any).price ?? 0);
+      const discountPercent = Number((record as any).discount ?? 0);
+      const fee = Number((record as any).service_fee ?? 0);
+      const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+      const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+
       return {
         success: true,
-        data: record,
+        data: { ...record, computed_price },
       };
     } catch (error) {
       return {
@@ -756,6 +858,13 @@ export class PackageService {
       if (updatePackageDto.max_capacity) {
         data.max_capacity = Number(updatePackageDto.max_capacity);
       }
+      // service_fee Decimal? on Package
+      if ((updatePackageDto as any).service_fee != null) {
+        const fee = Number((updatePackageDto as any).service_fee);
+        if (!Number.isNaN(fee)) {
+          data.service_fee = fee;
+        }
+      }
       // if (updatePackageDto.cancellation_policy_id) {
       //   data.cancellation_policy_id = updatePackageDto.cancellation_policy_id;
       // }
@@ -789,6 +898,21 @@ export class PackageService {
           updated_at: DateHelper.now(),
         },
       });
+
+      // Recompute and persist computed_price after update
+      try {
+        const basePrice = Number((data.price != null ? data.price : (existing_package as any).price) ?? 0);
+        const discountPercent = Number((data.discount != null ? data.discount : (existing_package as any).discount) ?? 0);
+        const fee = Number((data.service_fee != null ? data.service_fee : (existing_package as any).service_fee) ?? 0);
+        const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+        const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+        await this.prisma.package.update({
+          where: { id: record.id },
+          data: { computed_price },
+        });
+      } catch (e) {
+        console.error('Failed to compute/persist computed_price on update:', e?.message || e);
+      }
 
       // delete package images which is not included in updatePackageDto.package_files
       if (updatePackageDto.package_files) {

@@ -613,6 +613,22 @@ export class VendorPackageService {
 
     const vendorPackage = await this.prisma.package.create({ data });
 
+    // Compute and persist computed_price for vendor-created package
+    try {
+      const basePrice = Number((createVendorPackageDto as any)?.price ?? 0);
+      const discountPercentRaw = (createVendorPackageDto as any)?.discount ?? 0;
+      const discountPercent = Math.max(0, Math.min(100, Number(discountPercentRaw) || 0));
+      const fee = Number((createVendorPackageDto as any)?.service_fee ?? 0) || 0;
+      const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+      const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+      await this.prisma.package.update({
+        where: { id: vendorPackage.id },
+        data: { computed_price },
+      });
+    } catch (e) {
+      console.error('Failed to compute/persist computed_price (vendor create):', e?.message || e);
+    }
+
     return {
       success: true,
       data: vendorPackage,
@@ -655,6 +671,19 @@ export class VendorPackageService {
         },
         data: updateVendorPackageDto
       });
+
+      // Recompute and persist computed_price after vendor update
+      try {
+        const basePrice = Number((updateVendorPackageDto?.price != null ? updateVendorPackageDto.price : (packageData as any).price) ?? 0);
+        const discountRaw = (updateVendorPackageDto?.discount != null ? updateVendorPackageDto.discount : (packageData as any).discount) ?? 0;
+        const discountPercent = Math.max(0, Math.min(100, Number(discountRaw) || 0));
+        const fee = Number((updateVendorPackageDto?.service_fee != null ? updateVendorPackageDto.service_fee : (packageData as any).service_fee) ?? 0) || 0;
+        const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+        const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+        await this.prisma.package.update({ where: { id: updatedPackage.id }, data: { computed_price } });
+      } catch (e) {
+        console.error('Failed to compute/persist computed_price (vendor update):', e?.message || e);
+      }
   
       return {
         success: true,
@@ -711,6 +740,11 @@ export class VendorPackageService {
     }
   ) {
     try {
+      // Validate user exists to avoid failed nested connect
+      const existingUser = await this.prisma.user.findUnique({ where: { id: user_id } });
+      if (!existingUser) {
+        throw new Error('User not found');
+      }
       // Test URL generation using existing function
       console.log('=== URL Generation Test ===');
       console.log('APP_URL:', process.env.APP_URL);
@@ -888,7 +922,7 @@ export class VendorPackageService {
           rootTripPlanPayload = {
             title: rawPackageData.title || 'Trip Plan 1',
             description: '',
-            time: rawPackageData.time || rawPackageData.meetingPoint || '',
+            time: rawPackageData.time ? String(rawPackageData.time) : rawPackageData.meetingPoint ? String(rawPackageData.meetingPoint) : '',
             ticket_free: parsedTripPlan || [],
             sort_order: 0,
           };
@@ -896,7 +930,7 @@ export class VendorPackageService {
           rootTripPlanPayload = {
             title: rawPackageData.title || 'Trip Plan 1',
             description: '',
-            time: rawPackageData.time || rawPackageData.meetingPoint || '',
+            time: rawPackageData.time ? String(rawPackageData.time) : rawPackageData.meetingPoint ? String(rawPackageData.meetingPoint) : '',
             ticket_free: [],
             sort_order: 0,
           };
@@ -957,6 +991,46 @@ export class VendorPackageService {
         description: cleanPackageData.description,
         price: cleanPackageData.price
       });
+
+      // Coerce numeric scalars to correct types where needed
+      const numericFields: Array<keyof typeof cleanPackageData> = [
+        'discount', 'service_fee', 'bathrooms', 'max_guests', 'size_sqm', 'min_capacity', 'max_capacity', 'latitude', 'longitude'
+      ] as any;
+      numericFields.forEach((field) => {
+        if ((cleanPackageData as any)[field] != null && (cleanPackageData as any)[field] !== '') {
+          const n = Number((cleanPackageData as any)[field]);
+          if (!Number.isNaN(n)) {
+            (cleanPackageData as any)[field] = n;
+          } else {
+            // remove invalid numeric to avoid Prisma type errors
+            delete (cleanPackageData as any)[field];
+          }
+        }
+      });
+
+      // Normalize language JSON field on Package (language: Json?)
+      if ((cleanPackageData as any).language != null) {
+        const rawLang = (cleanPackageData as any).language;
+        try {
+          if (typeof rawLang === 'string') {
+            // Try strict JSON parse first
+            (cleanPackageData as any).language = JSON.parse(rawLang);
+          }
+        } catch {
+          // Fallback: convert formats like "{\"en\", \"bn\"}" to ["en","bn"]
+          if (typeof rawLang === 'string') {
+            const trimmed = rawLang.trim();
+            // Replace curly braces with square and remove stray quotes around items
+            const inner = trimmed.replace(/^\{/, '[').replace(/\}$/, ']');
+            const parts = inner
+              .replace(/^[\[]|[\]]$/g, '')
+              .split(',')
+              .map((s) => s.replace(/^\s*"|"\s*$/g, '').replace(/^\s*'|'\s*$/g, '').trim())
+              .filter((s) => s.length > 0);
+            (cleanPackageData as any).language = parts;
+          }
+        }
+      }
       
       console.log('Extracted fields:', {
         destinations: destinations,
@@ -1006,7 +1080,7 @@ export class VendorPackageService {
             create: tripPlansArray.map((tripPlan: any, index: number) => ({
               title: tripPlan.title || `Trip Plan ${index + 1}`,
               description: tripPlan.description || '',
-              time: tripPlan.time || tripPlan.meetingPoint || '',
+              time: tripPlan.time ? String(tripPlan.time) : tripPlan.meetingPoint ? String(tripPlan.meetingPoint) : '',
               ticket_free: (() => {
                 const tf = tripPlan.ticket_free ?? tripPlan.tripPlan ?? [];
                 return typeof tf === 'string' ? tf : JSON.stringify(tf);
@@ -1048,7 +1122,7 @@ export class VendorPackageService {
       // Build the data object for Prisma
       const data: any = {
         ...cleanPackageData,
-        user: { connect: { id: user_id } },
+        user_id: user_id,
         // Create package files
         package_files: {
           create: [
@@ -1069,6 +1143,20 @@ export class VendorPackageService {
           ]
         }
       };
+
+      // Merge nested relations (e.g., trip plans) built earlier
+      if (nested.package_trip_plans) {
+        data.package_trip_plans = nested.package_trip_plans;
+      }
+      if ('cancellation_policy' in data) {
+        delete data.cancellation_policy;
+      }
+      if ('package_policies' in data) {
+        delete data.package_policies;
+      }
+      if ('policy_description' in data) {
+        delete data.policy_description;
+      }
 
       // Normalize bedrooms only (do not use total_bedrooms scalar on Package)
       try {
@@ -1271,9 +1359,21 @@ export class VendorPackageService {
         dataKeys: Object.keys(data)
       });
 
+      // Compute computed_price before create
+      try {
+        const basePrice = Number((cleanPackageData as any)?.price ?? 0);
+        const discountPercent = Math.max(0, Math.min(100, Number((cleanPackageData as any)?.discount ?? 0) || 0));
+        const fee = Number((cleanPackageData as any)?.service_fee ?? 0) || 0;
+        const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+        const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+        (data as any).computed_price = computed_price;
+      } catch (e) {
+        console.error('Failed to precompute computed_price (vendor createWithFiles):', e?.message || e);
+      }
+
       // Create package with nested data
       console.log('Final data being sent to Prisma:', JSON.stringify(data, null, 2));
-      const result = await this.prisma.package.create({
+      let result = await this.prisma.package.create({
         data,
         include: {
           package_files: true,
@@ -1285,6 +1385,74 @@ export class VendorPackageService {
               package_trip_plan_images: true
             }
           },
+          user: true,
+        },
+      });
+
+      // After package creation, optionally create and link cancellation policy
+      try {
+        const cancellationPolicyRaw = (createVendorPackageDto as any)?.cancellation_policy;
+        const policyDescription = (createVendorPackageDto as any)?.policy_description;
+        if (cancellationPolicyRaw && typeof cancellationPolicyRaw === 'string') {
+          const createdCP = await this.prisma.packageCancellationPolicy.create({
+            data: {
+              user_id: user_id,
+              policy: cancellationPolicyRaw,
+              description: policyDescription ?? null,
+            },
+          });
+          await this.prisma.package.update({
+            where: { id: result.id },
+            data: { cancellation_policy_id: createdCP.id },
+          });
+        }
+      } catch (e) {
+        console.error('Failed to create/link PackageCancellationPolicy:', e?.message || e);
+      }
+
+      // After package creation, optionally create and link PackagePolicy built from dto items
+      try {
+        const items = [
+          { title: 'transportation', description: (createVendorPackageDto as any)?.transportation },
+          { title: 'meals', description: (createVendorPackageDto as any)?.meals },
+          { title: 'guide_tours', description: (createVendorPackageDto as any)?.guide },
+          { title: 'add_ons', description: (createVendorPackageDto as any)?.addOns },
+          { title: 'cancellation_policy', description: (createVendorPackageDto as any)?.cancellation_policy },
+        ].filter((i) => typeof i.description === 'string' && i.description.trim() !== '');
+
+        const policyDescription = (createVendorPackageDto as any)?.policy_description;
+        if (items.length > 0 || (typeof policyDescription === 'string' && policyDescription.trim() !== '')) {
+          const createdPolicy = await this.prisma.packagePolicy.create({
+            data: {
+              description: policyDescription ?? null,
+              package_policies: items as any,
+            },
+          });
+          await this.prisma.package.update({
+            where: { id: result.id },
+            data: {
+              package_policies: {
+                connect: { id: createdPolicy.id },
+              },
+            },
+          });
+        }
+      } catch (e) {
+        console.error('Failed to create/link PackagePolicy:', e?.message || e);
+      }
+
+      // Re-fetch the package to include newly linked relations (package_policies, trip plans)
+      result = await this.prisma.package.findUnique({
+        where: { id: result.id },
+        include: {
+          package_files: true,
+          package_room_types: true,
+          package_availabilities: true,
+          package_extra_services: true,
+          package_trip_plans: {
+            include: { package_trip_plan_images: true },
+          },
+          package_policies: true,
           user: true,
         },
       });
@@ -1684,6 +1852,18 @@ export class VendorPackageService {
         }
       });
 
+      // Recompute and persist computed_price after updateWithFiles
+      try {
+        const basePrice = Number((normalizedPackageData as any)?.price ?? (result as any).price ?? 0);
+        const discountPercent = Math.max(0, Math.min(100, Number((normalizedPackageData as any)?.discount ?? (result as any).discount ?? 0) || 0));
+        const fee = Number((normalizedPackageData as any)?.service_fee ?? (result as any).service_fee ?? 0) || 0;
+        const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+        const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+        await this.prisma.package.update({ where: { id: result.id }, data: { computed_price } });
+      } catch (e) {
+        console.error('Failed to compute/persist computed_price (vendor updateWithFiles):', e?.message || e);
+      }
+
       // Post-process to attach public URLs using existing image function
       const processedResult = {
         ...result,
@@ -1896,6 +2076,25 @@ export class VendorPackageService {
         },
       });
 
+      // Build rating distribution (1..5) with counts
+      const distributionAgg = await this.prisma.review.groupBy({
+        by: ['rating_value'],
+        where: {
+          package_id: packageId,
+          deleted_at: null,
+          status: 1,
+        },
+        _count: { rating_value: true },
+      });
+
+      const ratingDistribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      for (const stat of distributionAgg as any[]) {
+        const bucket = Math.round(stat.rating_value as number);
+        if (bucket >= 1 && bucket <= 5) {
+          ratingDistribution[bucket] = stat._count?.rating_value ?? 0;
+        }
+      }
+
              // Add avatar URLs
        for (const review of reviews) {
          if (review.user && review.user.avatar) {
@@ -1916,6 +2115,7 @@ export class VendorPackageService {
           summary: {
             averageRating: averageRating._avg.rating_value || 0,
             totalReviews: averageRating._count.rating_value || 0,
+            ratingDistribution,
           },
         },
       };

@@ -115,4 +115,12 @@ export class UpdateUserProfileDto {
     example: '2025-01-01',
   })
   passport_expiry_date?: string;
+
+  @ApiProperty({
+    description: 'User avatar image file',
+    type: 'string',
+    format: 'binary',
+    required: false,
+  })
+  avatar?: Express.Multer.File;
 }
