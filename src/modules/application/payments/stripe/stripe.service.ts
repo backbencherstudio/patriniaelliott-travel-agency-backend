@@ -2,7 +2,7 @@ import { BadRequestException, HttpException, Injectable, InternalServerErrorExce
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAccountDto } from './dto/create-account.dto';
-import { dashboardTransactionsQuerySchema } from '@/src/utils/query-validation';
+import { dashboardTransactionsQuerySchema, withdrawQuerySchema } from '@/src/utils/query-validation';
 
 @Injectable()
 export class StripeService {
@@ -359,9 +359,9 @@ export class StripeService {
         }
     }
 
-    async withdraw({ amount, method, vendorId }: { vendorId: string, amount: number, method: string }) {
+    async withdraw({ amount, method, vendor_id }: { vendor_id: string, amount: number, method: string }) {
         const wallet = await this.prisma.vendorWallet.findUnique({
-            where: { user_id: vendorId },
+            where: { user_id: vendor_id },
         });
 
         if (!wallet || Number(wallet.balance) < amount) {
@@ -370,8 +370,8 @@ export class StripeService {
 
         const vendor = await this.prisma.vendorPaymentMethod.findFirst({
             where: {
-                user_id: vendorId,
-                payment_method: 'stripe'
+                user_id: vendor_id,
+                payment_method: method
             }
         })
 
@@ -383,8 +383,8 @@ export class StripeService {
         const payout = await StripePayment.createPayout(vendor.account_id, amount, 'usd')
         await this.prisma.paymentTransaction.create({
             data: {
-                provider: 'stripe',
-                user_id: vendorId,
+                provider: method,
+                user_id: vendor_id,
                 amount,
                 currency: 'usd',
                 paid_amount: amount,
@@ -394,7 +394,7 @@ export class StripeService {
             }
         })
         await this.prisma.vendorWallet.update({
-            where: { user_id: vendorId },
+            where: { user_id: vendor_id },
             data: { balance: { decrement: amount } },
         });
 
@@ -403,5 +403,200 @@ export class StripeService {
             message: "Withdrawal request submitted.",
             data: payout,
         };
+    }
+
+    async withdrawal(vendor_id: string, requestQuery: any) {
+        try {
+            const query = withdrawQuerySchema.safeParse(requestQuery);
+
+            if (!query.success) {
+                throw new BadRequestException({
+                    message: "Invalid query parameters",
+                    errors: query.error.flatten().fieldErrors,
+                });
+            }
+
+            const {
+                page,
+                perPage,
+                dateRange,
+                startDate,
+                endDate,
+                status
+            } = query.data;
+
+            let from: Date | undefined;
+            let to: Date | undefined = new Date();
+
+            switch (dateRange) {
+                case "7d":
+                    from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+                    break;
+                case "30d":
+                    from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+                    break;
+                case "90d":
+                    from = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+                    break;
+                case "365d":
+                    from = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+                    break;
+                case "custom":
+                    if (startDate && endDate) {
+                        from = new Date(startDate);
+                        to = new Date(endDate);
+                    }
+                    break;
+                case "all":
+                default:
+                    from = undefined;
+                    to = undefined;
+            }
+
+            const where: any = {
+                type: 'withdraw',
+                booking: {
+                    vendor_id: vendor_id
+                }
+            };
+            if (from && to) {
+                where.created_at = { gte: from, lte: to };
+            }
+            if (status && status !== 'all') {
+                where.status = status
+            }
+
+            const total = await this.prisma.paymentTransaction.count({ where });
+
+            const withdrawal = await
+                this.prisma.paymentTransaction.findMany({
+                    where,
+                    select: {
+                        id: true,
+                        order_id: true,
+                        amount: true,
+                        status: true,
+                        created_at: true,
+                    },
+                    skip: (page - 1) * perPage,
+                    take: perPage,
+                    orderBy: { created_at: "desc" },
+                })
+
+            const balance = await this.prisma.vendorWallet.aggregate({
+                where: {
+                    user_id: vendor_id,
+                },
+                _sum: { balance: true }
+            })
+
+            return {
+                success: true,
+                message: "Successfully fetched withdrawal.",
+                data: { total: balance._sum.balance, withdrawal },
+                pagination: {
+                    total,
+                    page,
+                    perPage,
+                    totalPages: Math.ceil(total / perPage),
+                    hasNextPage: page * perPage < total,
+                    hasPrevPage: page > 1,
+                },
+            };
+        } catch (error) {
+            if (error instanceof HttpException) {
+                throw error;
+            }
+            throw new InternalServerErrorException(`Error getting withdrawal: ${error?.message}`);
+        }
+    }
+
+    async withdrawByID(vendor_id: string, id: string) {
+        try {
+            const withdraw = await
+                this.prisma.paymentTransaction.findUnique({
+                    where: {
+                        id,
+                        booking: {
+                            vendor_id
+                        }
+                    },
+                    select: {
+                        id: true,
+                        order_id: true,
+                        provider: true,
+                        amount: true,
+                        status: true,
+                        created_at: true,
+                        user: {
+                            select: {
+                                VendorPaymentMethod: {
+                                    select: {
+                                        account_id: true
+                                    }
+                                }
+                            }
+                        }
+                    },
+                });
+
+            if (!withdraw) {
+                throw new NotFoundException('Withdraw not found.')
+            }
+
+            const result = withdraw
+                ? {
+                    ...withdraw,
+                    account_id: withdraw.user?.VendorPaymentMethod?.[0]?.account_id || null
+                }
+                : null;
+
+            return {
+                success: true,
+                message: "Successfully fetched withdraw.",
+                data: result,
+            };
+        } catch (error) {
+            if (error instanceof HttpException) {
+                throw error;
+            }
+            throw new InternalServerErrorException(`Error getting withdraw: ${error?.message}`);
+        }
+    }
+    async deleteWithdrawByID(vendor_id: string, id: string) {
+        try {
+            const withdraw = await
+                this.prisma.paymentTransaction.findUnique({
+                    where: {
+                        id,
+                        booking: {
+                            vendor_id
+                        }
+                    },
+                });
+            if (!withdraw) {
+                throw new NotFoundException('Withdraw not found.')
+            }
+            const result = await
+                this.prisma.paymentTransaction.delete({
+                    where: {
+                        id,
+                        booking: {
+                            vendor_id
+                        }
+                    },
+                });
+
+            return {
+                success: true,
+                message: "Successfully deleted withdraw.",
+                data: result,
+            };
+        } catch (error) {
+            if (error instanceof HttpException) {
+                throw error;
+            }
+            throw new InternalServerErrorException(`Error deleting withdraw: ${error?.message}`);
+        }
     }
 }

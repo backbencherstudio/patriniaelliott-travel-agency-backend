@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { Request } from 'express';
@@ -92,6 +92,36 @@ export class StripeController {
         @Body() body: WithdrawDto
     ) {
         const user_id = req.user.userId;
-        return this.stripeService.withdraw({ amount: body.amount, method: body.method, vendorId: user_id, })
+        return this.stripeService.withdraw({ amount: body.amount, method: body.method, vendor_id: user_id, })
+    }
+
+    @ApiOperation({ summary: 'Get withdraw' })
+    @Get('/payments/transactions/withdraw')
+    async withdrawal(
+        @Req() req: Request,
+        @Query() query: any
+    ) {
+        const user_id = req.user.userId;
+        return this.stripeService.withdrawal(user_id, query)
+    }
+
+    @ApiOperation({ summary: 'Get withdraw by ID' })
+    @Get('/payments/transactions/withdraw/:id')
+    async withdrawByID(
+        @Req() req: Request,
+        @Param('id') id: string
+    ) {
+        const user_id = req.user.userId;
+        return this.stripeService.withdrawByID(user_id, id)
+    }
+
+    @ApiOperation({ summary: 'Delete withdraw by ID' })
+    @Delete('/payments/transactions/withdraw/:id')
+    async deleteWithdraw(
+        @Req() req: Request,
+        @Param('id') id: string
+    ) {
+        const user_id = req.user.userId;
+        return this.stripeService.deleteWithdrawByID(user_id, id)
     }
 }
