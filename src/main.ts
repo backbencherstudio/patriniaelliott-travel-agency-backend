@@ -34,16 +34,8 @@ async function bootstrap() {
   app.use('/storage', (req, res, next) => {
     try {
       const filePath = join(__dirname, '..', 'public', req.path);
-     
-      console.log(`Static file requested: ${req.path}`);
-      console.log(`Full path: ${filePath}`);
-      console.log(`User-Agent: ${req.get('User-Agent')}`);
-      console.log(`Referer: ${req.get('Referer')}`);
-     
       // Check if file exists
       if (require('fs').existsSync(filePath)) {
-        console.log('File exists, serving...');
-       
         // Set proper headers for images
         if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg') || filePath.endsWith('.png') || filePath.endsWith('.gif') || filePath.endsWith('.webp')) {
           const ext = filePath.split('.').pop()?.toLowerCase();
@@ -52,16 +44,15 @@ async function bootstrap() {
           res.setHeader('Access-Control-Allow-Origin', '*');
           res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
           res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-         
+
           // Handle preflight requests
           if (req.method === 'OPTIONS') {
             return res.status(200).end();
           }
         }
-       
+
         return res.sendFile(filePath, (err) => {
           if (err) {
-            console.error('❌ Error serving file:', err);
             return res.status(500).json({
               success: false,
               message: 'Error serving file',
@@ -70,7 +61,6 @@ async function bootstrap() {
           }
         });
       } else {
-        console.log('❌ File not found');
         return res.status(404).json({
           success: false,
           message: 'File not found',
@@ -79,7 +69,6 @@ async function bootstrap() {
         });
       }
     } catch (error) {
-      console.error('Error in static file handler:', error);
       return res.status(500).json({
         success: false,
         message: 'Internal server error',
@@ -87,8 +76,8 @@ async function bootstrap() {
       });
     }
   });
- 
- 
+
+
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,

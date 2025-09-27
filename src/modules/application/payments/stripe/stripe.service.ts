@@ -2,6 +2,7 @@ import { BadRequestException, HttpException, Injectable, InternalServerErrorExce
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAccountDto } from './dto/create-account.dto';
+import { dashboardTransactionsQuerySchema } from '@/src/utils/query-validation';
 
 @Injectable()
 export class StripeService {
@@ -53,9 +54,18 @@ export class StripeService {
 
     async index(user_id: string) {
         try {
+            const user = await this.prisma.user.findUnique({
+                where: {
+                    id: user_id
+                }
+            })
+
+            if (!user) {
+                throw new NotFoundException('User not found.');
+            }
             const accounts = await this.prisma.vendorPaymentMethod.findMany({
                 where: {
-                    user_id: user_id
+                    user_id
                 }
             })
             return {
@@ -88,6 +98,10 @@ export class StripeService {
                     id: id
                 }
             })
+
+            if (!account) {
+                throw new NotFoundException('Account not found.')
+            }
 
             return {
                 success: true,
@@ -195,6 +209,153 @@ export class StripeService {
                 throw error;
             }
             throw new InternalServerErrorException(`Error getting vendor ballance info: ${error?.message}`);
+        }
+    }
+
+    async transactions(vendor_id: string, requestQuery: any) {
+        try {
+            const query = dashboardTransactionsQuerySchema.safeParse(requestQuery);
+
+            if (!query.success) {
+                throw new BadRequestException({
+                    message: "Invalid query parameters",
+                    errors: query.error.flatten().fieldErrors,
+                });
+            }
+
+            const {
+                page,
+                perPage,
+                payment_method,
+                dateRange,
+                startDate,
+                endDate,
+                type
+            } = query.data;
+
+            let from: Date | undefined;
+            let to: Date | undefined = new Date();
+
+            switch (dateRange) {
+                case "7d":
+                    from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+                    break;
+                case "30d":
+                    from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+                    break;
+                case "90d":
+                    from = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+                    break;
+                case "365d":
+                    from = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+                    break;
+                case "custom":
+                    if (startDate && endDate) {
+                        from = new Date(startDate);
+                        to = new Date(endDate);
+                    }
+                    break;
+                case "all":
+                default:
+                    from = undefined;
+                    to = undefined;
+            }
+
+            const where: any = {
+                booking: {
+                    vendor_id: vendor_id
+                }
+            };
+            if (payment_method) {
+                where.provider = payment_method;
+            }
+            if (from && to) {
+                where.created_at = { gte: from, lte: to };
+            }
+            if (type && type !== 'all') {
+                where.type = type
+            }
+
+            const total = await this.prisma.paymentTransaction.count({ where });
+
+            const [total_bookings, total_earnings, total_withdraw, total_refund, transactions] = await Promise.all([
+                this.prisma.booking.count({
+                    where: {
+                        vendor_id,
+                        ...(from && to ? { created_at: { gte: from, lte: to } } : {})
+                    }
+                }),
+                this.prisma.vendorWallet.aggregate({
+                    where: {
+                        user_id: vendor_id,
+                        ...(from && to ? { created_at: { gte: from, lte: to } } : {})
+                    },
+                    _sum: { total_earnings: true }
+                }),
+                this.prisma.paymentTransaction.aggregate({
+                    where: {
+                        type: "withdraw",
+                        booking: { vendor_id },
+                        ...(from && to ? { created_at: { gte: from, lte: to } } : {})
+                    },
+                    _sum: { amount: true }
+                }),
+                this.prisma.paymentTransaction.aggregate({
+                    where: {
+                        type: "refund",
+                        status: 'approved',
+                        booking: { vendor_id },
+                        ...(from && to ? { created_at: { gte: from, lte: to } } : {})
+                    },
+                    _sum: { amount: true }
+                }),
+                this.prisma.paymentTransaction.findMany({
+                    where,
+                    select: {
+                        id: true,
+                        booking_id: true,
+                        user: { select: { name: true } },
+                        type: true,
+                        amount: true,
+                        provider: true,
+                        status: true,
+                        reference_number: true,
+                        created_at: true,
+                    },
+                    skip: (page - 1) * perPage,
+                    take: perPage,
+                    orderBy: { created_at: "desc" },
+                })
+            ]);
+
+            return {
+                success: true,
+                message: "Successfully fetched transactions.",
+                data: {
+                    statistics: {
+                        total_bookings: total_bookings.toString() || '0',
+                        total_earnings: total_earnings._sum.total_earnings || '0',
+                        total_withdraw: total_withdraw._sum.amount || '0',
+                        total_refund: total_refund._sum.amount || '0',
+                    },
+                    transactions: {
+                        data: transactions,
+                        pagination: {
+                            total,
+                            page,
+                            perPage,
+                            totalPages: Math.ceil(total / perPage),
+                            hasNextPage: page * perPage < total,
+                            hasPrevPage: page > 1,
+                        },
+                    },
+                },
+            };
+        } catch (error) {
+            if (error instanceof HttpException) {
+                throw error;
+            }
+            throw new InternalServerErrorException(`Error getting transactions: ${error?.message}`);
         }
     }
 
