@@ -124,21 +124,153 @@ export class VendorUserVerificationAdminService {
 
   // Mark the vendor verification as approved; call when required docs are approved.
   async approveVendor(userId: string) {
-    const verification = await this.prisma.vendorVerification.findUnique({ where: { user_id: userId } });
-    if (!verification) throw new NotFoundException('Vendor verification record not found');
+    // First check if user exists
+    const user = await this.prisma.user.findUnique({ 
+      where: { id: userId },
+      select: { id: true, name: true, email: true, type: true }
+    });
+    
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
 
-    await this.prisma.vendorVerification.update({
-      where: { user_id: userId },
-      data: { status: 'approved', verified_at: new Date(), updated_at: new Date() },
+    // Check all user documents status before approving vendor
+    const userDocuments = await this.prisma.userDocument.findMany({
+      where: { 
+        user_id: userId,
+        deleted_at: null 
+      },
+      select: {
+        id: true,
+        status: true,
+        type: true,
+        created_at: true
+      }
     });
 
-    // Optionally set user.type to 'vendor' if not already
+    // Check if user has any documents
+    if (userDocuments.length === 0) {
+      return {
+        success: false,
+        message: 'Cannot approve vendor. User has no documents uploaded.',
+        data: {
+          user_id: userId,
+          user_name: user.name,
+          user_email: user.email,
+          total_documents: 0,
+          documents_status: []
+        }
+      };
+    }
+
+    // Check document statuses
+    const pendingDocuments = userDocuments.filter(doc => doc.status !== 'approved');
+    const rejectedDocuments = userDocuments.filter(doc => doc.status === 'rejected');
+    
+    if (pendingDocuments.length > 0) {
+      return {
+        success: false,
+        message: 'Cannot approve vendor. Some documents are still pending approval.',
+        data: {
+          user_id: userId,
+          user_name: user.name,
+          user_email: user.email,
+          total_documents: userDocuments.length,
+          pending_documents: pendingDocuments.length,
+          rejected_documents: rejectedDocuments.length,
+          pending_document_types: pendingDocuments.map(doc => doc.type),
+          documents_status: userDocuments
+        }
+      };
+    }
+
+    if (rejectedDocuments.length > 0) {
+      return {
+        success: false,
+        message: 'Cannot approve vendor. Some documents have been rejected.',
+        data: {
+          user_id: userId,
+          user_name: user.name,
+          user_email: user.email,
+          total_documents: userDocuments.length,
+          pending_documents: pendingDocuments.length,
+          rejected_documents: rejectedDocuments.length,
+          rejected_document_types: rejectedDocuments.map(doc => doc.type),
+          documents_status: userDocuments
+        }
+      };
+    }
+
+    // All documents are approved, proceed with vendor approval
+    // Create or update vendor verification record
+    let verification = await this.prisma.vendorVerification.findUnique({ where: { user_id: userId } });
+    
+    if (!verification) {
+      // Create vendor verification record if it doesn't exist
+      verification = await this.prisma.vendorVerification.create({
+        data: {
+          user_id: userId,
+          first_name: user.name || 'Auto-generated',
+          phone_number: '0000000000', // Default placeholder
+          status: 'approved',
+          verified_at: new Date(),
+          created_at: new Date(),
+          updated_at: new Date()
+        }
+      });
+    } else {
+      // Update existing verification record
+      await this.prisma.vendorVerification.update({
+        where: { user_id: userId },
+        data: { status: 'approved', verified_at: new Date(), updated_at: new Date() },
+      });
+    }
+
+    // Set user.type to 'vendor'
     await this.prisma.user.update({
       where: { id: userId },
       data: { type: 'vendor', approved_at: new Date() },
     });
 
-    return { success: true, message: 'Vendor verification approved' };
+    // Get user data with packages for response
+    const userData = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        type: true,
+        approved_at: true,
+        packages: {
+          orderBy: { created_at: 'desc' },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            price: true,
+            computed_price: true,
+            type: true,
+            status: true,
+            approved_at: true,
+            created_at: true,
+            updated_at: true,
+            discount: true,
+            service_fee: true,
+            package_files: {
+              select: { id: true, file: true, type: true, sort_order: true },
+              orderBy: { sort_order: 'asc' },
+            },
+          },
+        },
+      },
+    });
+
+    return { 
+      success: true, 
+      message: 'Vendor verification approved successfully. All documents verified.',
+      data: userData,
+      documents_verified: userDocuments.length
+    };
   }
 
   async rejectVendor(userId: string, reason?: string) {
@@ -159,9 +291,44 @@ export class VendorUserVerificationAdminService {
       data: { type: 'user' },
     });
 
+    // Get user data with packages for response
+    const userData = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        type: true,
+        approved_at: true,
+        packages: {
+          orderBy: { created_at: 'desc' },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            price: true,
+            computed_price: true,
+            type: true,
+            status: true,
+            approved_at: true,
+            created_at: true,
+            updated_at: true,
+            discount: true,
+            service_fee: true,
+            package_files: {
+              select: { id: true, file: true, type: true, sort_order: true },
+              orderBy: { sort_order: 'asc' },
+            },
+          },
+        },
+      },
+    });
+
     return { 
       success: true, 
-      message: 'Vendor verification rejected' };
+      message: 'Vendor verification rejected',
+      data: userData
+    };
   }
 
   // Update vendor verification by user ID (admin)
