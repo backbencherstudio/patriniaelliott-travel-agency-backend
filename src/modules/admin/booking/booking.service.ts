@@ -356,13 +356,20 @@ export class BookingService {
                   description: true,
                   package_files: {
                     where: {
-                      is_featured: true,
+                      deleted_at: null,
+                      status: 1,
                     },
                     select: {
+                      id: true,
                       file: true,
                       file_alt: true,
+                      type: true,
+                      is_featured: true,
+                      sort_order: true,
                     },
-                    take: 1,
+                    orderBy: {
+                      sort_order: 'asc',
+                    },
                   },
                 },
               },
@@ -449,7 +456,22 @@ export class BookingService {
           price: booking.booking_items[0].package.price,
           type: booking.booking_items[0].package.type,
           description: booking.booking_items[0].package.description,
-          featured_image: booking.booking_items[0].package.package_files?.[0] ? {
+          images: booking.booking_items[0].package.package_files?.map(file => ({
+            id: file.id,
+            url: file.file ? SojebStorage.url(
+              appConfig().storageUrl.package + file.file,
+            ) : null,
+            alt: file.file_alt,
+            type: file.type,
+            is_featured: file.is_featured,
+            sort_order: file.sort_order,
+          })) || [],
+          featured_image: booking.booking_items[0].package.package_files?.find(file => file.is_featured) ? {
+            url: SojebStorage.url(
+              appConfig().storageUrl.package + booking.booking_items[0].package.package_files.find(file => file.is_featured).file,
+            ),
+            alt: booking.booking_items[0].package.package_files.find(file => file.is_featured).file_alt,
+          } : booking.booking_items[0].package.package_files?.[0] ? {
             url: SojebStorage.url(
               appConfig().storageUrl.package + booking.booking_items[0].package.package_files[0].file,
             ),
@@ -489,7 +511,30 @@ export class BookingService {
           end_date: item.end_date,
           quantity: item.quantity,
           price: item.price,
-          package: item.package,
+          package: item.package ? {
+            ...item.package,
+            images: item.package.package_files?.map(file => ({
+              id: file.id,
+              url: file.file ? SojebStorage.url(
+                appConfig().storageUrl.package + file.file,
+              ) : null,
+              alt: file.file_alt,
+              type: file.type,
+              is_featured: file.is_featured,
+              sort_order: file.sort_order,
+            })) || [],
+            featured_image: item.package.package_files?.find(file => file.is_featured) ? {
+              url: SojebStorage.url(
+                appConfig().storageUrl.package + item.package.package_files.find(file => file.is_featured).file,
+              ),
+              alt: item.package.package_files.find(file => file.is_featured).file_alt,
+            } : item.package.package_files?.[0] ? {
+              url: SojebStorage.url(
+                appConfig().storageUrl.package + item.package.package_files[0].file,
+              ),
+              alt: item.package.package_files[0].file_alt,
+            } : null,
+          } : null,
         })) || [],
 
         booking_travellers: booking.booking_travellers?.map(traveller => ({

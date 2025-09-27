@@ -318,6 +318,24 @@ export class ListingManagementService {
         };
       }
 
+      // Calculate average rating
+      const ratingStats = await this.prisma.review.aggregate({
+        where: {
+          package_id: id,
+          deleted_at: null,
+          status: 1,
+        },
+        _avg: {
+          rating_value: true,
+        },
+        _count: {
+          rating_value: true,
+        },
+      });
+
+      const averageRating = ratingStats._avg.rating_value || 0;
+      const totalReviews = ratingStats._count.rating_value || 0;
+
       // Transform package files to include URLs
       const transformedFiles = packageData.package_files.map((file) => ({
         ...file,
@@ -345,6 +363,8 @@ export class ListingManagementService {
           status: statusText,
           statusClass: statusClass,
           package_files: transformedFiles,
+          averageRating: averageRating,
+          totalReviews: totalReviews,
         },
       };
     } catch (error) {
