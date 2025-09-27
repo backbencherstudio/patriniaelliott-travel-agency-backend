@@ -1,0 +1,38 @@
+% Operations Manager Report - Main File
+\documentclass[12pt,a4paper]{report}
+\usepackage[margin=1in]{geometry}
+\usepackage{setspace}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{titlesec}
+
+% Simple, readable formatting
+\onehalfspacing
+\setlist[itemize]{noitemsep, topsep=2pt, leftmargin=1.2em}
+\titleformat{\chapter}[hang]{\bfseries\Large}{\thechapter.}{0.6em}{}
+\titleformat{\section}[hang]{\bfseries\large}{\thesection}{0.6em}{}
+
+\begin{document}
+
+\begin{titlepage}
+  \centering
+  {\Large Travel Platform – Operations Report\\[6pt]}
+  {\large Project Overview, Pending Work, and Delay Analysis}\\[18pt]
+  {\normalsize Prepared for: Operations Manager}\\[6pt]
+  {\normalsize Date: \today}
+\end{titlepage}
+
+\tableofcontents
+\clearpage
+
+% Chapter 1
+\input{chapters/01_project_overview}
+
+% Placeholders for next chapters (will be added later)
+\input{chapters/02_pending_work}
+\input{chapters/03_timeline_and_delay_analysis}
+\input{chapters/04_conclusion_and_actions}
+
+\end{document}
+
+

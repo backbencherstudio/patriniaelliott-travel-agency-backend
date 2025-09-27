@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UserProfileService } from './user-profile.service';
 import { CreateUserProfileDto } from './dto/create-user-profile.dto';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Request } from 'express';
-import { ApiOperation } from '@nestjs/swagger';
+import { ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { CreateUserCardDto } from './dto/create-user-card.dto';
 
 @Controller('user-profile')
@@ -13,14 +14,17 @@ export class UserProfileController {
   constructor(private readonly userProfileService: UserProfileService) { }
 
   @ApiOperation({ summary: 'Update user profile' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('avatar'))
   @Patch('/update')
   async update(
     @Req() req: Request,
     @Body() updateUserProfileDto: UpdateUserProfileDto,
+    @UploadedFile() avatar?: Express.Multer.File,
   ) {
     try {
       const user_id = req.user.userId;
-      return this.userProfileService.update(user_id, updateUserProfileDto);
+      return this.userProfileService.update(user_id, updateUserProfileDto, avatar);
     } catch (error) {
       return {
         success: false,

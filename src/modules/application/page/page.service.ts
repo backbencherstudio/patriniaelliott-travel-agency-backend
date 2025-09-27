@@ -124,13 +124,7 @@ export class PageService {
               },
             },
           },
-          cancellation_policy: {
-            select: {
-              id: true,
-              policy: true,
-              description: true,
-            },
-          },
+          cancellation_policy: true,
           package_files: {
             select: {
               id: true,
@@ -167,8 +161,8 @@ export class PageService {
       // add image url package_files
       if (packages && packages.length > 0) {
         for (const record of packages) {
-          if (record.package_files) {
-            for (const file of record.package_files) {
+          if ((record as any).package_files) {
+            for (const file of (record as any).package_files) {
               file['file_url'] = SojebStorage.url(
                 appConfig().storageUrl.package + file.file,
               );
