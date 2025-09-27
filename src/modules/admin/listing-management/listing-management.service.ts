@@ -249,19 +249,7 @@ export class ListingManagementService {
         where: {
           id: id,
         },
-        select: {
-          id: true,
-          name: true,
-          description: true,
-          type: true,
-          price: true,
-          city: true,
-          country: true,
-          address: true,
-          status: true,
-          approved_at: true,
-          created_at: true,
-          updated_at: true,
+        include: {
           user: {
             select: {
               id: true,
@@ -270,11 +258,54 @@ export class ListingManagementService {
               phone_number: true,
             },
           },
-          package_files: {
-            select: {
-              file: true,
-              file_alt: true,
-              is_featured: true,
+          package_files: true,
+          package_destinations: {
+            include: {
+              destination: true,
+            },
+          },
+          package_categories: {
+            include: {
+              category: true,
+            },
+          },
+          package_tags: {
+            include: {
+              tag: true,
+            },
+          },
+          package_trip_plans: {
+            include: {
+              package_trip_plan_images: true,
+            },
+          },
+          package_extra_services: {
+            include: {
+              extra_service: true,
+            },
+          },
+          package_languages: {
+            include: {
+              language: true,
+            },
+          },
+          package_traveller_types: {
+            include: {
+              traveller_type: true,
+            },
+          },
+          package_room_types: true,
+          package_availabilities: true,
+          property_calendars: true,
+          reviews: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
             },
           },
         },
@@ -290,15 +321,29 @@ export class ListingManagementService {
       // Transform package files to include URLs
       const transformedFiles = packageData.package_files.map((file) => ({
         ...file,
-        file_url: SojebStorage.url(
+        file_url: file.file ? SojebStorage.url(
           appConfig().storageUrl.package + file.file,
-        ),
+        ) : null,
       }));
+
+      // Transform status to match findAll logic
+      let statusText = 'Available';
+      let statusClass = 'available';
+      
+      if (packageData.status === 0) {
+        statusText = 'Cancel';
+        statusClass = 'cancel';
+      } else if (packageData.approved_at === null) {
+        statusText = 'Pending';
+        statusClass = 'pending';
+      }
 
       return {
         success: true,
         data: {
           ...packageData,
+          status: statusText,
+          statusClass: statusClass,
           package_files: transformedFiles,
         },
       };
