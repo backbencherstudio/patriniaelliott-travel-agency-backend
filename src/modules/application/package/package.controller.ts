@@ -25,7 +25,7 @@ import { CalendarQueryDto } from '../../admin/vendor-package/dto/calendar-availa
 @ApiTags('Package')
 @Controller('application/packages')
 export class PackageController {
-  constructor(private readonly packageService: PackageService) {}
+  constructor(private readonly packageService: PackageService) { }
 
   @ApiOperation({ summary: 'Search and discover packages' })
   @Get('search')
@@ -124,40 +124,40 @@ export class PackageController {
   //   }
   // }
 
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get vendor packages with enhanced search capabilities',
     description: 'Search packages by name, description, country, location, destination, and other filters. Supports pagination and calendar data.'
   })
   @Get()
   async getVendorPackage(
-    @Query() query: GetVendorPackageDto & CalendarQueryDto, 
+    @Query() query: GetVendorPackageDto & CalendarQueryDto,
     @Req() req: any
   ) {
     try {
-    const page = parseInt(query.page?.toString() || '1', 10);
-    const limit = parseInt(query.limit?.toString() || '10', 10);
-    const user_id = req.user?.userId || null;
-    
-    // Debug logging for rating parameter
+      const page = parseInt(query.page?.toString() || '1', 10);
+      const limit = parseInt(query.limit?.toString() || '10', 10);
+      const user_id = req.user?.userId || null;
+
+      // Debug logging for rating parameter
       console.log('Ratings parameter received:', (query as any).ratings);
-    console.log('Query object:', query);
-      
+      console.log('Query object:', query);
+
       // Handle multiple type parameters
-      const types = Array.isArray(query.type) ? query.type : 
-                    (typeof query.type === 'string' && query.type.includes(',')) ? 
-                    query.type.split(',').map(t => t.trim()) : 
-                    query.type ? [query.type] : undefined;
-      
+      const types = Array.isArray(query.type) ? query.type :
+        (typeof query.type === 'string' && query.type.includes(',')) ?
+          query.type.split(',').map(t => t.trim()) :
+          query.type ? [query.type] : undefined;
+
       return await this.packageService.getVendorPackage(
-        page, 
-        limit, 
-        user_id, 
-        { 
+        page,
+        limit,
+        user_id,
+        {
           searchQuery: query.q,
           country: (query as any).country,
           location: (query as any).location,
-          status: query.status, 
-          categoryId: query.category_id, 
+          status: query.status,
+          categoryId: query.category_id,
           destinationId: query.destination_id,
           type: types,
           freeCancellation: query.free_cancellation,
@@ -177,6 +177,14 @@ export class PackageController {
         error: process.env.NODE_ENV === 'development' ? error.stack : undefined
       };
     }
+  }
+
+  @ApiOperation({
+    summary: ''
+  })
+  @Get('/top-destinations')
+  async topLocation() {
+    return await this.packageService.topLocations()
   }
 
   // @UseGuards(JwtAuthGuard)

@@ -703,7 +703,7 @@ export class BookingService {
     }
   }
 
-  async refundRequest(user_id: string, booking_id: string) {
+  async refundRequest({ booking_id, user_id, refund_reason }: {user_id: string, booking_id: string, refund_reason: string}) {
     try {
       const booking = await this.prisma.booking.findUnique({
         where: {
@@ -756,6 +756,7 @@ export class BookingService {
 
       const refundReq = await this.prisma.paymentTransaction.create({
         data: {
+          order_id: isPaymentConfirm.order_id,
           amount,
           provider: 'stripe',
           type: 'refund',
@@ -768,6 +769,7 @@ export class BookingService {
       await this.prisma.refundTransaction.create({
         data: {
           payment_transaction_id: refundReq.id,
+          refund_reason
         }
       })
       return {

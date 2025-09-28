@@ -22,6 +22,7 @@ import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
+import { RefundRequest } from './dto/refund-request.dto';
 
 @ApiBearerAuth()
 @ApiTags('Booking')
@@ -249,8 +250,9 @@ export class BookingController {
   async refund(
     @Req() req: Request,
     @Param('booking_id') booking_id: string,
+    @Body() body: RefundRequest,
   ) {
     const user_id = req.user.userId;
-    return await this.bookingService.refundRequest(user_id, booking_id)
+    return await this.bookingService.refundRequest({ user_id, booking_id, refund_reason: body.refund_reason })
   }
 }
