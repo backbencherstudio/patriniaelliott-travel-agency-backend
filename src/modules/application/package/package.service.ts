@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SojebStorage } from '../../../common/lib/Disk/SojebStorage';
 import appConfig from '../../../config/app.config';
@@ -14,7 +14,7 @@ export class PackageService {
   constructor(
     private prisma: PrismaService,
     private readonly messageGateway: MessageGateway,
-  ) {}
+  ) { }
 
   async searchPackages(searchDto: SearchPackagesDto) {
     const {
@@ -296,8 +296,8 @@ export class PackageService {
         {
           package_destinations: {
             some: {
-              destination: { 
-                name: { contains: search, mode: 'insensitive' } 
+              destination: {
+                name: { contains: search, mode: 'insensitive' }
               }
             }
           }
@@ -337,8 +337,8 @@ export class PackageService {
         {
           package_destinations: {
             some: {
-              destination: { 
-                name: { contains: location, mode: 'insensitive' } 
+              destination: {
+                name: { contains: location, mode: 'insensitive' }
               }
             }
           }
@@ -361,12 +361,12 @@ export class PackageService {
     if (city || country) {
       // Build location conditions
       const locationConditions = [];
-      
+
       if (city) {
         locationConditions.push({ city: { contains: city, mode: 'insensitive' } });
         console.log('City filter applied:', city);
       }
-      
+
       if (country) {
         // Search in both package country field and destination countries
         const countryConditions = [
@@ -383,7 +383,7 @@ export class PackageService {
             }
           }
         ];
-        
+
         // Use OR logic for country search to match either package country or destination country
         if (locationConditions.length > 0) {
           // If we have city conditions, combine with country using AND
@@ -394,10 +394,10 @@ export class PackageService {
           // If only country is provided, use OR logic directly
           where.OR = countryConditions;
         }
-        
+
         console.log('Country filter applied:', country);
       }
-      
+
       // If we have location conditions (city or combined city+country), apply them
       if (locationConditions.length > 0) {
         if (locationConditions.length === 1) {
@@ -406,7 +406,7 @@ export class PackageService {
           where.AND = locationConditions;
         }
       }
-      
+
       // Clear any existing OR conditions when using specific location filters
       if (!country || city) {
         delete where.OR;
@@ -451,10 +451,10 @@ export class PackageService {
         where.price.lte = Number(budget_end);
         console.log('Budget end filter applied:', Number(budget_end));
       }
-      
-      console.log('Budget filter applied:', { 
-        budget_start: budget_start ? Number(budget_start) : null, 
-        budget_end: budget_end ? Number(budget_end) : null, 
+
+      console.log('Budget filter applied:', {
+        budget_start: budget_start ? Number(budget_start) : null,
+        budget_end: budget_end ? Number(budget_end) : null,
         budget_start_type: typeof budget_start,
         budget_end_type: typeof budget_end,
         price_condition: where.price
@@ -506,7 +506,7 @@ export class PackageService {
     if (free_cancellation !== undefined) {
       // Convert string to boolean if needed
       const isFreeCancellation = free_cancellation === true || String(free_cancellation).toLowerCase() === 'true';
-      
+
       if (isFreeCancellation) {
         // For free cancellation, search for packages with free cancellation terms OR packages without cancellation policies
         where.OR = [
@@ -539,7 +539,7 @@ export class PackageService {
           ]
         };
       }
-      
+
       console.log('Free cancellation filter applied:', isFreeCancellation, 'Original value:', free_cancellation);
     }
 
@@ -678,12 +678,12 @@ export class PackageService {
 
     // Log the final where condition for debugging
     console.log('Final where condition:', JSON.stringify(where, null, 2));
-    console.log('Search parameters:', { 
-      city, 
-      country, 
-      location, 
-      search, 
-      name, 
+    console.log('Search parameters:', {
+      city,
+      country,
+      location,
+      search,
+      name,
       free_cancellation,
       budget_start: budget_start ? Number(budget_start) : null,
       budget_end: budget_end ? Number(budget_end) : null,
@@ -696,7 +696,7 @@ export class PackageService {
       searchInPackageCountry: !!country,
       searchInDestinationCountry: !!country
     });
-    
+
     // Debug: Check what cancellation policies exist in the database
     if (free_cancellation !== undefined) {
       try {
@@ -709,7 +709,7 @@ export class PackageService {
           }
         });
         console.log('Sample cancellation policies in database:', samplePolicies);
-        
+
         // Also check how many packages have cancellation policies
         const totalPackages = await this.prisma.package.count();
         const packagesWithPolicies = await this.prisma.package.count({
@@ -720,7 +720,7 @@ export class PackageService {
           }
         });
         console.log(`Total packages: ${totalPackages}, Packages with cancellation policies: ${packagesWithPolicies}`);
-        
+
         // Test: Get packages without any filters to see if we can get any results
         const testPackages = await this.prisma.package.findMany({
           take: 5,
@@ -847,26 +847,26 @@ export class PackageService {
     if (packages.length > 0) {
       console.log('Sample package cities:', packages.slice(0, 3).map(p => p.city));
       console.log('Sample package countries:', packages.slice(0, 3).map(p => p.country));
-      console.log('Sample destination countries:', packages.slice(0, 3).map(p => 
+      console.log('Sample destination countries:', packages.slice(0, 3).map(p =>
         p.package_destinations?.map(pd => pd.destination.country?.name).filter(Boolean)
       ));
       console.log('Sample cancellation policies:', packages.slice(0, 3).map(p => ({
         package_id: p.id,
         cancellation_policy_id: (p as any)?.cancellation_policy_id
       })));
-      
-             // Log price range of returned packages
-       const prices = packages.map(p => Number(p.price)).filter(p => !isNaN(p));
-       if (prices.length > 0) {
-         console.log('Price range of returned packages:', {
-           min: Math.min(...prices),
-           max: Math.max(...prices),
-           count: prices.length,
-           all_prices: prices.slice(0, 10) // Show first 10 prices for debugging
-         });
-       } else {
-         console.log('No packages with valid prices found');
-       }
+
+      // Log price range of returned packages
+      const prices = packages.map(p => Number(p.price)).filter(p => !isNaN(p));
+      if (prices.length > 0) {
+        console.log('Price range of returned packages:', {
+          min: Math.min(...prices),
+          max: Math.max(...prices),
+          count: prices.length,
+          all_prices: prices.slice(0, 10) // Show first 10 prices for debugging
+        });
+      } else {
+        console.log('No packages with valid prices found');
+      }
     } else {
       console.log('No packages found. This might be due to:');
       console.log('1. No packages match the free cancellation criteria');
@@ -887,7 +887,7 @@ export class PackageService {
     //   return {
     //     // All original package properties
     //     ...pkg,
-        
+
     //     // Additional calculated fields
     //     average_rating: Math.round(averageRating * 10) / 10, // Round to 1 decimal place
     //     total_reviews: pkg._count.reviews,
@@ -896,16 +896,16 @@ export class PackageService {
     //       const policy = cp?.policy;
     //       return typeof policy === 'string' && policy.toLowerCase().includes('free');
     //     })() || false,
-        
+
     //     // Ensure price is a number
     //     price: Number(pkg.price),
-        
+
     //     // Add file URLs for images
     //     package_files: pkg.package_files.map(file => ({
     //       ...file,
     //       file_url: `${process.env.APP_URL || 'http://localhost:4000'}/storage/package/${file.file}`
     //     })),
-        
+
     //     // Add vendor info
     //     vendor: {
     //       id: pkg.user.id,
@@ -913,20 +913,20 @@ export class PackageService {
     //       email: pkg.user.email,
     //       avatar: pkg.user.avatar,
     //     },
-        
+
     //     // Add destination info
     //     destinations: pkg.package_destinations.map(pd => ({
     //       id: pd.destination.id,
     //       name: pd.destination.name,
     //       country: pd.destination.country?.name,
     //     })),
-        
+
     //     // Add category info
     //     categories: pkg.package_categories.map(pc => ({
     //       id: pc.category.id,
     //       name: pc.category.name,
     //     })),
-        
+
     //     // Add room type info
     //     room_types: pkg.package_room_types.map(rt => ({
     //       id: rt.id,
@@ -935,7 +935,7 @@ export class PackageService {
     //       max_guests: rt.max_guests,
     //       is_available: rt.is_available,
     //     })),
-        
+
     //     // Add availability info
     //     availability: pkg.package_availabilities || [],
     //   };
@@ -973,13 +973,13 @@ export class PackageService {
           hasNextPage,
           hasPrevPage,
         },
-                 filters: {
-           applied: {
-             search,
-             name,
-             location,
-             city,
-             country,
+        filters: {
+          applied: {
+            search,
+            name,
+            location,
+            city,
+            country,
             budget_start,
             budget_end,
             min_rating,
@@ -992,17 +992,17 @@ export class PackageService {
             start_date,
             end_date,
           },
-                     available: {
-             total_packages: total,
-             price_range: {
-               min: packages.length > 0 ? Math.min(...packages.map(p => Number(p.price))) : 0,
-               max: packages.length > 0 ? Math.max(...packages.map(p => Number(p.price))) : 0,
-             },
-             rating_range: {
-               min: 0,
-               max: 5,
-             },
-           },
+          available: {
+            total_packages: total,
+            price_range: {
+              min: packages.length > 0 ? Math.min(...packages.map(p => Number(p.price))) : 0,
+              max: packages.length > 0 ? Math.max(...packages.map(p => Number(p.price))) : 0,
+            },
+            rating_range: {
+              min: 0,
+              max: 5,
+            },
+          },
         },
       },
     };
@@ -1503,9 +1503,9 @@ export class PackageService {
     }
   }
   async getVendorPackage(
-    page: number, 
-    limit: number, 
-    user_id?: string | null, 
+    page: number,
+    limit: number,
+    user_id?: string | null,
     searchParams?: {
       searchQuery?: string;
       country?: string;
@@ -1525,7 +1525,7 @@ export class PackageService {
   ) {
     try {
       const skip = (page - 1) * limit;
-      
+
       // Debug logging
       console.log('getVendorPackage called with:', {
         page,
@@ -1533,453 +1533,453 @@ export class PackageService {
         user_id,
         searchParams
       });
-    
-    // Build where conditions
-    const where: any = {
-      deleted_at: null
-    };
 
-    // Add user_id filter only if provided
-    if (user_id) {
-      where.user_id = user_id;
-    }
+      // Build where conditions
+      const where: any = {
+        deleted_at: null
+      };
 
-    // Add search functionality
-    if (searchParams?.searchQuery || searchParams?.country || searchParams?.location) {
-      const searchConditions = [];
-      
-      // Search by package name and description
-      if (searchParams?.searchQuery) {
-        searchConditions.push(
-          { name: { contains: searchParams.searchQuery, mode: 'insensitive' } },
-          { description: { contains: searchParams.searchQuery, mode: 'insensitive' } }
-        );
+      // Add user_id filter only if provided
+      if (user_id) {
+        where.user_id = user_id;
       }
-      
-      // Search by country
-      if (searchParams?.country) {
-        searchConditions.push({
-          package_destinations: {
-            some: {
-              destination: {
-                country: {
-                  name: { contains: searchParams.country, mode: 'insensitive' }
-                }
-              }
-            }
-          }
-        });
-      }
-      
-      // Search by location (city)
-      if (searchParams?.location) {
-        searchConditions.push(
-          // Search in package's direct location fields
-          { city: { contains: searchParams.location, mode: 'insensitive' } },
-          { country: { contains: searchParams.location, mode: 'insensitive' } },
-          // Search in destination names
-          {
+
+      // Add search functionality
+      if (searchParams?.searchQuery || searchParams?.country || searchParams?.location) {
+        const searchConditions = [];
+
+        // Search by package name and description
+        if (searchParams?.searchQuery) {
+          searchConditions.push(
+            { name: { contains: searchParams.searchQuery, mode: 'insensitive' } },
+            { description: { contains: searchParams.searchQuery, mode: 'insensitive' } }
+          );
+        }
+
+        // Search by country
+        if (searchParams?.country) {
+          searchConditions.push({
             package_destinations: {
               some: {
                 destination: {
-                  name: { contains: searchParams.location, mode: 'insensitive' }
-                }
-              }
-            }
-          }
-        );
-      }
-      
-      if (searchConditions.length > 0) {
-        where.OR = searchConditions;
-      }
-    }
-
-    // Add status filter
-    if (searchParams?.status !== undefined) {
-      where.status = Number(searchParams.status);
-    }
-
-    // Add category filter via relation
-    if (searchParams?.categoryId) {
-      where.package_categories = {
-        some: { category_id: searchParams.categoryId }
-      };
-    }
-
-    // Add destination filter
-    if (searchParams?.destinationId) {
-      where.package_destinations = {
-        some: {
-          destination_id: searchParams.destinationId
-        }
-      };
-    }
-
-    // Add type filter
-    if (searchParams?.type) {
-      where.type = Array.isArray(searchParams.type) ? searchParams.type[0] : searchParams.type;
-    }
-
-    // Free cancellation filter will be applied in-memory (JSON field)
-
-    // Add languages filter
-    if (searchParams?.languages && searchParams.languages.length > 0) {
-      where.package_languages = {
-        some: {
-          language_id: {
-            in: searchParams.languages
-          }
-        }
-      };
-    }
-
-    // Add ratings filter
-    if (searchParams?.ratings && Array.isArray(searchParams.ratings) && searchParams.ratings.length > 0) {
-      // Filter out any invalid ratings
-      const validRatings = searchParams.ratings.filter(rating => 
-        typeof rating === 'number' && rating >= 0 && rating <= 5
-      );
-      
-      console.log('Ratings filter - Original:', searchParams.ratings);
-      console.log('Ratings filter - Valid:', validRatings);
-      
-      if (validRatings.length > 0) {
-        // Only return packages that have at least one review with the specified rating
-        // This ensures packages without reviews are excluded when rating filter is applied
-        where.reviews = {
-          some: {
-            rating_value: {
-              in: validRatings
-            },
-            deleted_at: null,
-            status: 1
-          }
-        };
-        console.log('Applied ratings filter to where clause:', where.reviews);
-        console.log('Looking for packages with reviews having rating values:', validRatings);
-      }
-    }
-
-    // Add budget range filter
-    if (searchParams?.budgetStart !== undefined || searchParams?.budgetEnd !== undefined) {
-      where.price = {};
-      if (searchParams.budgetStart !== undefined) {
-        where.price.gte = searchParams.budgetStart;
-      }
-      if (searchParams.budgetEnd !== undefined) {
-        where.price.lte = searchParams.budgetEnd;
-      }
-    }
-
-    // Add date range filter for availability
-    if (searchParams?.durationStart || searchParams?.durationEnd) {
-      where.package_availabilities = {
-        some: {
-          AND: []
-        }
-      };
-      
-      if (searchParams.durationStart) {
-        where.package_availabilities.some.AND.push({
-          date: {
-            gte: new Date(searchParams.durationStart)
-          }
-        });
-      }
-      
-      if (searchParams.durationEnd) {
-        where.package_availabilities.some.AND.push({
-          date: {
-            lte: new Date(searchParams.durationEnd)
-          }
-        });
-      }
-    }
-  
-    console.log('Final where clause for package query:', JSON.stringify(where, null, 2));
-    
-    const [packages, total] = await Promise.all([
-      this.prisma.package.findMany({
-        skip,
-        take: limit,
-        orderBy: { created_at: 'desc' },
-        where,
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              display_name: true,
-              avatar: true,
-              created_at: true,
-            },
-          },
-          package_files: {
-            where: { deleted_at: null },
-            orderBy: { sort_order: 'asc' },
-            select: { id: true, file: true, type: true, sort_order: true },
-          },
-          package_room_types: {
-            where: { deleted_at: null },
-            orderBy: { created_at: 'asc' },
-            select: { id: true, name: true, description: true, price: true, currency: true, room_photos: true },
-          },
-          package_availabilities: {
-            orderBy: { date: 'asc' },
-            select: { id: true, date: true, status: true },
-          },
-          // cancellation_policy: true,
-          // package_languages: {
-          //   include: { language: { select: { id: true, name: true, code: true } } },
-          // },
-          package_destinations: {
-            include: {
-              destination: {
-                select: {
-                  id: true,
-                  name: true,
                   country: {
-                    select: {
-                      id: true,
-                      name: true,
-                      country_code: true,
-                      flag: true
-                    }
+                    name: { contains: searchParams.country, mode: 'insensitive' }
                   }
                 }
               }
             }
-          },
-          package_extra_services: {
-            include: { 
-              extra_service: { 
-                select: { id: true, name: true, price: true, description: true } 
-              } 
+          });
+        }
+
+        // Search by location (city)
+        if (searchParams?.location) {
+          searchConditions.push(
+            // Search in package's direct location fields
+            { city: { contains: searchParams.location, mode: 'insensitive' } },
+            { country: { contains: searchParams.location, mode: 'insensitive' } },
+            // Search in destination names
+            {
+              package_destinations: {
+                some: {
+                  destination: {
+                    name: { contains: searchParams.location, mode: 'insensitive' }
+                  }
+                }
+              }
+            }
+          );
+        }
+
+        if (searchConditions.length > 0) {
+          where.OR = searchConditions;
+        }
+      }
+
+      // Add status filter
+      if (searchParams?.status !== undefined) {
+        where.status = Number(searchParams.status);
+      }
+
+      // Add category filter via relation
+      if (searchParams?.categoryId) {
+        where.package_categories = {
+          some: { category_id: searchParams.categoryId }
+        };
+      }
+
+      // Add destination filter
+      if (searchParams?.destinationId) {
+        where.package_destinations = {
+          some: {
+            destination_id: searchParams.destinationId
+          }
+        };
+      }
+
+      // Add type filter
+      if (searchParams?.type) {
+        where.type = Array.isArray(searchParams.type) ? searchParams.type[0] : searchParams.type;
+      }
+
+      // Free cancellation filter will be applied in-memory (JSON field)
+
+      // Add languages filter
+      if (searchParams?.languages && searchParams.languages.length > 0) {
+        where.package_languages = {
+          some: {
+            language_id: {
+              in: searchParams.languages
+            }
+          }
+        };
+      }
+
+      // Add ratings filter
+      if (searchParams?.ratings && Array.isArray(searchParams.ratings) && searchParams.ratings.length > 0) {
+        // Filter out any invalid ratings
+        const validRatings = searchParams.ratings.filter(rating =>
+          typeof rating === 'number' && rating >= 0 && rating <= 5
+        );
+
+        console.log('Ratings filter - Original:', searchParams.ratings);
+        console.log('Ratings filter - Valid:', validRatings);
+
+        if (validRatings.length > 0) {
+          // Only return packages that have at least one review with the specified rating
+          // This ensures packages without reviews are excluded when rating filter is applied
+          where.reviews = {
+            some: {
+              rating_value: {
+                in: validRatings
+              },
+              deleted_at: null,
+              status: 1
+            }
+          };
+          console.log('Applied ratings filter to where clause:', where.reviews);
+          console.log('Looking for packages with reviews having rating values:', validRatings);
+        }
+      }
+
+      // Add budget range filter
+      if (searchParams?.budgetStart !== undefined || searchParams?.budgetEnd !== undefined) {
+        where.price = {};
+        if (searchParams.budgetStart !== undefined) {
+          where.price.gte = searchParams.budgetStart;
+        }
+        if (searchParams.budgetEnd !== undefined) {
+          where.price.lte = searchParams.budgetEnd;
+        }
+      }
+
+      // Add date range filter for availability
+      if (searchParams?.durationStart || searchParams?.durationEnd) {
+        where.package_availabilities = {
+          some: {
+            AND: []
+          }
+        };
+
+        if (searchParams.durationStart) {
+          where.package_availabilities.some.AND.push({
+            date: {
+              gte: new Date(searchParams.durationStart)
+            }
+          });
+        }
+
+        if (searchParams.durationEnd) {
+          where.package_availabilities.some.AND.push({
+            date: {
+              lte: new Date(searchParams.durationEnd)
+            }
+          });
+        }
+      }
+
+      console.log('Final where clause for package query:', JSON.stringify(where, null, 2));
+
+      const [packages, total] = await Promise.all([
+        this.prisma.package.findMany({
+          skip,
+          take: limit,
+          orderBy: { created_at: 'desc' },
+          where,
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                display_name: true,
+                avatar: true,
+                created_at: true,
+              },
+            },
+            package_files: {
+              where: { deleted_at: null },
+              orderBy: { sort_order: 'asc' },
+              select: { id: true, file: true, type: true, sort_order: true },
+            },
+            package_room_types: {
+              where: { deleted_at: null },
+              orderBy: { created_at: 'asc' },
+              select: { id: true, name: true, description: true, price: true, currency: true, room_photos: true },
+            },
+            package_availabilities: {
+              orderBy: { date: 'asc' },
+              select: { id: true, date: true, status: true },
+            },
+            // cancellation_policy: true,
+            // package_languages: {
+            //   include: { language: { select: { id: true, name: true, code: true } } },
+            // },
+            package_destinations: {
+              include: {
+                destination: {
+                  select: {
+                    id: true,
+                    name: true,
+                    country: {
+                      select: {
+                        id: true,
+                        name: true,
+                        country_code: true,
+                        flag: true
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            package_extra_services: {
+              include: {
+                extra_service: {
+                  select: { id: true, name: true, price: true, description: true }
+                }
+              },
             },
           },
-        },
-      }),
-      this.prisma.package.count({ where }),
-    ]);
-  
-    console.log(`Found ${packages.length} packages, total: ${total}`);
-    console.log('Package IDs:', packages.map(p => p.id));
-  
-    // Fetch rating aggregates for all returned package IDs in one query
-    const packageIds = packages.map(p => p.id);
-    const ratingAgg = await this.prisma.review.groupBy({
-      by: ['package_id'],
-      where: {
-        package_id: { in: packageIds },
-        deleted_at: null,
-        status: 1,
-      },
-      _avg: { rating_value: true },
-      _count: { rating_value: true },
-    });
+        }),
+        this.prisma.package.count({ where }),
+      ]);
 
-    console.log('Rating aggregation results:', ratingAgg);
+      console.log(`Found ${packages.length} packages, total: ${total}`);
+      console.log('Package IDs:', packages.map(p => p.id));
 
-    const packageIdToRating = new Map<string, { averageRating: number; totalReviews: number }>();
-    for (const row of ratingAgg as any[]) {
-      packageIdToRating.set(row.package_id, {
-        averageRating: row._avg?.rating_value ?? 0,
-        totalReviews: row._count?.rating_value ?? 0,
-      });
-    }
-    
-    console.log('Package ID to Rating mapping:', Object.fromEntries(packageIdToRating));
-    
-    // Debug: Check if any packages were returned without matching ratings
-    if (searchParams?.ratings && Array.isArray(searchParams.ratings) && searchParams.ratings.length > 0) {
-      const packagesWithoutMatchingRatings = packages.filter(pkg => {
-        const ratingData = packageIdToRating.get(pkg.id);
-        return !ratingData || ratingData.totalReviews === 0;
-      });
-      
-      if (packagesWithoutMatchingRatings.length > 0) {
-        console.log('WARNING: Found packages without matching ratings:', packagesWithoutMatchingRatings.map(p => p.id));
-      }
-    }
-    // Build per-package rating distribution (1..5)
-    const distributionAgg = await this.prisma.review.groupBy({
-      by: ['package_id', 'rating_value'],
-      where: {
-        package_id: { in: packageIds },
-        deleted_at: null,
-        status: 1,
-      },
-      _count: { rating_value: true },
-    });
-    
-    console.log('Rating distribution results:', distributionAgg);
-    
-    // Debug: Check actual review data for returned packages when rating filter is applied
-    if (searchParams?.ratings && Array.isArray(searchParams.ratings) && searchParams.ratings.length > 0) {
-      const actualReviews = await this.prisma.review.findMany({
+      // Fetch rating aggregates for all returned package IDs in one query
+      const packageIds = packages.map(p => p.id);
+      const ratingAgg = await this.prisma.review.groupBy({
+        by: ['package_id'],
         where: {
           package_id: { in: packageIds },
           deleted_at: null,
           status: 1,
         },
-        select: {
-          package_id: true,
-          rating_value: true,
-        }
+        _avg: { rating_value: true },
+        _count: { rating_value: true },
       });
-      
-      console.log('Actual review data for returned packages:', actualReviews);
-      
-      // Check if any packages have reviews that don't match the filter
-      const validRatings = searchParams.ratings.filter(rating => 
-        typeof rating === 'number' && rating >= 0 && rating <= 5
-      );
-      
-      const packagesWithNonMatchingReviews = new Set();
-      actualReviews.forEach(review => {
-        if (!validRatings.includes(review.rating_value)) {
-          packagesWithNonMatchingReviews.add(review.package_id);
+
+      console.log('Rating aggregation results:', ratingAgg);
+
+      const packageIdToRating = new Map<string, { averageRating: number; totalReviews: number }>();
+      for (const row of ratingAgg as any[]) {
+        packageIdToRating.set(row.package_id, {
+          averageRating: row._avg?.rating_value ?? 0,
+          totalReviews: row._count?.rating_value ?? 0,
+        });
+      }
+
+      console.log('Package ID to Rating mapping:', Object.fromEntries(packageIdToRating));
+
+      // Debug: Check if any packages were returned without matching ratings
+      if (searchParams?.ratings && Array.isArray(searchParams.ratings) && searchParams.ratings.length > 0) {
+        const packagesWithoutMatchingRatings = packages.filter(pkg => {
+          const ratingData = packageIdToRating.get(pkg.id);
+          return !ratingData || ratingData.totalReviews === 0;
+        });
+
+        if (packagesWithoutMatchingRatings.length > 0) {
+          console.log('WARNING: Found packages without matching ratings:', packagesWithoutMatchingRatings.map(p => p.id));
         }
-      });
-      
-      if (packagesWithNonMatchingReviews.size > 0) {
-        console.log('ERROR: Found packages with reviews that do not match the rating filter:', Array.from(packagesWithNonMatchingReviews));
       }
-    }
-
-    const packageIdToDistribution = new Map<string, Record<number, number>>();
-    for (const row of distributionAgg as any[]) {
-      const current = packageIdToDistribution.get(row.package_id) ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-      // rating_value may be float; clamp to 1..5 integer bucket
-      const bucket = Math.round(row.rating_value as number) as 1|2|3|4|5;
-      if (bucket >= 1 && bucket <= 5) {
-        current[bucket] = row._count?.rating_value ?? 0;
-      }
-      packageIdToDistribution.set(row.package_id, current);
-    }
-
-    // Confirmed bookings per package (approved bookings only)
-    const confirmedAgg = await this.prisma.bookingItem.groupBy({
-      by: ['package_id'],
-      where: {
-        package_id: { in: packageIds },
-        deleted_at: null,
-        booking: {
+      // Build per-package rating distribution (1..5)
+      const distributionAgg = await this.prisma.review.groupBy({
+        by: ['package_id', 'rating_value'],
+        where: {
+          package_id: { in: packageIds },
           deleted_at: null,
-          status: 'approved',
+          status: 1,
         },
-      },
-      _count: { _all: true },
-      _sum: { quantity: true },
-    });
-
-    const packageIdToConfirmed = new Map<string, { confirmedBookings: number; confirmedQuantity: number }>();
-    for (const row of confirmedAgg as any[]) {
-      packageIdToConfirmed.set(row.package_id, {
-        confirmedBookings: row._count?._all ?? 0,
-        confirmedQuantity: row._sum?.quantity ?? 0,
+        _count: { rating_value: true },
       });
-    }
-  
-    // Process the data to add file URLs, avatar URLs, and rating summary
-    // const processedData = packages.map(pkg => {
-    //   const processedPackageFiles = pkg.package_files.map(file => ({
-    //     ...file,
-    //     file_url: this.generateFileUrl(file.file, 'package'),
-    //   }));
 
-    //   const processedRoomTypes = pkg.package_room_types.map(roomType => {
-    //     let processedRoomPhotos = roomType.room_photos;
-    //     if (Array.isArray(roomType.room_photos)) {
-    //       processedRoomPhotos = roomType.room_photos.map(photo =>
-    //         typeof photo === 'string' ? SojebStorage.url(appConfig().storageUrl.package + photo) : photo,
-    //       );
-    //     }
-    //     return { ...roomType, room_photos: processedRoomPhotos };
-    //   });
+      console.log('Rating distribution results:', distributionAgg);
 
-    //   // const processedExtraServices = pkg.package_extra_services.map(service => ({
-    //   //   id: service.id,
-    //   //   extra_service: {
-    //   //     id: service.extra_service.id,
-    //   //     name: service.extra_service.name,
-    //   //     price: service.extra_service.price,
-    //   //     description: service.extra_service.description
-    //   //   }
-    //   // }));
+      // Debug: Check actual review data for returned packages when rating filter is applied
+      if (searchParams?.ratings && Array.isArray(searchParams.ratings) && searchParams.ratings.length > 0) {
+        const actualReviews = await this.prisma.review.findMany({
+          where: {
+            package_id: { in: packageIds },
+            deleted_at: null,
+            status: 1,
+          },
+          select: {
+            package_id: true,
+            rating_value: true,
+          }
+        });
 
-    //   //        const processedUser = pkg.user
-    //   //    ? {
-    //   //        ...pkg.user,
-    //   //        avatar_url: pkg.user.avatar
-    //   //          ? this.generateFileUrl(pkg.user.avatar, 'avatar')
-    //   //          : null,
-    //   //      }
-    //   //    : null;
+        console.log('Actual review data for returned packages:', actualReviews);
 
-    //   const rating = packageIdToRating.get(pkg.id) ?? { averageRating: 0, totalReviews: 0 };
-    //   const ratingDistribution = packageIdToDistribution.get(pkg.id) ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    //   const confirmed = packageIdToConfirmed.get(pkg.id) ?? { confirmedBookings: 0, confirmedQuantity: 0 };
-    //   const approvedDate = pkg.approved_at ? pkg.approved_at.toISOString() : null;
+        // Check if any packages have reviews that don't match the filter
+        const validRatings = searchParams.ratings.filter(rating =>
+          typeof rating === 'number' && rating >= 0 && rating <= 5
+        );
 
-    //   // Extract room photos from processed data
-    // const allRoomPhotos = processedRoomTypes.flatMap(roomType => roomType.room_photos || []);
+        const packagesWithNonMatchingReviews = new Set();
+        actualReviews.forEach(review => {
+          if (!validRatings.includes(review.rating_value)) {
+            packagesWithNonMatchingReviews.add(review.package_id);
+          }
+        });
 
-    //   return {
-    //     ...pkg,
-    //     package_files: processedPackageFiles,
-    //     package_room_types: processedRoomTypes,
-    //     // package_extra_services: processedExtraServices,
-    //     // user: processedUser,
-    //     rating_summary: {
-    //       averageRating: rating.averageRating,
-    //       totalReviews: rating.totalReviews,
-    //       ratingDistribution,
-    //     },
-        
-    //     roomFiles: allRoomPhotos,
-    //     confirmed_bookings: confirmed.confirmedBookings,
-    //     confirmed_quantity: confirmed.confirmedQuantity,
-    //     approved_at: pkg.approved_at,
-    //     approved_date: approvedDate,
-    //   } as any;
-    // });
-
-    // // Add calendar configuration to each package
-    // for (const pkg of processedData) {
-    //   const calendarConfig = await this.getCalendarConfiguration(pkg.id);
-    //   if (calendarConfig) {
-    //     (pkg as any).calendar_configuration = calendarConfig;
-    //   }
-    // }
-
-    
-
-    // Apply free cancellation filter in-memory if requested
-    let returnedPackages = packages as any[];
-    if (searchParams?.freeCancellation !== undefined) {
-      const isFree = !!searchParams.freeCancellation;
-      returnedPackages = (packages as any[]).filter((pkg: any) => {
-        const cp: any = pkg.cancellation_policy as any;
-        const text = typeof cp?.policy === 'string' ? cp.policy.toLowerCase() : '';
-        if (isFree) {
-          return !cp || text.includes('free') || text.includes('refundable') || text.includes('no charge') || text.includes('full refund');
+        if (packagesWithNonMatchingReviews.size > 0) {
+          console.log('ERROR: Found packages with reviews that do not match the rating filter:', Array.from(packagesWithNonMatchingReviews));
         }
-        return cp && (text.includes('paid') || text.includes('fee') || text.includes('non-refundable') || text.includes('no refund'));
-      });
-    }
+      }
 
-    return {
-      data: returnedPackages,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+      const packageIdToDistribution = new Map<string, Record<number, number>>();
+      for (const row of distributionAgg as any[]) {
+        const current = packageIdToDistribution.get(row.package_id) ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+        // rating_value may be float; clamp to 1..5 integer bucket
+        const bucket = Math.round(row.rating_value as number) as 1 | 2 | 3 | 4 | 5;
+        if (bucket >= 1 && bucket <= 5) {
+          current[bucket] = row._count?.rating_value ?? 0;
+        }
+        packageIdToDistribution.set(row.package_id, current);
+      }
+
+      // Confirmed bookings per package (approved bookings only)
+      const confirmedAgg = await this.prisma.bookingItem.groupBy({
+        by: ['package_id'],
+        where: {
+          package_id: { in: packageIds },
+          deleted_at: null,
+          booking: {
+            deleted_at: null,
+            status: 'approved',
+          },
+        },
+        _count: { _all: true },
+        _sum: { quantity: true },
+      });
+
+      const packageIdToConfirmed = new Map<string, { confirmedBookings: number; confirmedQuantity: number }>();
+      for (const row of confirmedAgg as any[]) {
+        packageIdToConfirmed.set(row.package_id, {
+          confirmedBookings: row._count?._all ?? 0,
+          confirmedQuantity: row._sum?.quantity ?? 0,
+        });
+      }
+
+      // Process the data to add file URLs, avatar URLs, and rating summary
+      // const processedData = packages.map(pkg => {
+      //   const processedPackageFiles = pkg.package_files.map(file => ({
+      //     ...file,
+      //     file_url: this.generateFileUrl(file.file, 'package'),
+      //   }));
+
+      //   const processedRoomTypes = pkg.package_room_types.map(roomType => {
+      //     let processedRoomPhotos = roomType.room_photos;
+      //     if (Array.isArray(roomType.room_photos)) {
+      //       processedRoomPhotos = roomType.room_photos.map(photo =>
+      //         typeof photo === 'string' ? SojebStorage.url(appConfig().storageUrl.package + photo) : photo,
+      //       );
+      //     }
+      //     return { ...roomType, room_photos: processedRoomPhotos };
+      //   });
+
+      //   // const processedExtraServices = pkg.package_extra_services.map(service => ({
+      //   //   id: service.id,
+      //   //   extra_service: {
+      //   //     id: service.extra_service.id,
+      //   //     name: service.extra_service.name,
+      //   //     price: service.extra_service.price,
+      //   //     description: service.extra_service.description
+      //   //   }
+      //   // }));
+
+      //   //        const processedUser = pkg.user
+      //   //    ? {
+      //   //        ...pkg.user,
+      //   //        avatar_url: pkg.user.avatar
+      //   //          ? this.generateFileUrl(pkg.user.avatar, 'avatar')
+      //   //          : null,
+      //   //      }
+      //   //    : null;
+
+      //   const rating = packageIdToRating.get(pkg.id) ?? { averageRating: 0, totalReviews: 0 };
+      //   const ratingDistribution = packageIdToDistribution.get(pkg.id) ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      //   const confirmed = packageIdToConfirmed.get(pkg.id) ?? { confirmedBookings: 0, confirmedQuantity: 0 };
+      //   const approvedDate = pkg.approved_at ? pkg.approved_at.toISOString() : null;
+
+      //   // Extract room photos from processed data
+      // const allRoomPhotos = processedRoomTypes.flatMap(roomType => roomType.room_photos || []);
+
+      //   return {
+      //     ...pkg,
+      //     package_files: processedPackageFiles,
+      //     package_room_types: processedRoomTypes,
+      //     // package_extra_services: processedExtraServices,
+      //     // user: processedUser,
+      //     rating_summary: {
+      //       averageRating: rating.averageRating,
+      //       totalReviews: rating.totalReviews,
+      //       ratingDistribution,
+      //     },
+
+      //     roomFiles: allRoomPhotos,
+      //     confirmed_bookings: confirmed.confirmedBookings,
+      //     confirmed_quantity: confirmed.confirmedQuantity,
+      //     approved_at: pkg.approved_at,
+      //     approved_date: approvedDate,
+      //   } as any;
+      // });
+
+      // // Add calendar configuration to each package
+      // for (const pkg of processedData) {
+      //   const calendarConfig = await this.getCalendarConfiguration(pkg.id);
+      //   if (calendarConfig) {
+      //     (pkg as any).calendar_configuration = calendarConfig;
+      //   }
+      // }
+
+
+
+      // Apply free cancellation filter in-memory if requested
+      let returnedPackages = packages as any[];
+      if (searchParams?.freeCancellation !== undefined) {
+        const isFree = !!searchParams.freeCancellation;
+        returnedPackages = (packages as any[]).filter((pkg: any) => {
+          const cp: any = pkg.cancellation_policy as any;
+          const text = typeof cp?.policy === 'string' ? cp.policy.toLowerCase() : '';
+          if (isFree) {
+            return !cp || text.includes('free') || text.includes('refundable') || text.includes('no charge') || text.includes('full refund');
+          }
+          return cp && (text.includes('paid') || text.includes('fee') || text.includes('non-refundable') || text.includes('no refund'));
+        });
+      }
+
+      return {
+        data: returnedPackages,
+        meta: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
     } catch (error) {
       console.error('Error in getVendorPackage service:', error);
       throw error;
@@ -2279,9 +2279,9 @@ export class PackageService {
         data: {
           total_packages: totalPackages,
           filtered_packages: filteredPackages,
-          budget_filter: { 
-            budget_start: budget_start ? Number(budget_start) : null, 
-            budget_end: budget_end ? Number(budget_end) : null 
+          budget_filter: {
+            budget_start: budget_start ? Number(budget_start) : null,
+            budget_end: budget_end ? Number(budget_end) : null
           },
           price_range: priceRange,
           sample_packages: packages,
@@ -2293,6 +2293,33 @@ export class PackageService {
         success: false,
         message: error.message
       };
+    }
+  }
+
+  async topLocations() {
+    try {
+      const locations = await this.prisma.package.findMany({
+        select: {
+          id: true,
+          country: true
+        }
+      })
+
+      const formatted_data = locations.map(location => ({
+        ...location,
+        tours: 0
+      }))
+
+      return {
+        success: true,
+        message: 'Success',
+        data: formatted_data
+      }
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Internal server error.');
     }
   }
 }
