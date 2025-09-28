@@ -267,6 +267,7 @@ model PaymentTransaction {
 model RefundTransaction {
   id                     String  @id @default(cuid())
   payment_transaction_id String
+  refund_reason          String
   status                 String  @default("requested")
   stripe_refund_id       String? @unique
   amount                 Float?

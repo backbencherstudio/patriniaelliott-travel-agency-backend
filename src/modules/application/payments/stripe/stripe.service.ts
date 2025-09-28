@@ -321,12 +321,25 @@ export class StripeService {
                         status: true,
                         reference_number: true,
                         created_at: true,
+                        RefundTransaction: {
+                            select: {
+                                refund_reason: true
+                            }
+                        }
                     },
                     skip: (page - 1) * perPage,
                     take: perPage,
                     orderBy: { created_at: "desc" },
                 })
             ]);
+
+            const formatted_transactions = transactions.map(({ RefundTransaction, ...transaction }) => ({
+                ...transaction,
+                ...(RefundTransaction.length > 0 && {
+                    refund_reason: RefundTransaction[0].refund_reason,
+                }),
+            }));
+
 
             return {
                 success: true,
@@ -339,7 +352,7 @@ export class StripeService {
                         total_refund: total_refund._sum.amount || '0',
                     },
                     transactions: {
-                        data: transactions,
+                        data: formatted_transactions,
                         pagination: {
                             total,
                             page,
