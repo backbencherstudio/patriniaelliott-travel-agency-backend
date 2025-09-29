@@ -2296,24 +2296,33 @@ export class PackageService {
     }
   }
 
-  async topLocations() {
+  async topLocations(limit = 5) {
     try {
-      const locations = await this.prisma.package.findMany({
+      const packages = await this.prisma.package.findMany({
+        where: {
+          booking_items: {
+            some: {
+              booking: { payment_status: "pending" },
+            },
+          },
+        },
         select: {
           id: true,
-          country: true
-        }
+          country: true,
+          _count: {
+            select: { booking_items: true },
+          },
+        },
       })
 
-      const formatted_data = locations.map(location => ({
-        ...location,
-        tours: 0
-      }))
-
+      const topDestinations = packages
+        .map((pkg) => ({ id: pkg.id, country: pkg.country, count: pkg._count.booking_items }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, limit ? limit : 10)
       return {
         success: true,
         message: 'Success',
-        data: formatted_data
+        data: topDestinations,
       }
     } catch (error) {
       if (error instanceof HttpException) {

@@ -183,8 +183,9 @@ export class PackageController {
     summary: ''
   })
   @Get('/top-destinations')
-  async topLocation() {
-    return await this.packageService.topLocations()
+  async topLocation(@Query() query: { limit?: number }) {
+    const limit = Number(query.limit)
+    return await this.packageService.topLocations(limit)
   }
 
   // @UseGuards(JwtAuthGuard)
