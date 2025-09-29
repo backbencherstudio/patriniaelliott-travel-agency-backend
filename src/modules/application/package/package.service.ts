@@ -1337,18 +1337,18 @@ export class PackageService {
       //   }
       // }
 
-      const pagination = {
+      const meta = {
         total,
-        current_page: page,
-        perPage: limit,
-        totalPages: Math.ceil(total / limit),
+        page,
+        limit: limit,
+        totalPages: page * limit < total,
         hasNextPage: page * limit < total,
         hasPrevPage: page > 1,
-      };
+      }
 
       return {
         success: true,
-        pagination: pagination,
+        meta: meta,
         data: [
           ...packagesWithRatingSummary,
         ],
