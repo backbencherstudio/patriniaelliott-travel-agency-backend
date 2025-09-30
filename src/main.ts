@@ -20,7 +20,12 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   app.enableCors();
   app.use(helmet());
-  app.useStaticAssets(join(__dirname, '..', 'public'), {
+  // Use consistent path resolution for static assets (same as storage config)
+  const publicPath = process.env.NODE_ENV === 'production' 
+    ? join(process.cwd(), 'dist', 'public')  // Production: /project/dist/public
+    : join(__dirname, '..', 'public');       // Development: /project/public
+
+  app.useStaticAssets(publicPath, {
     index: false,
     prefix: '/public',
     setHeaders: (res, path) => {
@@ -33,7 +38,14 @@ async function bootstrap() {
 
   app.use('/storage', (req, res, next) => {
     try {
-      const filePath = join(__dirname, '..', 'public', req.path);
+      const filePath = join(publicPath, req.path);
+      
+      console.log('🔍 [STATIC FILE DEBUG] Static file requested:', req.path);
+      console.log('🔍 [STATIC FILE DEBUG] publicPath:', publicPath);
+      console.log('🔍 [STATIC FILE DEBUG] Full filePath:', filePath);
+      console.log('🔍 [STATIC FILE DEBUG] NODE_ENV:', process.env.NODE_ENV);
+      console.log('🔍 [STATIC FILE DEBUG] File exists:', require('fs').existsSync(filePath));
+      
       // Check if file exists
       if (require('fs').existsSync(filePath)) {
         // Set proper headers for images
@@ -87,7 +99,6 @@ async function bootstrap() {
     }),
   );
   app.useGlobalFilters(new CustomExceptionFilter());
-  app.useGlobalPipes()
 
   // storage setup
   SojebStorage.config({
