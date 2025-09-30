@@ -368,7 +368,7 @@ export class StripeService {
             if (error instanceof HttpException) {
                 throw error;
             }
-            throw new InternalServerErrorException(`Error getting transactions: ${error?.message}`);
+            throw new InternalServerErrorException(`${error?.message}`);
         }
     }
 

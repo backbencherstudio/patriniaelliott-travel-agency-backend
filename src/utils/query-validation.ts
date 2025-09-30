@@ -67,3 +67,78 @@ export const withdrawQuerySchema = z.object({
     },
     { message: "startDate and endDate are required when dateRange is 'custom'" }
 );
+
+export const packageSearchQuerySchema = z.object({
+    q: z.string().optional(),
+    type: z.string().optional(),
+
+    duration_start: z
+        .string()
+        .optional()
+        .transform((val) => (val ? Number(val) : undefined))
+        .refine((val) => val === undefined || !isNaN(val), {
+            message: "duration_start must be a number",
+        }),
+
+    duration_end: z
+        .string()
+        .optional()
+        .transform((val) => (val ? Number(val) : undefined))
+        .refine((val) => val === undefined || !isNaN(val), {
+            message: "duration_end must be a number",
+        }),
+
+    budget_start: z
+        .string()
+        .optional()
+        .transform((val) => (val ? Number(val) : undefined))
+        .refine((val) => val === undefined || !isNaN(val), {
+            message: "budget_start must be a number",
+        }),
+
+    budget_end: z
+        .string()
+        .optional()
+        .transform((val) => (val ? Number(val) : undefined))
+        .refine((val) => val === undefined || !isNaN(val), {
+            message: "budget_end must be a number",
+        }),
+
+    ratings: z
+        .union([z.string(), z.array(z.string())])
+        .optional()
+        .transform((val) => {
+            if (!val) return []
+            return Array.isArray(val) ? val.map(Number) : [Number(val)]
+        })
+        .refine((arr) => arr.every((n) => !isNaN(n)), {
+            message: "ratings must be an array of numbers",
+        }),
+
+    free_cancellation: z
+        .union([z.string(), z.array(z.string())])
+        .optional()
+        .transform((val) => (val ? (Array.isArray(val) ? val : [val]) : [])),
+
+    destinations: z
+        .union([z.string(), z.array(z.string())])
+        .optional()
+        .transform((val) => (val ? (Array.isArray(val) ? val : [val]) : [])),
+
+    languages: z
+        .union([z.string(), z.array(z.string())])
+        .optional()
+        .transform((val) => (val ? (Array.isArray(val) ? val : [val]) : [])),
+
+    cursor: z.string().optional(),
+
+    limit: z
+        .string()
+        .optional()
+        .transform((val) => (val ? Number(val) : 10)),
+
+    page: z
+        .string()
+        .optional()
+        .transform((val) => (val ? Number(val) : 1)),
+});

@@ -1,4 +1,4 @@
-import { HttpException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SojebStorage } from '../../../common/lib/Disk/SojebStorage';
 import appConfig from '../../../config/app.config';
@@ -8,6 +8,7 @@ import { NotificationRepository } from '../../../common/repository/notification/
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { SearchPackagesDto } from '../../admin/vendor-package/dto/search-packages.dto';
 import { EnhancedSearchDto } from './dto/enhanced-search.dto';
+import { packageSearchQuerySchema } from '@/src/utils/query-validation';
 
 @Injectable()
 export class PackageService {
@@ -1008,40 +1009,53 @@ export class PackageService {
     };
   }
 
-  async findAll({
-    filters: {
-      q,
-      type,
-      duration_start,
-      duration_end,
-      budget_start,
-      budget_end,
-      ratings,
-      free_cancellation,
-      destinations,
-      languages,
-      cursor,
-      limit = 15,
-      page,
-    },
-  }: {
-    filters: {
-      q?: string;
-      type?: string;
-      duration_start?: string;
-      duration_end?: string;
-      budget_start?: number;
-      budget_end?: number;
-      ratings?: number[];
-      free_cancellation?: string[];
-      destinations?: string[];
-      languages?: string[];
-      cursor?: string;
-      limit?: number;
-      page?: number;
-    };
-  }) {
+  // {
+  //   filters: {
+  //     q,
+  //     type,
+  //     duration_start,
+  //     duration_end,
+  //     budget_start,
+  //     budget_end,
+  //     ratings,
+  //     free_cancellation,
+  //     destinations,
+  //     languages,
+  //     cursor,
+  //     limit = 15,
+  //     page,
+  //   },
+  // }: {
+  //   filters: {
+  //     q?: string;
+  //     type?: string;
+  //     duration_start?: string;
+  //     duration_end?: string;
+  //     budget_start?: number;
+  //     budget_end?: number;
+  //     ratings?: number[];
+  //     free_cancellation?: string[];
+  //     destinations?: string[];
+  //     languages?: string[];
+  //     cursor?: string;
+  //     limit?: number;
+  //     page?: number;
+  //   };
+  // }
+
+  async findAll(requestQuery: any) {
     try {
+      const query = packageSearchQuerySchema.safeParse(requestQuery);
+
+      if (!query.success) {
+        throw new BadRequestException({
+          message: "Invalid query parameters",
+          errors: query.error.flatten().fieldErrors,
+        });
+      }
+
+      let { budget_end, budget_start, cursor, destinations, duration_end, duration_start, free_cancellation, languages, limit, page, q, ratings, type } = query.data
+
       const where_condition = {};
       const query_condition = {};
       if (q) {
@@ -1084,7 +1098,7 @@ export class PackageService {
         }
       }
 
-      if (ratings) {
+      if (ratings.length) {
         // if not array
         if (!Array.isArray(ratings)) {
           ratings = [ratings];
@@ -1107,7 +1121,7 @@ export class PackageService {
         }
       }
 
-      if (free_cancellation) {
+      if (free_cancellation.length) {
         // if not array
         if (!Array.isArray(free_cancellation)) {
           free_cancellation = [free_cancellation];
@@ -1119,22 +1133,18 @@ export class PackageService {
         };
       }
 
-      if (destinations) {
+      if (destinations.length) {
         // if not array
         if (!Array.isArray(destinations)) {
           destinations = [destinations];
         }
 
-        where_condition['package_destinations'] = {
-          some: {
-            destination_id: {
-              in: destinations,
-            },
-          },
+        where_condition['country'] = {
+          in: destinations,
         };
       }
 
-      if (languages) {
+      if (languages.length) {
         if (!Array.isArray(languages)) {
           languages = [languages];
         }
@@ -1172,9 +1182,6 @@ export class PackageService {
         where: {
           ...where_condition,
           status: 1,
-          approved_at: {
-            not: null,
-          },
         },
         orderBy: {
           id: 'asc',
@@ -1182,8 +1189,12 @@ export class PackageService {
         ...query_condition,
         select: {
           id: true,
+          total_bedrooms: true,
+          bathrooms: true,
           created_at: true,
           updated_at: true,
+          breakfast_available: true,
+          amenities: true,
           user_id: true,
           name: true,
           description: true,
@@ -1192,6 +1203,7 @@ export class PackageService {
           min_capacity: true,
           max_capacity: true,
           type: true,
+          package_room_types: true,
           package_traveller_types: {
             select: {
               traveller_type: {
@@ -1202,6 +1214,8 @@ export class PackageService {
               },
             },
           },
+          country: true,
+          city: true,
           package_languages: {
             select: {
               language: {
@@ -1236,13 +1250,6 @@ export class PackageService {
               },
             },
           },
-          // cancellation_policy: {
-          //   select: {
-          //     id: true,
-          //     policy: true,
-          //     description: true,
-          //   },
-          // },
           package_files: {
             select: {
               id: true,
@@ -1277,6 +1284,46 @@ export class PackageService {
         },
       });
 
+      // 👉 Add rating summary for each package
+      const packagesWithRatingSummary = packages.map(({ package_room_types, ...pkg }) => {
+        const totalReviews = pkg.reviews.length;
+        const ratingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+
+        let totalRating = 0;
+        pkg.reviews.forEach(review => {
+          const rating = review.rating_value;
+          totalRating += rating;
+          if (ratingDistribution[rating] !== undefined) {
+            ratingDistribution[rating] += 1;
+          }
+        });
+
+        const processedRoomTypes = package_room_types.map(roomType => {
+          let processedRoomPhotos = roomType.room_photos;
+          if (Array.isArray(roomType.room_photos)) {
+            processedRoomPhotos = roomType.room_photos.map(photo => SojebStorage.url(appConfig().storageUrl.package + photo)
+            );
+          }
+          return { ...roomType, room_photos: processedRoomPhotos };
+        });
+
+        const averageRating = totalReviews > 0 ? totalRating / totalReviews : 0;
+
+        return {
+          ...pkg,
+          address: `${pkg.city}, ${pkg.country}`,
+          package_room_types: processedRoomTypes,
+          room_photos: processedRoomTypes?.[0]?.room_photos,
+          rating_summary: {
+            averageRating,
+            totalReviews,
+            ratingDistribution,
+          },
+        };
+      });
+
+      const total = await this.prisma.package.count({ where: where_condition });
+
       // add image url package_files
       // if (packages && packages.length > 0) {
       //   for (const record of packages) {
@@ -1290,22 +1337,27 @@ export class PackageService {
       //   }
       // }
 
-      const pagination = {
-        current_page: page,
-        total_pages: Math.ceil(packages.length / limit),
-        cursor: cursor,
-      };
+      const meta = {
+        total,
+        page,
+        limit: limit,
+        totalPages: page * limit < total,
+        hasNextPage: page * limit < total,
+        hasPrevPage: page > 1,
+      }
 
       return {
         success: true,
-        pagination: pagination,
-        data: packages,
+        meta: meta,
+        data: [
+          ...packagesWithRatingSummary,
+        ],
       };
     } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(`${error?.message}`);
     }
   }
 
@@ -2296,24 +2348,36 @@ export class PackageService {
     }
   }
 
-  async topLocations() {
+  async topLocations(limit = 5) {
     try {
-      const locations = await this.prisma.package.findMany({
+      const packages = await this.prisma.package.findMany({
+        where: {
+          booking_items: {
+            some: {
+              booking: { payment_status: "pending" },
+            },
+          },
+        },
         select: {
           id: true,
-          country: true
-        }
+          country: true,
+          package_files: true,
+          _count: {
+            select: { booking_items: true },
+          },
+        },
       })
 
-      const formatted_data = locations.map(location => ({
-        ...location,
-        tours: 0
-      }))
+      const src_url = '/public/storage/package/'
 
+      const topDestinations = packages
+        .map((pkg) => ({ id: pkg.id, img: src_url + pkg.package_files?.[0]?.file, country: pkg.country, count: pkg._count.booking_items }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, limit ? limit : 10)
       return {
         success: true,
         message: 'Success',
-        data: formatted_data
+        data: topDestinations,
       }
     } catch (error) {
       if (error instanceof HttpException) {
