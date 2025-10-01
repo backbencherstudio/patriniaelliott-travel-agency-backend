@@ -502,6 +502,7 @@ export class PackageService {
       q?: string;
       type?: string;
     },
+    additionalWhere?: any,
   ) {
     try {
       const where_condition = {};
@@ -525,6 +526,11 @@ export class PackageService {
         if (filters.type) {
           where_condition['type'] = filters.type;
         }
+      }
+
+      // Merge additional where conditions
+      if (additionalWhere) {
+        Object.assign(where_condition, additionalWhere);
       }
 
       const packages = await this.prisma.package.findMany({
