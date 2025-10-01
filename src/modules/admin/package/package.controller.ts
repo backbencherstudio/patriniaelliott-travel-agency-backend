@@ -32,7 +32,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 @ApiBearerAuth()
 @ApiTags('Package')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('admin/package')
 export class PackageController {
   constructor(private readonly packageService: PackageService) {}
@@ -177,7 +176,7 @@ export class PackageController {
     }
   }
 
-  @Roles(Role.ADMIN, Role.VENDOR)
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create package' })
   @Post()
   @ApiConsumes('multipart/form-data')
@@ -400,18 +399,22 @@ export class PackageController {
     }
   }
 
-  @Roles(Role.ADMIN, Role.VENDOR)
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get all packages' })
   @Get()
   async findAll(
     @Req() req: Request,
-    @Query() query: { q?: string; vendor_id?: string },
+    @Query() query: { q?: string; vendor_id?: string; type?: string },
   ) {
     try {
       const user_id = req.user.userId;
       const vendor_id = query.vendor_id;
+      const filters = {
+        q: query.q,
+        type: query.type
+      };
 
-      const packages = await this.packageService.findAll(user_id, vendor_id);
+      const packages = await this.packageService.findAll(user_id, vendor_id, filters);
 
       // Add full URLs to images for all packages
       if (packages.success && packages.data && Array.isArray(packages.data)) {
@@ -428,7 +431,44 @@ export class PackageController {
     }
   }
 
-  @Roles(Role.ADMIN, Role.VENDOR)
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get packages by current user' })
+  @Get('my-packages')
+  async getMyPackages(
+    @Req() req: Request,
+    @Query() query: { q?: string; type?: string; status?: number },
+  ) {
+    try {
+      const user_id = req.user.userId;
+      const filters = {
+        q: query.q,
+        type: query.type
+      };
+
+      // Add status filter if provided
+      const where_condition: any = {};
+      if (query.status !== undefined) {
+        where_condition.status = parseInt(query.status.toString());
+      }
+
+      const packages = await this.packageService.findAll(user_id, null, filters, where_condition);
+
+      // Add full URLs to images for all packages
+      if (packages.success && packages.data && Array.isArray(packages.data)) {
+        packages.data = packages.data.map(pkg => this.addImageUrls(pkg));
+        console.log(`🖼️  Added image URLs to ${packages.data.length} packages`);
+      }
+
+      return packages;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get package by id' })
   @Get(':id')
   async findOne(@Req() req: Request, @Param('id') id: string) {
@@ -450,7 +490,7 @@ export class PackageController {
     }
   }
 
-  @Roles(Role.ADMIN, Role.VENDOR)
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get package images' })
   @Get(':id/images')
   async getPackageImages(@Param('id') id: string, @Req() req: Request) {
