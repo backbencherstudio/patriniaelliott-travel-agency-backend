@@ -32,7 +32,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 @ApiBearerAuth()
 @ApiTags('Package')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('admin/package')
 export class PackageController {
   constructor(private readonly packageService: PackageService) {}
@@ -177,7 +176,7 @@ export class PackageController {
     }
   }
 
-  @Roles(Role.ADMIN, Role.VENDOR)
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create package' })
   @Post()
   @ApiConsumes('multipart/form-data')
@@ -469,7 +468,7 @@ export class PackageController {
     }
   }
 
-  @Roles(Role.ADMIN, Role.VENDOR)
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get package by id' })
   @Get(':id')
   async findOne(@Req() req: Request, @Param('id') id: string) {
@@ -491,7 +490,7 @@ export class PackageController {
     }
   }
 
-  @Roles(Role.ADMIN, Role.VENDOR)
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get package images' })
   @Get(':id/images')
   async getPackageImages(@Param('id') id: string, @Req() req: Request) {
