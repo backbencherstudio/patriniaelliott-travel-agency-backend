@@ -183,15 +183,32 @@ export class PackageService {
 
       // add package files to package
       if (files.package_files && files.package_files.length > 0) {
-        const package_files_data = files.package_files.map((file) => ({
-          file: file.filename,
-          file_alt: file.originalname,
-          package_id: record.id,
-          type: file.mimetype,
-        }));
+        console.log('🔍 [SERVICE DEBUG] Processing package files...');
+        console.log('🔍 [SERVICE DEBUG] Package files count:', files.package_files.length);
+        
+        const package_files_data = files.package_files.map((file) => {
+          console.log('🔍 [SERVICE DEBUG] Package file info:', {
+            filename: file.filename,
+            originalname: file.originalname,
+            mimetype: file.mimetype,
+            size: file.size,
+            path: file.path,
+            destination: file.destination
+          });
+          
+          return {
+            file: file.filename,
+            file_alt: file.originalname,
+            package_id: record.id,
+            type: file.mimetype,
+          };
+        });
+        
+        console.log('🔍 [SERVICE DEBUG] Creating package files in database...');
         await this.prisma.packageFile.createMany({
           data: package_files_data,
         });
+        console.log('✅ [SERVICE DEBUG] Package files created in database successfully');
       }
 
       // add trip plan to package

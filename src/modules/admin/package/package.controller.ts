@@ -42,13 +42,37 @@ export class PackageController {
    */
   private ensureStorageDirectories() {
     try {
-      const storagePath = path.join(process.cwd(), 'public', 'storage', 'package');
+      console.log('🔍 [STORAGE DEBUG] ensureStorageDirectories called...');
+      console.log('🔍 [STORAGE DEBUG] NODE_ENV:', process.env.NODE_ENV);
+      console.log('🔍 [STORAGE DEBUG] process.cwd():', process.cwd());
+      
+      const storagePath = process.env.NODE_ENV === 'production' 
+              ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')  // Production: /project/dist/public/storage/package
+              : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
+      
+      console.log('🔍 [STORAGE DEBUG] Resolved storagePath:', storagePath);
+      console.log('🔍 [STORAGE DEBUG] Storage path exists:', fs.existsSync(storagePath));
+      
       if (!fs.existsSync(storagePath)) {
+        console.log('🔍 [STORAGE DEBUG] Creating storage directory...');
         fs.mkdirSync(storagePath, { recursive: true });
-        console.log('Created storage directory:', storagePath);
+        console.log('✅ [STORAGE DEBUG] Created storage directory:', storagePath);
+      } else {
+        console.log('✅ [STORAGE DEBUG] Storage directory already exists:', storagePath);
       }
+      
+      // Test write permissions
+      try {
+        const testFile = path.join(storagePath, 'test-write.txt');
+        fs.writeFileSync(testFile, 'test');
+        fs.unlinkSync(testFile);
+        console.log('✅ [STORAGE DEBUG] Write permissions test: SUCCESS');
+      } catch (writeError) {
+        console.error('❌ [STORAGE DEBUG] Write permissions test: FAILED', writeError);
+      }
+      
     } catch (error) {
-      console.error('Failed to create storage directories:', error);
+      console.error('❌ [STORAGE DEBUG] Failed to create storage directories:', error);
       throw new InternalServerErrorException('Failed to initialize storage system');
     }
   }
@@ -61,7 +85,9 @@ export class PackageController {
     trip_plans_images?: Express.Multer.File[];
   }) {
     try {
-      const storagePath = path.join(process.cwd(), 'public', 'storage', 'package');
+      const storagePath = process.env.NODE_ENV === 'production' 
+              ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')  // Production: /project/dist/public/storage/package
+              : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
       
       if (files.package_files) {
         for (const file of files.package_files) {
@@ -161,12 +187,46 @@ export class PackageController {
       {
         storage: diskStorage({
           destination: (req, file, cb) => {
+            // DEBUG: Multer destination callback logging
+            console.log('🔍 [MULTER DEBUG] Destination callback called...');
+            console.log('🔍 [MULTER DEBUG] NODE_ENV:', process.env.NODE_ENV);
+            console.log('🔍 [MULTER DEBUG] process.cwd():', process.cwd());
+            console.log('🔍 [MULTER DEBUG] File info:', {
+              fieldname: file.fieldname,
+              originalname: file.originalname,
+              mimetype: file.mimetype,
+              size: file.size
+            });
+            
             // Ensure storage directories exist
-            const storagePath = path.join(process.cwd(), 'public', 'storage', 'package');
-            if (!fs.existsSync(storagePath)) {
-              fs.mkdirSync(storagePath, { recursive: true });
+            const storagePath = process.env.NODE_ENV === 'production' 
+              ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')  // Production: /project/dist/public/storage/package
+              : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
+            
+            console.log('🔍 [MULTER DEBUG] Resolved storagePath:', storagePath);
+            console.log('🔍 [MULTER DEBUG] Storage path exists:', fs.existsSync(storagePath));
+            
+            try {
+              if (!fs.existsSync(storagePath)) {
+                console.log('🔍 [MULTER DEBUG] Creating directory:', storagePath);
+                fs.mkdirSync(storagePath, { recursive: true });
+                console.log('✅ [MULTER DEBUG] Directory created successfully');
+              } else {
+                console.log('✅ [MULTER DEBUG] Directory already exists');
+              }
+              
+              // Test write permissions
+              const testFile = path.join(storagePath, 'test-write-permission.txt');
+              fs.writeFileSync(testFile, 'test');
+              fs.unlinkSync(testFile);
+              console.log('✅ [MULTER DEBUG] Write permissions: OK');
+              
+              console.log('🔍 [MULTER DEBUG] Calling callback with storagePath:', storagePath);
+              cb(null, storagePath);
+            } catch (error) {
+              console.error('❌ [MULTER DEBUG] Error in destination callback:', error);
+              cb(error, null);
             }
-            cb(null, storagePath);
           },
           filename: (req, file, cb) => {
             // Generate unique filename with timestamp and clean name
@@ -184,7 +244,9 @@ export class PackageController {
               .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
             
             const filename = `${timestamp}_${randomName}_${cleanOriginalName}`;
-            console.log(`📁 Generated filename: ${filename} from original: ${file.originalname}`);
+            console.log('🔍 [MULTER FILENAME DEBUG] Generated filename:', filename);
+            console.log('🔍 [MULTER FILENAME DEBUG] Original filename:', file.originalname);
+            console.log('🔍 [MULTER FILENAME DEBUG] Calling callback with filename:', filename);
             cb(null, filename);
           },
         }),
@@ -227,6 +289,18 @@ export class PackageController {
     },
   ) {
     try {
+      // DEBUG: Log request details
+      console.log('🔍 [PACKAGE CREATE DEBUG] Starting package creation...');
+      console.log('🔍 [PACKAGE CREATE DEBUG] Files received:', {
+        package_files: files.package_files?.length || 0,
+        trip_plans_images: files.trip_plans_images?.length || 0
+      });
+      console.log('🔍 [PACKAGE CREATE DEBUG] Package data:', {
+        name: createPackageDto.name,
+        type: createPackageDto.type,
+        price: createPackageDto.price
+      });
+      
       // Ensure storage directories exist
       this.ensureStorageDirectories();
       
@@ -446,12 +520,46 @@ export class PackageController {
       {
         storage: diskStorage({
           destination: (req, file, cb) => {
+            // DEBUG: Multer destination callback logging
+            console.log('🔍 [MULTER DEBUG] Destination callback called...');
+            console.log('🔍 [MULTER DEBUG] NODE_ENV:', process.env.NODE_ENV);
+            console.log('🔍 [MULTER DEBUG] process.cwd():', process.cwd());
+            console.log('🔍 [MULTER DEBUG] File info:', {
+              fieldname: file.fieldname,
+              originalname: file.originalname,
+              mimetype: file.mimetype,
+              size: file.size
+            });
+            
             // Ensure storage directories exist
-            const storagePath = path.join(process.cwd(), 'public', 'storage', 'package');
-            if (!fs.existsSync(storagePath)) {
-              fs.mkdirSync(storagePath, { recursive: true });
+            const storagePath = process.env.NODE_ENV === 'production' 
+              ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')  // Production: /project/dist/public/storage/package
+              : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
+            
+            console.log('🔍 [MULTER DEBUG] Resolved storagePath:', storagePath);
+            console.log('🔍 [MULTER DEBUG] Storage path exists:', fs.existsSync(storagePath));
+            
+            try {
+              if (!fs.existsSync(storagePath)) {
+                console.log('🔍 [MULTER DEBUG] Creating directory:', storagePath);
+                fs.mkdirSync(storagePath, { recursive: true });
+                console.log('✅ [MULTER DEBUG] Directory created successfully');
+              } else {
+                console.log('✅ [MULTER DEBUG] Directory already exists');
+              }
+              
+              // Test write permissions
+              const testFile = path.join(storagePath, 'test-write-permission.txt');
+              fs.writeFileSync(testFile, 'test');
+              fs.unlinkSync(testFile);
+              console.log('✅ [MULTER DEBUG] Write permissions: OK');
+              
+              console.log('🔍 [MULTER DEBUG] Calling callback with storagePath:', storagePath);
+              cb(null, storagePath);
+            } catch (error) {
+              console.error('❌ [MULTER DEBUG] Error in destination callback:', error);
+              cb(error, null);
             }
-            cb(null, storagePath);
           },
           filename: (req, file, cb) => {
             // Generate unique filename with timestamp and clean name
@@ -469,7 +577,9 @@ export class PackageController {
               .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
             
             const filename = `${timestamp}_${randomName}_${cleanOriginalName}`;
-            console.log(`📁 Generated filename: ${filename} from original: ${file.originalname}`);
+            console.log('🔍 [MULTER FILENAME DEBUG] Generated filename:', filename);
+            console.log('🔍 [MULTER FILENAME DEBUG] Original filename:', file.originalname);
+            console.log('🔍 [MULTER FILENAME DEBUG] Calling callback with filename:', filename);
             cb(null, filename);
           },
         }),

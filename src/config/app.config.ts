@@ -1,3 +1,5 @@
+import { join } from 'path';
+
 export default () => ({
   app: {
     name: process.env.APP_NAME,
@@ -63,10 +65,13 @@ export default () => ({
   },
 
   /**
-   * Storage directory
+   * Storage directory - Environment-specific paths for file uploads
    */
   storageUrl: {
-    rootUrl: './public/storage',
+    // Use absolute paths based on environment to ensure consistent file storage
+    rootUrl: process.env.NODE_ENV === 'production' 
+      ? join(process.cwd(), 'dist', 'public', 'storage')  // Production: /project/dist/public/storage
+      : './public/storage',  // Development: ./public/storage
     rootUrlPublic: '/public/storage',
     swapan: '/public/storage',
     // storage directory
