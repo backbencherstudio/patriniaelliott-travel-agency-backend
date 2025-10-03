@@ -446,7 +446,7 @@ export class PackageController {
       };
 
       // Add status filter if provided
-      const where_condition: any = {};
+      const where_condition: any = { user_id };
       if (query.status !== undefined) {
         where_condition.status = parseInt(query.status.toString());
       }
