@@ -111,12 +111,14 @@ model UserDocument {
   updated_at DateTime  @default(now())
   deleted_at DateTime?
 
-  status  String? @default("pending") // pending, approved, rejected
-  user_id String?
-  type    String?
-  image   String?
-  number  String?
-  user    User?   @relation(fields: [user_id], references: [id])
+  status      String? @default("pending") // pending, approved, rejected
+  user_id     String?
+  type        String?
+  front_image String?
+  back_image  String?
+  image       String?
+  number      String?
+  user        User?   @relation(fields: [user_id], references: [id])
 
   @@map("user_documents")
 }

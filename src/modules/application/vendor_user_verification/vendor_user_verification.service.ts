@@ -13,7 +13,9 @@ export class VendorUserVerificationService {
   async create(
     userDocumentDto: UserDocumentDto,
     userId: string,
-    file?: Express.Multer.File,
+    frontImage?: Express.Multer.File,
+    backImage?: Express.Multer.File,
+    legacyImage?: Express.Multer.File, // For backward compatibility
   ) {
     try {
       // Check if user exists
@@ -25,9 +27,8 @@ export class VendorUserVerificationService {
       // Set default type if not provided
       const documentType = userDocumentDto.type || 'vendor_verification';
 
-      let imageFileName: string | null = null;
-
-      if (file) {
+      // Helper function to process and upload a file
+      const processFile = async (file: Express.Multer.File): Promise<string> => {
         // Validate file
         if (!file.buffer || file.buffer.length === 0) {
           throw new Error('Invalid file: file buffer is empty');
@@ -36,26 +37,45 @@ export class VendorUserVerificationService {
         if (!file.mimetype || !file.mimetype.startsWith('image/')) {
           throw new Error('Invalid file type: only image files are allowed');
         }
-        if (file.size > 10 * 1024 * 1024) { // 10MB limit
-          throw new Error('File too large: maximum size is 10MB');
+        if (file.size > 20 * 1024 * 1024) { // 20MB limit
+          throw new Error('File too large: maximum size is 20MB');
         }
+        
         // Generate unique filename for the uploaded image
         const randomName = Array(32)
           .fill(null)
           .map(() => Math.round(Math.random() * 16).toString(16))
           .join('');
         const fileExtension = file.originalname.split('.').pop();
-        imageFileName = `${randomName}.${fileExtension}`;
+        const fileName = `${randomName}.${fileExtension}`;
         
         try {
           // Upload file using SojebStorage with the correct path structure
-          const filePath = appConfig().storageUrl.package + imageFileName;
-          console.log(filePath);
+          const filePath = appConfig().storageUrl.package + fileName;
+          console.log('Uploading file to:', filePath);
           await SojebStorage.put(filePath, file.buffer);
+          return fileName;
         } catch (uploadError) {
           console.error('File upload error:', uploadError);
           throw new Error(`Failed to upload file: ${uploadError.message}`);
         }
+      };
+
+      // Process all provided files
+      let frontImageFileName: string | null = null;
+      let backImageFileName: string | null = null;
+      let legacyImageFileName: string | null = null;
+
+      if (frontImage) {
+        frontImageFileName = await processFile(frontImage);
+      }
+
+      if (backImage) {
+        backImageFileName = await processFile(backImage);
+      }
+
+      if (legacyImage) {
+        legacyImageFileName = await processFile(legacyImage);
       }
 
       // Create UserDocument record following the schema
@@ -64,21 +84,25 @@ export class VendorUserVerificationService {
           user_id: userId,
           type: documentType,
           number: userDocumentDto.number || null,
-          image: imageFileName, // This stores the filename, not the full path
+          front_image: frontImageFileName,
+          back_image: backImageFileName,
+          image: legacyImageFileName, // For backward compatibility
           status: userDocumentDto.status || 'pending',
         },
       });
 
-      // Generate public URL for the image if it exists
-      const documentWithUrl = {
+      // Generate public URLs for all uploaded images
+      const documentWithUrls = {
         ...document,
-        image_url: imageFileName ? this.generateFileUrl(imageFileName, 'package') : null
+        front_image_url: frontImageFileName ? this.generateFileUrl(frontImageFileName, 'package') : null,
+        back_image_url: backImageFileName ? this.generateFileUrl(backImageFileName, 'package') : null,
+        image_url: legacyImageFileName ? this.generateFileUrl(legacyImageFileName, 'package') : null
       };
 
       return {
         success: true,
-        data: documentWithUrl,
-        message: 'Document uploaded successfully for vendor verification.',
+        data: documentWithUrls,
+        message: 'Document(s) uploaded successfully for vendor verification.',
       };
     } catch (error) {
       throw new Error(`Failed to create user document: ${error.message}`);
@@ -197,8 +221,8 @@ export class VendorUserVerificationService {
           throw new Error('Invalid file type: only image files are allowed');
         }
 
-        if (file.size > 10 * 1024 * 1024) { // 10MB limit
-          throw new Error('File too large: maximum size is 10MB');
+        if (file.size > 20 * 1024 * 1024) { // 20MB limit
+          throw new Error('File too large: maximum size is 20MB');
         }
 
         try {

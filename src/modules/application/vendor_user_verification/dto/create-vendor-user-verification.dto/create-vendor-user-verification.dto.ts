@@ -31,6 +31,22 @@ export class UserDocumentDto {
   @IsString()
   status?: string;
 
+  @ApiProperty({ 
+    required: false, 
+    description: 'Front image filename (will be populated after upload)'
+  })
+  @IsOptional()
+  @IsString()
+  front_image?: string;
+
+  @ApiProperty({ 
+    required: false, 
+    description: 'Back image filename (will be populated after upload)'
+  })
+  @IsOptional()
+  @IsString()
+  back_image?: string;
+
   // Note: image field will be handled by file upload, not in DTO
 }
 
