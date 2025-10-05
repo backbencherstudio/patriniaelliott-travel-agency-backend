@@ -651,6 +651,215 @@ export class PackageService {
     }
   }
 
+  async findAllWithPagination(
+    user_id?: string,
+    vendor_id?: string,
+    filters?: {
+      q?: string;
+      type?: string;
+    },
+    additionalWhere?: any,
+    paginationOptions?: {
+      page: number;
+      limit: number;
+      skip: number;
+      sort_by: string;
+      sort_order: 'asc' | 'desc';
+    },
+  ) {
+    try {
+      const where_condition = {};
+      
+      // filter using vendor id if the package is from vendor
+      const userDetails = await UserRepository.getUserDetails(user_id);
+      if (userDetails && userDetails.type == 'vendor') {
+        where_condition['user_id'] = user_id;
+      }
+
+      if (vendor_id) {
+        where_condition['user_id'] = vendor_id;
+      }
+
+      if (filters) {
+        if (filters.q) {
+          where_condition['name'] = {
+            contains: filters.q,
+            mode: 'insensitive',
+          };
+        }
+        if (filters.type) {
+          where_condition['type'] = filters.type;
+        }
+      }
+
+      // Merge additional where conditions
+      if (additionalWhere) {
+        Object.assign(where_condition, additionalWhere);
+      }
+
+      // Get total count for pagination
+      const totalCount = await this.prisma.package.count({
+        where: { ...where_condition },
+      });
+
+      // Build orderBy object
+      const orderBy = {};
+      orderBy[paginationOptions?.sort_by || 'created_at'] = paginationOptions?.sort_order || 'desc';
+
+      // Get paginated packages
+      const packages = await this.prisma.package.findMany({
+        where: { ...where_condition },
+        skip: paginationOptions?.skip || 0,
+        take: paginationOptions?.limit || 10,
+        orderBy: orderBy,
+        select: {
+          id: true,
+          created_at: true,
+          updated_at: true,
+          status: true,
+          approved_at: true,
+          user_id: true,
+          name: true,
+          description: true,
+          price: true,
+          computed_price: true,
+          discount: true,
+          duration: true,
+          min_capacity: true,
+          max_capacity: true,
+          type: true,
+          service_fee: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+            },
+          },
+          package_languages: {
+            select: {
+              language: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+          package_destinations: {
+            select: {
+              destination: {
+                select: {
+                  id: true,
+                  name: true,
+                  country: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          package_categories: {
+            select: {
+              category: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+          package_files: {
+            select: {
+              id: true,
+              file: true,
+              file_alt: true,
+              type: true,
+            },
+          },
+          package_trip_plans: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              package_trip_plan_images: {
+                select: {
+                  id: true,
+                  image: true,
+                  image_alt: true,
+                },
+              },
+            },
+          },
+          package_policies: {
+            select: {
+              id: true,
+              description: true,
+              package_policies: true,
+            },
+          },
+        },
+      });
+
+      // Attach computed price per item: price - price*(discount/100) + service_fee
+      const withComputed = packages.map((pkg: any) => {
+        const basePrice = Number(pkg.price ?? 0);
+        const discountPercent = Number(pkg.discount ?? 0);
+        const fee = Number(pkg.service_fee ?? 0);
+        const discounted = basePrice - (basePrice * (isNaN(discountPercent) ? 0 : discountPercent) / 100);
+        const computed_price = discounted + (isNaN(fee) ? 0 : fee);
+        return { ...pkg, computed_price };
+      });
+
+      // Calculate pagination metadata
+      const totalPages = Math.ceil(totalCount / (paginationOptions?.limit || 10));
+      const currentPage = paginationOptions?.page || 1;
+      const hasNextPage = currentPage < totalPages;
+      const hasPrevPage = currentPage > 1;
+
+      console.log('🔍 [SERVICE DEBUG] Pagination calculation:', {
+        totalCount,
+        limit: paginationOptions?.limit || 10,
+        totalPages,
+        currentPage,
+        hasNextPage,
+        hasPrevPage,
+        withComputedLength: withComputed.length
+      });
+
+      const result = {
+        success: true,
+        data: withComputed,
+        pagination: {
+          current_page: currentPage,
+          total_pages: totalPages,
+          total_items: totalCount,
+          items_per_page: paginationOptions?.limit || 10,
+          has_next_page: hasNextPage,
+          has_prev_page: hasPrevPage,
+          next_page: hasNextPage ? currentPage + 1 : null,
+          prev_page: hasPrevPage ? currentPage - 1 : null,
+        },
+      };
+
+      console.log('🔍 [SERVICE DEBUG] Final result:', {
+        success: result.success,
+        dataLength: result.data.length,
+        pagination: result.pagination
+      });
+
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
   async findOne(id: string, user_id?: string) {
     try {
       const where_condition = {};

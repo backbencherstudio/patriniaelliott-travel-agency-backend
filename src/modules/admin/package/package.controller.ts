@@ -432,35 +432,151 @@ export class PackageController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Get packages by current user' })
+  @ApiOperation({ summary: 'Get packages by current user with pagination' })
   @Get('my-packages')
   async getMyPackages(
     @Req() req: Request,
-    @Query() query: { q?: string; type?: string; status?: number },
+    @Query() query: { 
+      q?: string; 
+      type?: string; 
+      status?: number;
+      page?: number;
+      limit?: number;
+      sort_by?: string;
+      sort_order?: 'asc' | 'desc';
+    },
   ) {
     try {
       const user_id = req.user.userId;
+      
+      // Pagination parameters
+      const page = Math.max(1, parseInt(query.page?.toString()) || 1);
+      const limit = Math.min(50, Math.max(1, parseInt(query.limit?.toString()) || 10)); // Max 50 items per page
+      const skip = (page - 1) * limit;
+      
+      // Sorting parameters
+      const sort_by = query.sort_by || 'created_at';
+      const sort_order = query.sort_order || 'desc';
+      
+      // Validate sort fields to prevent injection
+      const allowedSortFields = ['created_at', 'updated_at', 'name', 'price', 'status'];
+      const validSortBy = allowedSortFields.includes(sort_by) ? sort_by : 'created_at';
+      
       const filters = {
         q: query.q,
         type: query.type
       };
 
-      // Add status filter if provided
-      const where_condition: any = { user_id };
+      // Always filter by current user - ensure data isolation
+      const where_condition: any = { 
+        user_id: user_id,  // Always restrict to current user
+        deleted_at: null   // Only show non-deleted packages
+      };
+      
       if (query.status !== undefined) {
         where_condition.status = parseInt(query.status.toString());
       }
 
-      const packages = await this.packageService.findAll(user_id, null, filters, where_condition);
+      console.log('🔍 [DEBUG] Pagination params:', {
+        page,
+        limit,
+        skip,
+        sort_by: validSortBy,
+        sort_order,
+        user_id,
+        where_condition
+      });
+
+      console.log('🔍 [DEBUG] Service method exists:', typeof this.packageService.findAllWithPagination);
+      
+      // First, let's test if we can get any packages at all
+      console.log('🔍 [DEBUG] Testing basic package retrieval...');
+      const testPackages = await this.packageService.findAll(user_id, null, {}, { user_id, deleted_at: null });
+      console.log('🔍 [DEBUG] Test packages result:', {
+        success: testPackages.success,
+        dataLength: testPackages.data?.length || 0,
+        message: testPackages.message || 'No message'
+      });
+      
+      // If no packages found, let's try without the deleted_at filter
+      if (testPackages.success && testPackages.data?.length === 0) {
+        console.log('🔍 [DEBUG] No packages found with deleted_at filter, trying without...');
+        const testPackages2 = await this.packageService.findAll(user_id, null, {}, { user_id });
+        console.log('🔍 [DEBUG] Test packages result (no deleted_at filter):', {
+          success: testPackages2.success,
+          dataLength: testPackages2.data?.length || 0,
+          message: testPackages2.message || 'No message'
+        });
+      }
+
+      // Try the pagination method first, fallback to regular findAll if it fails
+      let packages;
+      try {
+        packages = await this.packageService.findAllWithPagination(
+          user_id, 
+          null, 
+          filters, 
+          where_condition,
+          {
+            page,
+            limit,
+            skip,
+            sort_by: validSortBy,
+            sort_order
+          }
+        );
+      } catch (paginationError) {
+        console.log('🔍 [DEBUG] Pagination method failed, falling back to regular findAll:', paginationError);
+        
+        // Fallback to regular findAll and add pagination manually
+        const allPackages = await this.packageService.findAll(user_id, null, filters, where_condition);
+        
+        if (allPackages.success && allPackages.data) {
+          const totalCount = allPackages.data.length;
+          const totalPages = Math.ceil(totalCount / limit);
+          const hasNextPage = page < totalPages;
+          const hasPrevPage = page > 1;
+          
+          // Apply pagination manually
+          const startIndex = skip;
+          const endIndex = skip + limit;
+          const paginatedData = allPackages.data.slice(startIndex, endIndex);
+          
+          packages = {
+            success: true,
+            data: paginatedData,
+            pagination: {
+              current_page: page,
+              total_pages: totalPages,
+              total_items: totalCount,
+              items_per_page: limit,
+              has_next_page: hasNextPage,
+              has_prev_page: hasPrevPage,
+              next_page: hasNextPage ? page + 1 : null,
+              prev_page: hasPrevPage ? page - 1 : null,
+            },
+          };
+        } else {
+          packages = allPackages;
+        }
+      }
+
+      console.log('🔍 [DEBUG] Service response:', {
+        success: packages.success,
+        dataLength: packages.success ? (packages as any).data?.length || 0 : 0,
+        hasPagination: packages.success ? !!(packages as any).pagination : false,
+        pagination: packages.success ? (packages as any).pagination : null
+      });
 
       // Add full URLs to images for all packages
-      if (packages.success && packages.data && Array.isArray(packages.data)) {
-        packages.data = packages.data.map(pkg => this.addImageUrls(pkg));
-        console.log(`🖼️  Added image URLs to ${packages.data.length} packages`);
+      if (packages.success && (packages as any).data && Array.isArray((packages as any).data)) {
+        (packages as any).data = (packages as any).data.map((pkg: any) => this.addImageUrls(pkg));
+        console.log(`🖼️  Added image URLs to ${(packages as any).data.length} packages for user ${user_id}`);
       }
 
       return packages;
     } catch (error) {
+      console.error('Error fetching user packages:', error);
       return {
         success: false,
         message: error.message,

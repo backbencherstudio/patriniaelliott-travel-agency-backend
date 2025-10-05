@@ -66,37 +66,35 @@ export class VendorUserVerificationController {
     try {
       const user_id = req.user.userId;
       
+      // Validate user_id exists
+      if (!user_id) {
+        return {
+          success: false,
+          message: 'User ID is required for document upload',
+        };
+      }
       
-      
-      // Validate files manually before processing
-      const allFiles = [
-        ...(files?.front_image || []),
-        ...(files?.back_image || []),
-        ...(files?.image || [])
-      ];
-      
-      // Check each file individually
-      for (const file of allFiles) {       
-        
-        if (file.size > 20 * 1024 * 1024) { // 20MB limit per file
-          return {
-            success: false,
-            message: `File "${file.originalname}" is too large. Maximum file size is 20MB per file.`,
-          };
-        }
-        
-        if (!file.mimetype.startsWith('image/')) {
-          return {
-            success: false,
-            message: `File "${file.originalname}" is not a valid image file. Only image files (JPG, PNG, GIF, WebP) are allowed.`,
-          };
-        }
+      // Validate files before processing
+      const validationResult = this.validateUploadedFiles(files);
+      if (!validationResult.isValid) {
+        return {
+          success: false,
+          message: validationResult.message,
+        };
       }
       
       // Extract individual files for backward compatibility
       const frontImage = files?.front_image?.[0];
       const backImage = files?.back_image?.[0];
       const image = files?.image?.[0]; // For backward compatibility
+      
+      // Check if at least one file is provided
+      if (!frontImage && !backImage && !image) {
+        return {
+          success: false,
+          message: 'At least one document file is required for upload',
+        };
+      }
       
       const docResp = await this.vendorUserVerificationService.create(
         body, 
@@ -106,6 +104,11 @@ export class VendorUserVerificationController {
         image
       );
       
+      // If the response indicates that upload is not allowed, return it directly
+      if (!docResp.success) {
+        return docResp;
+      }
+      
       const userPackages = await this.vendorUserVerificationService.getUserPackages(user_id);
       return {
         ...docResp,
@@ -114,25 +117,9 @@ export class VendorUserVerificationController {
     } catch (error) {
       console.error('Vendor verification upload error:', error);
       
-      // Handle file size errors specifically
-      if (error.message && error.message.includes('expected size is less than')) {
-        return {
-          success: false,
-          message: 'File too large. Maximum file size is 20MB per file.',
-        };
-      }
-      
-      // Handle file type errors
-      if (error.message && error.message.includes('Only image files are allowed')) {
-        return {
-          success: false,
-          message: 'Invalid file type. Only image files (JPG, PNG, GIF, WebP) are allowed.',
-        };
-      }
-      
       return {
         success: false,
-        message: error.message || 'An error occurred while uploading documents.',
+        message: this.getErrorMessage(error),
       };
     }
   }
@@ -251,7 +238,7 @@ export class VendorUserVerificationController {
       
       // If document is provided, create user document for this user
       if (document) {
-        await this.vendorUserVerificationService.create(
+        const docResp = await this.vendorUserVerificationService.create(
           {
             type: 'vendor_verification',
             status: 'pending'
@@ -259,6 +246,11 @@ export class VendorUserVerificationController {
           user_id,
           document
         );
+        
+        // If document upload is not allowed, return the response
+        if (!docResp.success) {
+          return docResp;
+        }
       }
       
       return result;
@@ -306,7 +298,7 @@ export class VendorUserVerificationController {
       const result = await this.vendorUserVerificationService.updateVendorVerification(userId, vendorData);
 
       if (document) {
-        await this.vendorUserVerificationService.create(
+        const docResp = await this.vendorUserVerificationService.create(
           {
             type: 'vendor_verification',
             status: 'pending'
@@ -314,6 +306,11 @@ export class VendorUserVerificationController {
           userId,
           document,
         );
+        
+        // If document upload is not allowed, return the response
+        if (!docResp.success) {
+          return docResp;
+        }
       }
 
       return result;
@@ -323,5 +320,74 @@ export class VendorUserVerificationController {
         message: error.message,
       };
     }
+  }
+
+  // Helper method to validate uploaded files
+  private validateUploadedFiles(files?: {
+    front_image?: Express.Multer.File[];
+    back_image?: Express.Multer.File[];
+    image?: Express.Multer.File[];
+  }): { isValid: boolean; message?: string } {
+    if (!files) {
+      return { isValid: true };
+    }
+
+    const allFiles = [
+      ...(files?.front_image || []),
+      ...(files?.back_image || []),
+      ...(files?.image || [])
+    ];
+    
+    // Check each file individually
+    for (const file of allFiles) {
+      if (file.size > 20 * 1024 * 1024) { // 20MB limit per file
+        return {
+          isValid: false,
+          message: `File "${file.originalname}" is too large. Maximum file size is 20MB per file.`,
+        };
+      }
+      
+      if (!file.mimetype.startsWith('image/')) {
+        return {
+          isValid: false,
+          message: `File "${file.originalname}" is not a valid image file. Only image files (JPG, PNG, GIF, WebP) are allowed.`,
+        };
+      }
+    }
+
+    return { isValid: true };
+  }
+
+  // Helper method to get appropriate error message
+  private getErrorMessage(error: any): string {
+    if (error.message && error.message.includes('expected size is less than')) {
+      return 'File too large. Maximum file size is 20MB per file.';
+    }
+    
+    if (error.message && error.message.includes('Only image files are allowed')) {
+      return 'Invalid file type. Only image files (JPG, PNG, GIF, WebP) are allowed.';
+    }
+    
+    if (error.message && error.message.includes('Invalid file extension')) {
+      return 'Invalid file extension. Only JPG, PNG, GIF, and WebP files are allowed.';
+    }
+    
+    if (error.message && error.message.includes('User not found')) {
+      return 'User not found. Please ensure you are logged in correctly.';
+    }
+    
+    if (error.message && error.message.includes('Already your document approved')) {
+      return 'Your documents have already been approved. No new uploads are allowed.';
+    }
+    
+    if (error.message && error.message.includes('pending documents')) {
+      return 'You already have pending documents. Please wait for approval before uploading new documents.';
+    }
+    
+    if (error.message && error.message.includes('Failed to upload file')) {
+      return 'File upload failed. Please try again with a valid image file.';
+    }
+    
+    return error.message || 'An unexpected error occurred while uploading documents. Please try again.';
   }
 }

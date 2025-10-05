@@ -45,9 +45,35 @@ export class VendorUserVerificationAdminService {
       this.prisma.userDocument.count({ where }),
     ]);
 
+    // Generate full URLs for document images
+    const docsWithUrls = docs.map(doc => {
+      const baseUrl = process.env.APP_URL || 'http://localhost:4001';
+      
+      const docWithUrls = {
+        ...doc,
+        // Generate URLs for different image fields
+        image_url: doc.image ? `${baseUrl}/public/storage/package/${encodeURIComponent(doc.image)}` : null,
+        front_image_url: doc.front_image ? `${baseUrl}/public/storage/package/${encodeURIComponent(doc.front_image)}` : null,
+        back_image_url: doc.back_image ? `${baseUrl}/public/storage/package/${encodeURIComponent(doc.back_image)}` : null,
+      };
+
+      // Also generate URLs for user packages if they exist
+      if (doc.user?.packages) {
+        docWithUrls.user.packages = doc.user.packages.map(pkg => ({
+          ...pkg,
+          package_files: pkg.package_files?.map(file => ({
+            ...file,
+            file_url: file.file ? `${baseUrl}/public/storage/package/${encodeURIComponent(file.file)}` : null,
+          })) || []
+        }));
+      }
+
+      return docWithUrls;
+    });
+
     return {
       success: true,
-      data: docs,
+      data: docsWithUrls,
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
