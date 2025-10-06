@@ -1,6 +1,7 @@
-import { Controller, Get, Query, Patch, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Patch, Param, Body, UseGuards, Req } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { VendorUserVerificationAdminService } from './vendor-user-verification.service';
+import { UpdateVendorVerificationDto } from './dto/update-vendor-verification.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guard/role/roles.guard';
 import { Roles } from '../../../common/guard/role/roles.decorator';
@@ -58,11 +59,32 @@ export class VendorUserVerificationAdminController {
     return this.service.rejectVendor(userId, body?.reason);
   }
 
+  @Roles(Role.ADMIN, Role.VENDOR)
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Update vendor verification by user id' })
+  @ApiOperation({ 
+    summary: 'Get vendor verification by user id',
+    description: 'Get vendor verification details for a specific user. Users can only view their own data and must be vendors. Admins can view any vendor data.'
+  })
+  @Get('vendor/:userId')
+  async getVendorByUserId(
+    @Param('userId') userId: string,
+    @Req() req: any
+  ) {
+    return this.service.getVendorByUserId(userId, req.user);
+  }
+
+  @Roles(Role.VENDOR)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiOperation({ 
+    summary: 'Update vendor verification by user id',
+    description: 'Update vendor verification details for a specific user. Users can only update their own data and must be vendors. Admins can update any vendor data. All fields are optional - only provided fields will be updated.'
+  })
   @Patch('vendor/:userId')
-  async updateVendorByUserId(@Param('userId') userId: string, @Body() body: any) {
-    return this.service.updateVendorByUserId(userId, body);
+  async updateVendorByUserId(
+    @Param('userId') userId: string, 
+    @Body() body: UpdateVendorVerificationDto,
+    @Req() req: any
+  ) {
+    return this.service.updateVendorByUserId(userId, body, req.user);
   }
 }

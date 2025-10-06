@@ -836,4 +836,271 @@ export class BookingService {
       };
     }
   }
+
+  async completeBooking(id: string) {
+    try {
+      // Check if booking exists
+      const existingBooking = await this.prisma.booking.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          invoice_number: true,
+          status: true,
+          payment_status: true,
+          user_id: true,
+          vendor_id: true,
+          total_amount: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          vendor: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      if (!existingBooking) {
+        return {
+          success: false,
+          message: 'Booking not found',
+        };
+      }
+
+      // Validate that booking is in pending status
+      if (existingBooking.status !== 'pending') {
+        return {
+          success: false,
+          message: `Cannot complete booking. Current status is "${existingBooking.status}". Only pending bookings can be completed.`,
+          data: {
+            booking_id: id,
+            current_status: existingBooking.status,
+            required_status: 'pending',
+          },
+        };
+      }
+
+      // Update booking status to completed and payment status to approved
+      const updatedBooking = await this.prisma.booking.update({
+        where: { id },
+        data: {
+          status: 'completed',
+          payment_status: 'approved',
+          approved_at: new Date(),
+          updated_at: new Date(),
+        },
+        select: {
+          id: true,
+          invoice_number: true,
+          status: true,
+          payment_status: true,
+          approved_at: true,
+          total_amount: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          vendor: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          booking_items: {
+            select: {
+              id: true,
+              start_date: true,
+              end_date: true,
+              quantity: true,
+              price: true,
+              package: {
+                select: {
+                  id: true,
+                  name: true,
+                  type: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // Log the completion for audit trail
+      console.log(`Booking ${id} (${existingBooking.invoice_number}) completed by admin:`, {
+        previous_status: existingBooking.status,
+        new_status: 'completed',
+        previous_payment_status: existingBooking.payment_status,
+        new_payment_status: 'approved',
+        completed_at: new Date(),
+        user: existingBooking.user?.name || existingBooking.user?.email,
+        vendor: existingBooking.vendor?.name || existingBooking.vendor?.email,
+        total_amount: existingBooking.total_amount,
+      });
+
+      return {
+        success: true,
+        message: 'Booking completed successfully',
+        data: {
+          ...updatedBooking,
+          completion_details: {
+            completed_at: updatedBooking.approved_at,
+            previous_status: existingBooking.status,
+            new_status: updatedBooking.status,
+            previous_payment_status: existingBooking.payment_status,
+            new_payment_status: updatedBooking.payment_status,
+          },
+        },
+      };
+    } catch (error) {
+      console.error('Error completing booking:', error);
+      return {
+        success: false,
+        message: `Failed to complete booking: ${error.message}`,
+      };
+    }
+  }
+
+  async completeMultipleBookings(bookingIds: string[]) {
+    try {
+      if (!bookingIds || bookingIds.length === 0) {
+        return {
+          success: false,
+          message: 'No booking IDs provided',
+        };
+      }
+
+      // Check if all bookings exist and are pending
+      const existingBookings = await this.prisma.booking.findMany({
+        where: {
+          id: { in: bookingIds },
+        },
+        select: {
+          id: true,
+          invoice_number: true,
+          status: true,
+          payment_status: true,
+          user_id: true,
+          vendor_id: true,
+          total_amount: true,
+        },
+      });
+
+      if (existingBookings.length === 0) {
+        return {
+          success: false,
+          message: 'No bookings found with the provided IDs',
+        };
+      }
+
+      // Check for non-pending bookings
+      const nonPendingBookings = existingBookings.filter(booking => booking.status !== 'pending');
+      if (nonPendingBookings.length > 0) {
+        return {
+          success: false,
+          message: 'Some bookings cannot be completed because they are not in pending status',
+          data: {
+            non_pending_bookings: nonPendingBookings.map(booking => ({
+              id: booking.id,
+              invoice_number: booking.invoice_number,
+              current_status: booking.status,
+            })),
+            total_provided: bookingIds.length,
+            total_found: existingBookings.length,
+            pending_count: existingBookings.length - nonPendingBookings.length,
+          },
+        };
+      }
+
+      // Update all pending bookings to completed
+      const updateResult = await this.prisma.booking.updateMany({
+        where: {
+          id: { in: bookingIds },
+          status: 'pending',
+        },
+        data: {
+          status: 'completed',
+          payment_status: 'approved',
+          approved_at: new Date(),
+          updated_at: new Date(),
+        },
+      });
+
+      // Get updated bookings for response
+      const updatedBookings = await this.prisma.booking.findMany({
+        where: {
+          id: { in: bookingIds },
+        },
+        select: {
+          id: true,
+          invoice_number: true,
+          status: true,
+          payment_status: true,
+          approved_at: true,
+          total_amount: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          vendor: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      // Log the bulk completion for audit trail
+      console.log(`Bulk booking completion by admin:`, {
+        completed_count: updateResult.count,
+        booking_ids: bookingIds,
+        completed_at: new Date(),
+        bookings: updatedBookings.map(booking => ({
+          id: booking.id,
+          invoice_number: booking.invoice_number,
+          user: booking.user?.name || booking.user?.email,
+          vendor: booking.vendor?.name || booking.vendor?.email,
+          total_amount: booking.total_amount,
+        })),
+      });
+
+      return {
+        success: true,
+        message: `Successfully completed ${updateResult.count} booking(s)`,
+        data: {
+          completed_count: updateResult.count,
+          total_requested: bookingIds.length,
+          completed_bookings: updatedBookings,
+          completion_details: {
+            completed_at: new Date(),
+            previous_status: 'pending',
+            new_status: 'completed',
+            previous_payment_status: 'pending',
+            new_payment_status: 'approved',
+          },
+        },
+      };
+    } catch (error) {
+      console.error('Error completing multiple bookings:', error);
+      return {
+        success: false,
+        message: `Failed to complete bookings: ${error.message}`,
+      };
+    }
+  }
 }

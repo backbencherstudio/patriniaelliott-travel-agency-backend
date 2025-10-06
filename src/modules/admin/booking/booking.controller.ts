@@ -11,6 +11,7 @@ import {
 import { BookingService } from './booking.service';
 import { UpdateBookingDto } from './dto/update-booking.dto';
 import { QueryBookingDto } from './dto/query-booking.dto';
+import { BulkCompleteBookingDto } from './dto/bulk-complete-booking.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from 'src/common/guard/role/role.enum';
 import { Roles } from 'src/common/guard/role/roles.decorator';
@@ -121,6 +122,40 @@ export class BookingController {
         updateBookingDto,
       );
       return booking;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ 
+    summary: 'Complete a pending booking',
+    description: 'Admin can complete a booking that has status "pending". This will change the status to "completed" and update payment status to "approved". Only pending bookings can be completed.'
+  })
+  @Patch(':id/complete')
+  async completeBooking(@Param('id') id: string) {
+    try {
+      const booking = await this.bookingService.completeBooking(id);
+      return booking;
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ 
+    summary: 'Complete multiple pending bookings',
+    description: 'Admin can complete multiple bookings that have status "pending". This will change the status to "completed" and update payment status to "approved". Only pending bookings can be completed.'
+  })
+  @Patch('complete/bulk')
+  async completeMultipleBookings(@Body() body: BulkCompleteBookingDto) {
+    try {
+      const result = await this.bookingService.completeMultipleBookings(body.booking_ids);
+      return result;
     } catch (error) {
       return {
         success: false,
