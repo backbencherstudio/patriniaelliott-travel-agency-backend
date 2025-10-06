@@ -8,6 +8,40 @@ import appConfig from '../../../config/app.config';
 export class BookingService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Add image URLs to package data
+   */
+  private addImageUrls(packageData: any) {
+    const baseUrl = appConfig().app.url;
+    
+    // Add URLs to package files
+    if (packageData.package_files && packageData.package_files.length > 0) {
+      packageData.package_files.forEach((file, index) => {
+        if (file.file) {
+          // Encode the filename to handle special characters and spaces
+          const encodedFilename = encodeURIComponent(file.file);
+          file.file_url = `${baseUrl}/public/storage/package/${encodedFilename}`;
+        }
+      });
+    }
+    
+    // Add URLs to trip plan images
+    if (packageData.package_trip_plans && packageData.package_trip_plans.length > 0) {
+      packageData.package_trip_plans.forEach((tripPlan, tripIndex) => {
+        if (tripPlan.package_trip_plan_images && tripPlan.package_trip_plan_images.length > 0) {
+          tripPlan.package_trip_plan_images.forEach((image, imgIndex) => {
+            if (image.image) {
+              const encodedFilename = encodeURIComponent(image.image);
+              image.image_url = `${baseUrl}/public/storage/package/${encodedFilename}`;
+            }
+          });
+        }
+      });
+    }
+    
+    return packageData;
+  }
+
   async findAll({
     q,
     status = null,
@@ -152,7 +186,33 @@ export class BookingService {
               end_date: true,
               package: {
                 select: {
+                  id: true,
                   name: true,
+                  description: true,
+                  type: true,
+                  package_files: {
+                    select: {
+                      id: true,
+                      file: true,
+                      file_alt: true,
+                      type: true,
+                      is_featured: true,
+                    },
+                  },
+                  package_trip_plans: {
+                    select: {
+                      id: true,
+                      title: true,
+                      description: true,
+                      package_trip_plan_images: {
+                        select: {
+                          id: true,
+                          image: true,
+                          image_alt: true,
+                        },
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -232,6 +292,12 @@ export class BookingService {
           return dateObj.toISOString().split('T')[0]; // YYYY-MM-DD format
         };
 
+        // Add image URLs to package data
+        const bookingItemsWithImages = booking.booking_items?.map(item => ({
+          ...item,
+          package: item.package ? this.addImageUrls(item.package) : item.package,
+        })) || [];
+
         return {
           id: booking.id,
           booking_id: booking.invoice_number || `#${booking.id.slice(-5)}`, // Use invoice_number or fallback to last 5 chars of ID
@@ -266,7 +332,7 @@ export class BookingService {
             payment_status: booking.payment_status,
             approved_at: booking.approved_at,
             user: booking.user,
-            booking_items: booking.booking_items,
+            booking_items: bookingItemsWithImages,
             created_at: booking.created_at,
             updated_at: booking.updated_at,
           }
@@ -833,6 +899,273 @@ export class BookingService {
       return {
         success: false,
         message: error.message,
+      };
+    }
+  }
+
+  async completeBooking(id: string) {
+    try {
+      // Check if booking exists
+      const existingBooking = await this.prisma.booking.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          invoice_number: true,
+          status: true,
+          payment_status: true,
+          user_id: true,
+          vendor_id: true,
+          total_amount: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          vendor: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      if (!existingBooking) {
+        return {
+          success: false,
+          message: 'Booking not found',
+        };
+      }
+
+      // Validate that booking is in pending status
+      if (existingBooking.status !== 'pending') {
+        return {
+          success: false,
+          message: `Cannot complete booking. Current status is "${existingBooking.status}". Only pending bookings can be completed.`,
+          data: {
+            booking_id: id,
+            current_status: existingBooking.status,
+            required_status: 'pending',
+          },
+        };
+      }
+
+      // Update booking status to completed and payment status to approved
+      const updatedBooking = await this.prisma.booking.update({
+        where: { id },
+        data: {
+          status: 'completed',
+          payment_status: 'approved',
+          approved_at: new Date(),
+          updated_at: new Date(),
+        },
+        select: {
+          id: true,
+          invoice_number: true,
+          status: true,
+          payment_status: true,
+          approved_at: true,
+          total_amount: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          vendor: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          booking_items: {
+            select: {
+              id: true,
+              start_date: true,
+              end_date: true,
+              quantity: true,
+              price: true,
+              package: {
+                select: {
+                  id: true,
+                  name: true,
+                  type: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // Log the completion for audit trail
+      console.log(`Booking ${id} (${existingBooking.invoice_number}) completed by admin:`, {
+        previous_status: existingBooking.status,
+        new_status: 'completed',
+        previous_payment_status: existingBooking.payment_status,
+        new_payment_status: 'approved',
+        completed_at: new Date(),
+        user: existingBooking.user?.name || existingBooking.user?.email,
+        vendor: existingBooking.vendor?.name || existingBooking.vendor?.email,
+        total_amount: existingBooking.total_amount,
+      });
+
+      return {
+        success: true,
+        message: 'Booking completed successfully',
+        data: {
+          ...updatedBooking,
+          completion_details: {
+            completed_at: updatedBooking.approved_at,
+            previous_status: existingBooking.status,
+            new_status: updatedBooking.status,
+            previous_payment_status: existingBooking.payment_status,
+            new_payment_status: updatedBooking.payment_status,
+          },
+        },
+      };
+    } catch (error) {
+      console.error('Error completing booking:', error);
+      return {
+        success: false,
+        message: `Failed to complete booking: ${error.message}`,
+      };
+    }
+  }
+
+  async completeMultipleBookings(bookingIds: string[]) {
+    try {
+      if (!bookingIds || bookingIds.length === 0) {
+        return {
+          success: false,
+          message: 'No booking IDs provided',
+        };
+      }
+
+      // Check if all bookings exist and are pending
+      const existingBookings = await this.prisma.booking.findMany({
+        where: {
+          id: { in: bookingIds },
+        },
+        select: {
+          id: true,
+          invoice_number: true,
+          status: true,
+          payment_status: true,
+          user_id: true,
+          vendor_id: true,
+          total_amount: true,
+        },
+      });
+
+      if (existingBookings.length === 0) {
+        return {
+          success: false,
+          message: 'No bookings found with the provided IDs',
+        };
+      }
+
+      // Check for non-pending bookings
+      const nonPendingBookings = existingBookings.filter(booking => booking.status !== 'pending');
+      if (nonPendingBookings.length > 0) {
+        return {
+          success: false,
+          message: 'Some bookings cannot be completed because they are not in pending status',
+          data: {
+            non_pending_bookings: nonPendingBookings.map(booking => ({
+              id: booking.id,
+              invoice_number: booking.invoice_number,
+              current_status: booking.status,
+            })),
+            total_provided: bookingIds.length,
+            total_found: existingBookings.length,
+            pending_count: existingBookings.length - nonPendingBookings.length,
+          },
+        };
+      }
+
+      // Update all pending bookings to completed
+      const updateResult = await this.prisma.booking.updateMany({
+        where: {
+          id: { in: bookingIds },
+          status: 'pending',
+        },
+        data: {
+          status: 'completed',
+          payment_status: 'approved',
+          approved_at: new Date(),
+          updated_at: new Date(),
+        },
+      });
+
+      // Get updated bookings for response
+      const updatedBookings = await this.prisma.booking.findMany({
+        where: {
+          id: { in: bookingIds },
+        },
+        select: {
+          id: true,
+          invoice_number: true,
+          status: true,
+          payment_status: true,
+          approved_at: true,
+          total_amount: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          vendor: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      // Log the bulk completion for audit trail
+      console.log(`Bulk booking completion by admin:`, {
+        completed_count: updateResult.count,
+        booking_ids: bookingIds,
+        completed_at: new Date(),
+        bookings: updatedBookings.map(booking => ({
+          id: booking.id,
+          invoice_number: booking.invoice_number,
+          user: booking.user?.name || booking.user?.email,
+          vendor: booking.vendor?.name || booking.vendor?.email,
+          total_amount: booking.total_amount,
+        })),
+      });
+
+      return {
+        success: true,
+        message: `Successfully completed ${updateResult.count} booking(s)`,
+        data: {
+          completed_count: updateResult.count,
+          total_requested: bookingIds.length,
+          completed_bookings: updatedBookings,
+          completion_details: {
+            completed_at: new Date(),
+            previous_status: 'pending',
+            new_status: 'completed',
+            previous_payment_status: 'pending',
+            new_payment_status: 'approved',
+          },
+        },
+      };
+    } catch (error) {
+      console.error('Error completing multiple bookings:', error);
+      return {
+        success: false,
+        message: `Failed to complete bookings: ${error.message}`,
       };
     }
   }

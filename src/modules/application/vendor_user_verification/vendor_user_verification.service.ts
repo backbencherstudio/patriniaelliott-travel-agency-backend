@@ -13,50 +13,42 @@ export class VendorUserVerificationService {
   async create(
     userDocumentDto: UserDocumentDto,
     userId: string,
-    file?: Express.Multer.File,
+    frontImage?: Express.Multer.File,
+    backImage?: Express.Multer.File,
+    legacyImage?: Express.Multer.File, // For backward compatibility
   ) {
     try {
-      // Check if user exists
-      const userData = await this.prisma.user.findUnique({ where: { id: userId } });
+      // Check if user exists and get verification status
+      const userData = await this.getUserWithVerificationStatus(userId);
+      
       if (!userData) {
         throw new Error('User not found');
+      }
+
+      console.log('User data retrieved for document upload:', {
+        userId,
+        userName: userData.name || userData.first_name,
+        userEmail: userData.email,
+        totalDocuments: userData.user_documents.length,
+        documentStatuses: userData.user_documents.map(doc => ({ id: doc.id, status: doc.status, type: doc.type }))
+      });
+
+      // Validate document upload eligibility
+      const eligibilityCheck = this.validateDocumentUploadEligibility(userData, userId);
+      if (!eligibilityCheck.canUpload) {
+        console.log('Upload blocked by validation:', eligibilityCheck.response);
+        return eligibilityCheck.response;
       }
 
       // Set default type if not provided
       const documentType = userDocumentDto.type || 'vendor_verification';
 
-      let imageFileName: string | null = null;
-
-      if (file) {
-        // Validate file
-        if (!file.buffer || file.buffer.length === 0) {
-          throw new Error('Invalid file: file buffer is empty');
-        }
-
-        if (!file.mimetype || !file.mimetype.startsWith('image/')) {
-          throw new Error('Invalid file type: only image files are allowed');
-        }
-        if (file.size > 10 * 1024 * 1024) { // 10MB limit
-          throw new Error('File too large: maximum size is 10MB');
-        }
-        // Generate unique filename for the uploaded image
-        const randomName = Array(32)
-          .fill(null)
-          .map(() => Math.round(Math.random() * 16).toString(16))
-          .join('');
-        const fileExtension = file.originalname.split('.').pop();
-        imageFileName = `${randomName}.${fileExtension}`;
-        
-        try {
-          // Upload file using SojebStorage with the correct path structure
-          const filePath = appConfig().storageUrl.package + imageFileName;
-          console.log(filePath);
-          await SojebStorage.put(filePath, file.buffer);
-        } catch (uploadError) {
-          console.error('File upload error:', uploadError);
-          throw new Error(`Failed to upload file: ${uploadError.message}`);
-        }
-      }
+      // Process all provided files
+      const fileResults = await this.processMultipleFiles({
+        frontImage,
+        backImage,
+        legacyImage
+      });
 
       // Create UserDocument record following the schema
       const document = await this.prisma.userDocument.create({
@@ -64,21 +56,25 @@ export class VendorUserVerificationService {
           user_id: userId,
           type: documentType,
           number: userDocumentDto.number || null,
-          image: imageFileName, // This stores the filename, not the full path
+          front_image: fileResults.frontImage,
+          back_image: fileResults.backImage,
+          image: fileResults.legacyImage, // For backward compatibility
           status: userDocumentDto.status || 'pending',
         },
       });
 
-      // Generate public URL for the image if it exists
-      const documentWithUrl = {
+      // Generate public URLs for all uploaded images
+      const documentWithUrls = {
         ...document,
-        image_url: imageFileName ? this.generateFileUrl(imageFileName, 'package') : null
+        front_image_url: fileResults.frontImage ? this.generateFileUrl(fileResults.frontImage, 'package') : null,
+        back_image_url: fileResults.backImage ? this.generateFileUrl(fileResults.backImage, 'package') : null,
+        image_url: fileResults.legacyImage ? this.generateFileUrl(fileResults.legacyImage, 'package') : null
       };
 
       return {
         success: true,
-        data: documentWithUrl,
-        message: 'Document uploaded successfully for vendor verification.',
+        data: documentWithUrls,
+        message: 'Document(s) uploaded successfully for vendor verification.',
       };
     } catch (error) {
       throw new Error(`Failed to create user document: ${error.message}`);
@@ -122,6 +118,171 @@ export class VendorUserVerificationService {
   private generateFileUrl(filename: string, type: string): string {
     const storagePath = appConfig().storageUrl[type] || appConfig().storageUrl.package;
     return SojebStorage.url(storagePath + filename);
+  }
+
+  // Helper method to get user with verification status
+  private async getUserWithVerificationStatus(userId: string) {
+    try {
+      return await this.prisma.user.findUnique({ 
+        where: { id: userId },
+        select: {
+          id: true,
+          name: true,
+          first_name: true,
+          email: true,
+          type: true,
+          VendorVerification: {
+            select: {
+              id: true,
+              status: true,
+              verified_at: true
+            }
+          },
+          user_documents: {
+            where: { 
+              deleted_at: null 
+            },
+            select: {
+              id: true,
+              status: true,
+              type: true,
+              created_at: true
+            },
+            orderBy: { created_at: 'desc' }
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching user verification status:', error);
+      throw new Error('Failed to fetch user verification status');
+    }
+  }
+
+  // Helper method to validate document upload eligibility
+  private validateDocumentUploadEligibility(userData: any, userId: string) {
+    // Debug logging to help identify issues
+    console.log('Validating document upload eligibility for user:', userId);
+    console.log('User documents found:', userData.user_documents);
+    console.log('Document statuses:', userData.user_documents.map(doc => ({ id: doc.id, status: doc.status, type: doc.type })));
+    
+    // Check if user has any approved documents - if yes, prevent new uploads
+    const hasApprovedDocuments = userData.user_documents.some(doc => doc.status === 'approved');
+    console.log('Has approved documents:', hasApprovedDocuments);
+    
+    if (hasApprovedDocuments) {
+      console.log('Blocking upload - user has approved documents');
+      return {
+        canUpload: false,
+        response: {
+          success: false,
+          message: 'Already your document approved',
+          data: {
+            user_id: userId,
+            user_name: userData.name || userData.first_name,
+            user_email: userData.email,
+            approved_documents: userData.user_documents.filter(doc => doc.status === 'approved').length,
+            total_documents: userData.user_documents.length,
+            verification_status: userData.VendorVerification?.status || 'pending'
+          }
+        }
+      };
+    }
+
+    // If user exists but no approved documents, allow upload
+    // This covers cases where user has pending, rejected, or no documents
+    console.log('Allowing upload - no approved documents found');
+    return { canUpload: true };
+  }
+
+  // Helper method to process multiple files
+  private async processMultipleFiles(files: {
+    frontImage?: Express.Multer.File;
+    backImage?: Express.Multer.File;
+    legacyImage?: Express.Multer.File;
+  }): Promise<{
+    frontImage: string | null;
+    backImage: string | null;
+    legacyImage: string | null;
+  }> {
+    const results = {
+      frontImage: null as string | null,
+      backImage: null as string | null,
+      legacyImage: null as string | null
+    };
+
+    // Create array of file processing tasks
+    const fileTasks = [];
+    
+    if (files.frontImage) {
+      fileTasks.push({ file: files.frontImage, key: 'frontImage' as const });
+    }
+    
+    if (files.backImage) {
+      fileTasks.push({ file: files.backImage, key: 'backImage' as const });
+    }
+    
+    if (files.legacyImage) {
+      fileTasks.push({ file: files.legacyImage, key: 'legacyImage' as const });
+    }
+
+    // Process all files in parallel for better performance
+    const filePromises = fileTasks.map(async ({ file, key }) => {
+      try {
+        const filename = await this.processFile(file);
+        results[key] = filename;
+      } catch (error) {
+        console.error(`Error processing ${key} file:`, error);
+        throw new Error(`Failed to process ${key} file: ${error.message}`);
+      }
+    });
+
+    // Wait for all files to be processed
+    await Promise.all(filePromises);
+
+    return results;
+  }
+
+  // Helper method to process and upload a single file
+  private async processFile(file: Express.Multer.File): Promise<string> {
+    // Validate file buffer
+    if (!file.buffer || file.buffer.length === 0) {
+      throw new Error('Invalid file: file buffer is empty');
+    }
+
+    // Validate file type
+    if (!file.mimetype || !file.mimetype.startsWith('image/')) {
+      throw new Error('Invalid file type: only image files (JPG, PNG, GIF, WebP) are allowed');
+    }
+    
+    // Validate file size (20MB limit)
+    if (file.size > 20 * 1024 * 1024) {
+      throw new Error('File too large: maximum size is 20MB per file');
+    }
+    
+    // Validate file extension
+    const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    const fileExtension = file.originalname.split('.').pop()?.toLowerCase();
+    if (!fileExtension || !allowedExtensions.includes(fileExtension)) {
+      throw new Error('Invalid file extension: only JPG, PNG, GIF, and WebP files are allowed');
+    }
+    
+    // Generate unique filename for the uploaded image
+    const randomName = Array(32)
+      .fill(null)
+      .map(() => Math.round(Math.random() * 16).toString(16))
+      .join('');
+    const fileName = `${randomName}.${fileExtension}`;
+    
+    try {
+      // Upload file using SojebStorage with the correct path structure
+      const filePath = appConfig().storageUrl.package + fileName;
+      console.log('Uploading file to:', filePath);
+      await SojebStorage.put(filePath, file.buffer);
+      return fileName;
+    } catch (uploadError) {
+      console.error('File upload error:', uploadError);
+      throw new Error(`Failed to upload file "${file.originalname}": ${uploadError.message}`);
+    }
   }
 
   async registerVendor(vendorData: VendorVerificationDto, file?: Express.Multer.File) {
@@ -197,8 +358,8 @@ export class VendorUserVerificationService {
           throw new Error('Invalid file type: only image files are allowed');
         }
 
-        if (file.size > 10 * 1024 * 1024) { // 10MB limit
-          throw new Error('File too large: maximum size is 10MB');
+        if (file.size > 20 * 1024 * 1024) { // 20MB limit
+          throw new Error('File too large: maximum size is 20MB');
         }
 
         try {
@@ -375,7 +536,10 @@ export class VendorUserVerificationService {
         include: {
           VendorVerification: true,
           user_documents: {
-            where: { type: 'vendor_verification' },
+            where: { 
+              type: 'vendor_verification',
+              deleted_at: null 
+            },
             orderBy: { created_at: 'desc' }
           }
         }
@@ -411,7 +575,10 @@ export class VendorUserVerificationService {
           include: {
             VendorVerification: true,
             user_documents: {
-              where: { type: 'vendor_verification' },
+              where: { 
+                type: 'vendor_verification',
+                deleted_at: null 
+              },
               orderBy: { created_at: 'desc' }
             }
           }
@@ -420,18 +587,38 @@ export class VendorUserVerificationService {
         user.VendorVerification = updatedUser.VendorVerification;
       }
 
-      // Add image URLs using SojebStorage
+      // Add image URLs using SojebStorage and document status information
       if (user.user_documents && user.user_documents.length > 0) {
         for (const document of user.user_documents) {
           if (document.image) {
             document['image_url'] = this.generateFileUrl(document.image, 'package');
           }
+          if (document.front_image) {
+            document['front_image_url'] = this.generateFileUrl(document.front_image, 'package');
+          }
+          if (document.back_image) {
+            document['back_image_url'] = this.generateFileUrl(document.back_image, 'package');
+          }
         }
       }
 
+      // Determine upload eligibility - only block if user has approved documents
+      const eligibilityCheck = this.validateDocumentUploadEligibility(user, userId);
+      const canUploadNewDocuments = eligibilityCheck.canUpload;
+
       return {
         success: true,
-        data: user,
+        data: {
+          ...user,
+          can_upload_new_documents: canUploadNewDocuments,
+          document_status_summary: {
+            total_documents: user.user_documents.length,
+            approved_documents: user.user_documents.filter(doc => doc.status === 'approved').length,
+            pending_documents: user.user_documents.filter(doc => doc.status === 'pending').length,
+            rejected_documents: user.user_documents.filter(doc => doc.status === 'rejected').length,
+            upload_blocked_reason: canUploadNewDocuments ? null : 'User has approved documents'
+          }
+        },
         email: user.email ?? null,
         message: user.VendorVerification ? 'Vendor verification found' : 'Default vendor verification created'
       };

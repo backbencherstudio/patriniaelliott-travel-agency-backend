@@ -111,12 +111,14 @@ model UserDocument {
   updated_at DateTime  @default(now())
   deleted_at DateTime?
 
-  status  String? @default("pending") // pending, approved, rejected
-  user_id String?
-  type    String?
-  image   String?
-  number  String?
-  user    User?   @relation(fields: [user_id], references: [id])
+  status      String? @default("pending") // pending, approved, rejected
+  user_id     String?
+  type        String?
+  front_image String?
+  back_image  String?
+  image       String?
+  number      String?
+  user        User?   @relation(fields: [user_id], references: [id])
 
   @@map("user_documents")
 }
@@ -843,6 +845,8 @@ model BookingExtraService {
   booking_id       String?
   extra_service_id String?
   price            Decimal?
+  quantity         Int?          @default(1)
+  notes            String?
   booking          Booking?      @relation(fields: [booking_id], references: [id])
   extra_service    ExtraService? @relation(fields: [extra_service_id], references: [id])
 

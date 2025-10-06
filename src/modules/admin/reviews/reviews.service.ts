@@ -7,6 +7,35 @@ import appConfig from '../../../config/app.config';
 export class ReviewsService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Add image URLs to package data
+   */
+  private addImageUrls(packageData: any) {
+    const baseUrl = appConfig().app.url;
+    
+    console.log('🔍 Package data:', {
+      id: packageData.id,
+      name: packageData.name,
+      package_files: packageData.package_files
+    });
+    
+    // Add URLs to package files
+    if (packageData.package_files && packageData.package_files.length > 0) {
+      packageData.package_files.forEach((file, index) => {
+        if (file.file) {
+          // Encode the filename to handle special characters and spaces
+          const encodedFilename = encodeURIComponent(file.file);
+          file.file_url = `${baseUrl}/public/storage/package/${encodedFilename}`;
+          console.log('✅ Added image URL:', file.file_url);
+        }
+      });
+    } else {
+      console.log('❌ No package files found for package:', packageData.name);
+    }
+    
+    return packageData;
+  }
+
   async findAll({
     status = 'all',
     date_range = 'all',
@@ -102,12 +131,12 @@ export class ReviewsService {
               name: true,
               type: true,
               package_files: {
-                where: {
-                  is_featured: true,
-                },
                 select: {
+                  id: true,
                   file: true,
                   file_alt: true,
+                  type: true,
+                  is_featured: true,
                 },
                 take: 1,
               },
@@ -151,12 +180,13 @@ export class ReviewsService {
           statusColor = 'orange';
         }
 
+        // Add image URLs to package data
+        const packageWithImages = this.addImageUrls(review.package);
+        
         // Format package image
-        const packageImage = review.package.package_files?.[0] ? {
-          url: SojebStorage.url(
-            appConfig().storageUrl.package + review.package.package_files[0].file,
-          ),
-          alt: review.package.package_files[0].file_alt,
+        const packageImage = packageWithImages.package_files?.[0] ? {
+          url: packageWithImages.package_files[0].file_url,
+          alt: packageWithImages.package_files[0].file_alt,
         } : null;
 
         // Format user avatar

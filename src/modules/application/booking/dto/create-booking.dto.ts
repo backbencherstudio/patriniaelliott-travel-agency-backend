@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsOptional, IsDate, IsNumber, IsArray, ValidateNested, Min } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, IsDate, IsNumber, IsArray, ValidateNested, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class BookingTravellerDto {
@@ -94,6 +94,11 @@ export class BookingItemDto {
   @Min(1)
   quantity?: number = 1;
 
+  @ApiProperty({ description: 'Image of the item' })
+  @IsOptional()
+  @IsString()
+  image?: string;
+
   @ApiProperty({ description: 'Price per item' })
   @IsOptional()
   @Type(() => Number)
@@ -117,6 +122,18 @@ export class BookingExtraServiceDto {
   @Type(() => Number)
   @IsNumber()
   price?: number;
+
+  @ApiProperty({ description: 'Quantity of the extra service', default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  quantity?: number = 1;
+
+  @ApiProperty({ description: 'Custom notes for this extra service' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }
 
 export class CreateBookingDto {
@@ -220,4 +237,19 @@ export class CreateBookingDto {
   @ValidateNested({ each: true })
   @Type(() => BookingExtraServiceDto)
   booking_extra_services?: BookingExtraServiceDto[];
+
+  @ApiProperty({ description: 'Discount percentage (0-100)', required: false })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  discount_percentage?: number;
+
+  @ApiProperty({ description: 'Discount amount in currency', required: false })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  discount_amount?: number;
 }
