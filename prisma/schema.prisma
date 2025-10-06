@@ -845,6 +845,8 @@ model BookingExtraService {
   booking_id       String?
   extra_service_id String?
   price            Decimal?
+  quantity         Int?          @default(1)
+  notes            String?
   booking          Booking?      @relation(fields: [booking_id], references: [id])
   extra_service    ExtraService? @relation(fields: [extra_service_id], references: [id])
 

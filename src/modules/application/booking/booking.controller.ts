@@ -23,6 +23,8 @@ import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
 import { RefundRequest } from './dto/refund-request.dto';
+import { GetUserBookingsDto } from './dto/get-user-bookings.dto';
+import { GetUserDashboardDto } from './dto/get-user-dashboard.dto';
 
 @ApiBearerAuth()
 @ApiTags('Booking')
@@ -66,6 +68,62 @@ export class BookingController {
       const bookings = await this.bookingService.findAll(user_id, query);
 
       return bookings;
+    } catch (error) {
+      console.error('Controller error:', error);
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  // @UseGuards(JwtAuthGuard)
+  // @ApiOperation({ summary: 'Get user bookings with pagination and filters' })
+  // @Get('my-bookings')
+  // async getUserBookings(
+  //   @Req() req: Request,
+  //   @Query() query: GetUserBookingsDto,
+  // ) {
+  //   try {
+  //     const user_id = req.user.userId;
+
+  //     if (!user_id) {
+  //       return {
+  //         success: false,
+  //         message: 'User not authenticated or user ID not found',
+  //       };
+  //     }
+
+  //     const result = await this.bookingService.getUserBookings(user_id, query);
+  //     return result;
+  //   } catch (error) {
+  //     console.error('Controller error:', error);
+  //     return {
+  //       success: false,
+  //       message: error.message,
+  //     };
+  //   }
+  // }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get user dashboard statistics' })
+  @Get('dashboard')
+  async getUserDashboard(
+    @Req() req: Request,
+    @Query() query: GetUserDashboardDto,
+  ) {
+    try {
+      const user_id = req.user.userId;
+
+      if (!user_id) {
+        return {
+          success: false,
+          message: 'User not authenticated or user ID not found',
+        };
+      }
+
+      const result = await this.bookingService.getUserDashboard(user_id, query);
+      return result;
     } catch (error) {
       console.error('Controller error:', error);
       return {

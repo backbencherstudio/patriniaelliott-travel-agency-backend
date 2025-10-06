@@ -5,10 +5,47 @@ import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 import { StripePayment } from '../../../common/lib/Payment/stripe/StripePayment';
 import { CreatePaymentDto, PaymentIntentResponseDto } from './dto/create-payment.dto';
+import { GetUserBookingsDto } from './dto/get-user-bookings.dto';
+import { GetUserDashboardDto } from './dto/get-user-dashboard.dto';
+import appConfig from '../../../config/app.config';
 
 @Injectable()
 export class BookingService {
   constructor(private readonly prisma: PrismaService) { }
+
+  /**
+   * Add image URLs to package data
+   */
+  private addImageUrls(packageData: any) {
+    const baseUrl = appConfig().app.url;
+    
+    // Add URLs to package files
+    if (packageData.package_files && packageData.package_files.length > 0) {
+      packageData.package_files.forEach((file, index) => {
+        if (file.file) {
+          // Encode the filename to handle special characters and spaces
+          const encodedFilename = encodeURIComponent(file.file);
+          file.file_url = `${baseUrl}/public/storage/package/${encodedFilename}`;
+        }
+      });
+    }
+    
+    // Add URLs to trip plan images
+    if (packageData.package_trip_plans && packageData.package_trip_plans.length > 0) {
+      packageData.package_trip_plans.forEach((tripPlan, tripIndex) => {
+        if (tripPlan.package_trip_plan_images && tripPlan.package_trip_plan_images.length > 0) {
+          tripPlan.package_trip_plan_images.forEach((image, imgIndex) => {
+            if (image.image) {
+              const encodedFilename = encodeURIComponent(image.image);
+              image.image_url = `${baseUrl}/public/storage/package/${encodedFilename}`;
+            }
+          });
+        }
+      });
+    }
+    
+    return packageData;
+  }
 
 
   async createBooking(
@@ -70,8 +107,8 @@ export class BookingService {
           throw new BadRequestException('Vendor account is not active');
         }
 
-        // Calculate total amount
-        const total_amount = this.calculateTotalAmount(processedItems, createBookingDto.booking_extra_services);
+        // Calculate total amount with discount (we'll recalculate after creating extra services)
+        let total_amount = this.calculateTotalAmount(processedItems, createBookingDto.booking_extra_services);
 
         // Generate invoice number
         const invoice_number = await this.generateInvoiceNumber(prisma);
@@ -110,6 +147,27 @@ export class BookingService {
         // Create booking extra services
         const bookingExtraServices = await this.createBookingExtraServices(prisma, booking.id, createBookingDto.booking_extra_services);
 
+        // Calculate price breakdown with actual database prices
+        const packageTotal = processedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const extraServicesTotal = bookingExtraServices.reduce((sum, es) => sum + (parseFloat(es.price.toString()) * es.quantity), 0);
+        const baseTotal = packageTotal + extraServicesTotal;
+        
+        // Apply discount to base total
+        let discount = 0;
+        if (createBookingDto.discount_amount && createBookingDto.discount_amount > 0) {
+          discount = createBookingDto.discount_amount;
+        } else if (createBookingDto.discount_percentage && createBookingDto.discount_percentage > 0) {
+          discount = (baseTotal * createBookingDto.discount_percentage) / 100;
+        }
+        
+        const finalTotal = baseTotal - discount;
+        
+        // Update booking with correct total amount
+        await prisma.booking.update({
+          where: { id: booking.id },
+          data: { total_amount: finalTotal }
+        });
+        
         return {
           success: true,
           data: {
@@ -118,7 +176,7 @@ export class BookingService {
               invoice_number: booking.invoice_number,
               status: booking.status,
               type: booking.type,
-              total_amount: booking.total_amount,
+              total_amount: finalTotal,
               booking_date_time: booking.booking_date_time,
             },
             user: {
@@ -134,6 +192,15 @@ export class BookingService {
             items: bookingItems,
             travellers: bookingTravellers,
             extra_services: bookingExtraServices,
+            price_breakdown: {
+              package_total: packageTotal,
+              extra_services_total: extraServicesTotal,
+              base_total: baseTotal,
+              discount_applied: discount,
+              final_total: finalTotal,
+              discount_percentage: createBookingDto.discount_percentage || 0,
+              discount_amount: createBookingDto.discount_amount || 0,
+            },
           },
           message: 'Booking created successfully',
         };
@@ -192,6 +259,29 @@ export class BookingService {
             deleted_at: null,
           },
         } : false,
+        package_files: {
+          select: {
+            id: true,
+            file: true,
+            file_alt: true,
+            type: true,
+            is_featured: true,
+          },
+        },
+        package_trip_plans: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            package_trip_plan_images: {
+              select: {
+                id: true,
+                image: true,
+                image_alt: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -221,9 +311,12 @@ export class BookingService {
       // Calculate price if not provided
       const price = item.price || parseFloat((packageData as any).price.toString());
 
+      // Add image URLs to package data
+      const packageWithImages = this.addImageUrls(packageData);
+
       processedItems.push({
         ...item,
-        package: packageData,
+        package: packageWithImages,
         price,
       });
     }
@@ -255,14 +348,46 @@ export class BookingService {
       total += itemTotal;
     }
 
-    // Calculate extra services total
-    if (extraServices) {
+    // Calculate extra services total with quantity support
+    if (extraServices && extraServices.length > 0) {
       for (const service of extraServices) {
-        total += service.price || 0;
+        // Get price from database if not provided in request
+        const servicePrice = service.price || 0; // This will be updated with database price later
+        const serviceQuantity = service.quantity || 1;
+        const serviceTotal = servicePrice * serviceQuantity;
+        total += serviceTotal;
       }
     }
 
     return total;
+  }
+
+  private calculateTotalAmountWithDiscount(
+    items: any[], 
+    extraServices?: BookingExtraServiceDto[],
+    discountPercentage?: number,
+    discountAmount?: number
+  ): number {
+    // Calculate base total
+    const baseTotal = this.calculateTotalAmount(items, extraServices);
+    
+    let discount = 0;
+    
+    // Apply discount percentage if provided
+    if (discountPercentage && discountPercentage > 0) {
+      discount = (baseTotal * discountPercentage) / 100;
+    }
+    
+    // Apply fixed discount amount if provided (takes priority over percentage)
+    if (discountAmount && discountAmount > 0) {
+      discount = discountAmount;
+    }
+    
+    // Calculate final total
+    const finalTotal = baseTotal - discount;
+    
+    // Ensure total is not negative
+    return Math.max(0, finalTotal);
   }
 
   private async generateInvoiceNumber(prisma: any): Promise<string> {
@@ -309,6 +434,29 @@ export class BookingService {
               id: true,
               name: true,
               description: true,
+              package_files: {
+                select: {
+                  id: true,
+                  file: true,
+                  file_alt: true,
+                  type: true,
+                  is_featured: true,
+                },
+              },
+              package_trip_plans: {
+                select: {
+                  id: true,
+                  title: true,
+                  description: true,
+                  package_trip_plan_images: {
+                    select: {
+                      id: true,
+                      image: true,
+                      image_alt: true,
+                    },
+                  },
+                },
+              },
             },
           },
           PackageRoomType: {
@@ -320,6 +468,11 @@ export class BookingService {
           },
         },
       });
+
+      // Add image URLs to package data
+      if (bookingItem.package) {
+        bookingItem.package = this.addImageUrls(bookingItem.package);
+      }
 
       bookingItems.push(bookingItem);
     }
@@ -366,20 +519,31 @@ export class BookingService {
     const bookingExtraServices = [];
 
     for (const service of extraServices) {
-      // Validate extra service exists
-      const extraService = await prisma.extraService.findUnique({
-        where: { id: service.extra_service_id },
+      // Validate extra service exists and is active
+      const extraService = await prisma.extraService.findFirst({
+        where: { 
+          id: service.extra_service_id,
+          deleted_at: null // Only active services
+        },
       });
 
       if (!extraService) {
-        throw new BadRequestException(`Extra service with ID ${service.extra_service_id} not found`);
+        throw new BadRequestException(`Extra service with ID ${service.extra_service_id} not found or inactive`);
       }
 
+      // Use service price from database if not provided in request
+      // Priority: Request price > Database price > 0
+      const finalPrice = service.price || parseFloat(extraService.price?.toString() || '0');
+      const quantity = service.quantity || 1;
+
+      // Create single record with quantity information
       const bookingExtraService = await prisma.bookingExtraService.create({
         data: {
           booking_id,
           extra_service_id: service.extra_service_id,
-          price: service.price,
+          price: finalPrice,
+          quantity: quantity, // Store quantity in the record
+          notes: service.notes, // Store notes if provided
         },
         include: {
           extra_service: {
@@ -387,6 +551,7 @@ export class BookingService {
               id: true,
               name: true,
               description: true,
+              price: true,
             },
           },
         },
@@ -1402,6 +1567,381 @@ export class BookingService {
     } catch (error) {
       console.error('Database check failed:', error);
       throw new BadRequestException(`Database check failed: ${error.message}`);
+    }
+  }
+
+  // /**
+  //  * Get user bookings with pagination and filters
+  //  */
+  // async getUserBookings(user_id: string, query: GetUserBookingsDto) {
+  //   try {
+  //     const {
+  //       page = 1,
+  //       limit = 10,
+  //       status,
+  //       type,
+  //       search,
+  //       sort_by = 'created_at',
+  //       sort_order = 'desc'
+  //     } = query;
+
+  //     // Calculate pagination
+  //     const skip = (page - 1) * limit;
+
+  //     // Build where conditions
+  //     const whereConditions: any = {
+  //       user_id: user_id,
+  //       deleted_at: null,
+  //     };
+
+  //     // Add status filter
+  //     if (status) {
+  //       whereConditions.status = status;
+  //     }
+
+  //     // Add type filter
+  //     if (type) {
+  //       whereConditions.type = type;
+  //     }
+
+  //     // Add search filter
+  //     if (search) {
+  //       whereConditions.OR = [
+  //         {
+  //           invoice_number: {
+  //             contains: search,
+  //             mode: 'insensitive',
+  //           },
+  //         },
+  //         {
+  //           booking_items: {
+  //             some: {
+  //               package: {
+  //                 name: {
+  //                   contains: search,
+  //                   mode: 'insensitive',
+  //                 },
+  //               },
+  //             },
+  //           },
+  //         },
+  //       ];
+  //     }
+
+  //     // Get total count for pagination
+  //     const totalCount = await this.prisma.booking.count({
+  //       where: whereConditions,
+  //     });
+
+  //     // Get bookings with pagination
+  //     const bookings = await this.prisma.booking.findMany({
+  //       where: whereConditions,
+  //       skip,
+  //       take: limit,
+  //       orderBy: {
+  //         [sort_by]: sort_order,
+  //       },
+  //       include: {
+  //         user: {
+  //           select: {
+  //             id: true,
+  //             name: true,
+  //             email: true,
+  //           },
+  //         },
+  //         booking_items: {
+  //           include: {
+  //             package: {
+  //               select: {
+  //                 id: true,
+  //                 name: true,
+  //                 description: true,
+  //                 package_files: {
+  //                   select: {
+  //                     id: true,
+  //                     file: true,
+  //                     file_alt: true,
+  //                     type: true,
+  //                     is_featured: true,
+  //                   },
+  //                 },
+  //                 package_trip_plans: {
+  //                   select: {
+  //                     id: true,
+  //                     title: true,
+  //                     description: true,
+  //                     package_trip_plan_images: {
+  //                       select: {
+  //                         id: true,
+  //                         image: true,
+  //                         image_alt: true,
+  //                       },
+  //                     },
+  //                   },
+  //                 },
+  //               },
+  //             },
+  //             PackageRoomType: {
+  //               select: {
+  //                 id: true,
+  //                 name: true,
+  //                 description: true,
+  //               },
+  //             },
+  //           },
+  //         },
+  //         booking_travellers: true,
+  //         booking_extra_services: {
+  //           include: {
+  //             extra_service: {
+  //               select: {
+  //                 id: true,
+  //                 name: true,
+  //                 description: true,
+  //                 price: true,
+  //               },
+  //             },
+  //           },
+  //         },
+  //         payment_transactions: {
+  //           select: {
+  //             id: true,
+  //             status: true,
+  //             amount: true,
+  //             provider: true,
+  //             created_at: true,
+  //           },
+  //         },
+  //       },
+  //     });
+
+  //     // Add image URLs to package data
+  //     const bookingsWithImages = bookings.map(booking => ({
+  //       ...booking,
+  //       items: (booking as any).booking_items.map((item: any) => ({
+  //         ...item,
+  //         package: item.package ? this.addImageUrls(item.package) : item.package,
+  //       })),
+  //       travellers: (booking as any).booking_travellers,
+  //       extra_services: (booking as any).booking_extra_services,
+  //       payments: (booking as any).payment_transactions,
+  //     }));
+
+  //     // Calculate pagination info
+  //     const totalPages = Math.ceil(totalCount / limit);
+  //     const hasNextPage = page < totalPages;
+  //     const hasPrevPage = page > 1;
+
+  //     return {
+  //       success: true,
+  //       data: {
+  //         bookings: bookingsWithImages,
+  //         pagination: {
+  //           current_page: page,
+  //           total_pages: totalPages,
+  //           total_items: totalCount,
+  //           items_per_page: limit,
+  //           has_next_page: hasNextPage,
+  //           has_prev_page: hasPrevPage,
+  //         },
+  //         filters: {
+  //           status: status || null,
+  //           type: type || null,
+  //           search: search || null,
+  //           sort_by,
+  //           sort_order,
+  //         },
+  //       },
+  //       message: 'User bookings retrieved successfully',
+  //     };
+  //   } catch (error) {
+  //     console.error('Error getting user bookings:', error);
+  //     throw new BadRequestException('Failed to retrieve user bookings');
+  //   }
+  // }
+
+  /**
+   * Get user dashboard statistics
+   */
+  async getUserDashboard(user_id: string, query: GetUserDashboardDto) {
+    try {
+      const { start_date, end_date, type } = query;
+
+      // Build where conditions
+      const whereConditions: any = {
+        user_id: user_id,
+        deleted_at: null,
+      };
+
+      // Add type filter
+      if (type) {
+        whereConditions.type = type;
+      }
+
+      // Add date range filter
+      if (start_date || end_date) {
+        whereConditions.booking_date_time = {};
+        if (start_date) {
+          whereConditions.booking_date_time.gte = new Date(start_date);
+        }
+        if (end_date) {
+          whereConditions.booking_date_time.lte = new Date(end_date);
+        }
+      }
+
+      // Get all user bookings with detailed information
+      const bookings = await this.prisma.booking.findMany({
+        where: whereConditions,
+        include: {
+          booking_items: {
+            include: {
+              package: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  type: true,
+                  package_files: {
+                    select: {
+                      id: true,
+                      file: true,
+                      file_alt: true,
+                      type: true,
+                      is_featured: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          booking_travellers: true,
+          booking_extra_services: {
+            include: {
+              extra_service: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  price: true,
+                },
+              },
+            },
+          },
+          payment_transactions: {
+            select: {
+              id: true,
+              status: true,
+              amount: true,
+              provider: true,
+              created_at: true,
+            },
+          },
+        },
+        orderBy: {
+          created_at: 'desc',
+        },
+      });
+
+      // Calculate statistics
+      const totalBookings = bookings.length;
+      const completedStays = bookings.filter(booking => booking.status === 'completed').length;
+      const upcomingStays = bookings.filter(booking => 
+        booking.status === 'approved' || booking.status === 'pending'
+      ).length;
+
+      // Calculate total spend
+      const totalSpend = bookings.reduce((sum, booking) => {
+        return sum + parseFloat(booking.total_amount?.toString() || '0');
+      }, 0);
+
+      // Calculate total nights stayed
+      const totalNights = bookings.reduce((sum, booking) => {
+        if (booking.status === 'completed' && booking.booking_items.length > 0) {
+          const item = booking.booking_items[0];
+          if (item.start_date && item.end_date) {
+            const start = new Date(item.start_date);
+            const end = new Date(item.end_date);
+            const diffTime = Math.abs(end.getTime() - start.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return sum + diffDays;
+          }
+        }
+        return sum;
+      }, 0);
+
+      // Get recent bookings (last 5)
+      const recentBookings = bookings.slice(0, 5).map(booking => ({
+        id: booking.id,
+        invoice_number: booking.invoice_number,
+        status: booking.status,
+        type: booking.type,
+        total_amount: booking.total_amount,
+        booking_date_time: booking.booking_date_time,
+        package_name: booking.booking_items[0]?.package?.name || 'N/A',
+        start_date: booking.booking_items[0]?.start_date,
+        end_date: booking.booking_items[0]?.end_date,
+        nights: booking.booking_items[0]?.start_date && booking.booking_items[0]?.end_date 
+          ? Math.ceil((new Date(booking.booking_items[0].end_date).getTime() - new Date(booking.booking_items[0].start_date).getTime()) / (1000 * 60 * 60 * 24))
+          : 0,
+        package_image: booking.booking_items[0]?.package?.package_files?.[0] 
+          ? this.addImageUrls(booking.booking_items[0].package).package_files[0].file_url
+          : null,
+      }));
+
+      // Get booking statistics by type
+      const bookingStatsByType = bookings.reduce((acc, booking) => {
+        const type = booking.type || 'unknown';
+        if (!acc[type]) {
+          acc[type] = {
+            count: 0,
+            total_amount: 0,
+            completed: 0,
+            pending: 0,
+          };
+        }
+        acc[type].count++;
+        acc[type].total_amount += parseFloat(booking.total_amount?.toString() || '0');
+        if (booking.status === 'completed') acc[type].completed++;
+        if (booking.status === 'pending' || booking.status === 'approved') acc[type].pending++;
+        return acc;
+      }, {} as any);
+
+      // Get monthly spending trend (last 12 months)
+      const monthlySpending = bookings.reduce((acc, booking) => {
+        if (booking.booking_date_time) {
+          const month = new Date(booking.booking_date_time).toISOString().slice(0, 7); // YYYY-MM
+          if (!acc[month]) {
+            acc[month] = 0;
+          }
+          acc[month] += parseFloat(booking.total_amount?.toString() || '0');
+        }
+        return acc;
+      }, {} as any);
+
+      return {
+        success: true,
+        data: {
+          summary: {
+            total_bookings: totalBookings,
+            completed_stays: completedStays,
+            upcoming_stays: upcomingStays,
+            total_spend: totalSpend,
+            total_nights: totalNights,
+          },
+          recent_bookings: recentBookings,
+          booking_stats_by_type: bookingStatsByType,
+          monthly_spending: monthlySpending,
+          filters: {
+            start_date: start_date || null,
+            end_date: end_date || null,
+            type: type || null,
+          },
+        },
+        message: 'User dashboard data retrieved successfully',
+      };
+    } catch (error) {
+      console.error('Error getting user dashboard:', error);
+      throw new BadRequestException('Failed to retrieve user dashboard data');
     }
   }
 }

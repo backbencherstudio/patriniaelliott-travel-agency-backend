@@ -8,6 +8,40 @@ import appConfig from '../../../config/app.config';
 export class BookingService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Add image URLs to package data
+   */
+  private addImageUrls(packageData: any) {
+    const baseUrl = appConfig().app.url;
+    
+    // Add URLs to package files
+    if (packageData.package_files && packageData.package_files.length > 0) {
+      packageData.package_files.forEach((file, index) => {
+        if (file.file) {
+          // Encode the filename to handle special characters and spaces
+          const encodedFilename = encodeURIComponent(file.file);
+          file.file_url = `${baseUrl}/public/storage/package/${encodedFilename}`;
+        }
+      });
+    }
+    
+    // Add URLs to trip plan images
+    if (packageData.package_trip_plans && packageData.package_trip_plans.length > 0) {
+      packageData.package_trip_plans.forEach((tripPlan, tripIndex) => {
+        if (tripPlan.package_trip_plan_images && tripPlan.package_trip_plan_images.length > 0) {
+          tripPlan.package_trip_plan_images.forEach((image, imgIndex) => {
+            if (image.image) {
+              const encodedFilename = encodeURIComponent(image.image);
+              image.image_url = `${baseUrl}/public/storage/package/${encodedFilename}`;
+            }
+          });
+        }
+      });
+    }
+    
+    return packageData;
+  }
+
   async findAll({
     q,
     status = null,
@@ -152,7 +186,33 @@ export class BookingService {
               end_date: true,
               package: {
                 select: {
+                  id: true,
                   name: true,
+                  description: true,
+                  type: true,
+                  package_files: {
+                    select: {
+                      id: true,
+                      file: true,
+                      file_alt: true,
+                      type: true,
+                      is_featured: true,
+                    },
+                  },
+                  package_trip_plans: {
+                    select: {
+                      id: true,
+                      title: true,
+                      description: true,
+                      package_trip_plan_images: {
+                        select: {
+                          id: true,
+                          image: true,
+                          image_alt: true,
+                        },
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -232,6 +292,12 @@ export class BookingService {
           return dateObj.toISOString().split('T')[0]; // YYYY-MM-DD format
         };
 
+        // Add image URLs to package data
+        const bookingItemsWithImages = booking.booking_items?.map(item => ({
+          ...item,
+          package: item.package ? this.addImageUrls(item.package) : item.package,
+        })) || [];
+
         return {
           id: booking.id,
           booking_id: booking.invoice_number || `#${booking.id.slice(-5)}`, // Use invoice_number or fallback to last 5 chars of ID
@@ -266,7 +332,7 @@ export class BookingService {
             payment_status: booking.payment_status,
             approved_at: booking.approved_at,
             user: booking.user,
-            booking_items: booking.booking_items,
+            booking_items: bookingItemsWithImages,
             created_at: booking.created_at,
             updated_at: booking.updated_at,
           }
