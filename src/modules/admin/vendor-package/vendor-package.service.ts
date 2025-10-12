@@ -36,7 +36,16 @@ export class VendorPackageService {
   // Use SojebStorage.url() for generating file URLs
   private generateFileUrl(filePath: string, type: 'package' | 'avatar' = 'package'): string {
     const storagePath = type === 'package' ? appConfig().storageUrl.package : appConfig().storageUrl.avatar;
-    return SojebStorage.url(storagePath + filePath);
+    const fullPath = storagePath + filePath;
+    const url = SojebStorage.url(fullPath);
+    console.log('generateFileUrl debug:', {
+      filePath,
+      type,
+      storagePath,
+      fullPath,
+      generatedUrl: url
+    });
+    return url;
   }
 
   async getVendorPackage(
@@ -217,24 +226,12 @@ export class VendorPackageService {
         package_trip_plans: {
           where: { deleted_at: null },
           orderBy: { sort_order: 'asc' },
-          select: { 
-            id: true, 
-            title: true, 
-            description: true, 
-            time: true, 
-            ticket_free: true, 
-            sort_order: true,
+          include: {
             package_trip_plan_images: {
               where: { deleted_at: null },
-              orderBy: { sort_order: 'asc' },
-              select: {
-                id: true,
-                image: true,
-                image_alt: true,
-                sort_order: true
-              }
+              orderBy: { sort_order: 'asc' }
             }
-          },
+          }
         },
         },
       }),
@@ -333,6 +330,23 @@ export class VendorPackageService {
         }
       }));
 
+      // Process trip plans with their images
+      const processedTripPlans = pkg.package_trip_plans.map(tripPlan => ({
+        ...tripPlan,
+        package_trip_plan_images: tripPlan.package_trip_plan_images.map(image => {
+          const imageUrl = this.generateFileUrl(image.image, 'package');
+          console.log('Processing trip plan image:', {
+            originalImage: image.image,
+            generatedUrl: imageUrl,
+            storagePath: appConfig().storageUrl.package
+          });
+          return {
+            ...image,
+            image_url: imageUrl
+          };
+        })
+      }));
+
              const processedUser = pkg.user
          ? {
              ...pkg.user,
@@ -355,6 +369,7 @@ export class VendorPackageService {
         package_files: processedPackageFiles,
         package_room_types: processedRoomTypes,
         package_extra_services: processedExtraServices,
+        package_trip_plans: processedTripPlans,
         user: processedUser,
         rating_summary: {
           averageRating: rating.averageRating,
@@ -550,6 +565,21 @@ export class VendorPackageService {
           description: service.extra_service.description
         }
       })),
+      package_trip_plans: data.package_trip_plans.map(tripPlan => ({
+        ...tripPlan,
+        package_trip_plan_images: tripPlan.package_trip_plan_images.map(image => {
+          const imageUrl = this.generateFileUrl(image.image, 'package');
+          console.log('Processing single package trip plan image:', {
+            originalImage: image.image,
+            generatedUrl: imageUrl,
+            storagePath: appConfig().storageUrl.package
+          });
+          return {
+            ...image,
+            image_url: imageUrl
+          };
+        })
+      })),
       user: data.user ? {
         ...data.user,
         avatar_url: data.user.avatar ? this.generateFileUrl(data.user.avatar, 'avatar') : null
@@ -736,6 +766,18 @@ export class VendorPackageService {
     files?: {
       package_files?: Express.Multer.File[];
       trip_plans_images?: Express.Multer.File[];
+      package_trip_plan_images?: Express.Multer.File[]; // Add this field for compatibility
+      // Dynamic day-wise trip plan images
+      day_1_images?: Express.Multer.File[];
+      day_2_images?: Express.Multer.File[];
+      day_3_images?: Express.Multer.File[];
+      day_4_images?: Express.Multer.File[];
+      day_5_images?: Express.Multer.File[];
+      day_6_images?: Express.Multer.File[];
+      day_7_images?: Express.Multer.File[];
+      day_8_images?: Express.Multer.File[];
+      day_9_images?: Express.Multer.File[];
+      day_10_images?: Express.Multer.File[];
       room_photos?: Express.Multer.File[]; // Add room_photos files
     }
   ) {
@@ -836,9 +878,63 @@ export class VendorPackageService {
         console.log('No room_photos files found in request');
       }
       
+      // Upload day-wise trip plan images
+      const day_wise_images: { [key: number]: string[] } = {};
+      for (let day = 1; day <= 10; day++) {
+        const dayKey = `day_${day}_images` as keyof typeof files;
+        if (files?.[dayKey]) {
+          day_wise_images[day] = [];
+          for (const file of files[dayKey]!) {
+            // Generate unique filename with timestamp and clean name
+            const timestamp = Date.now();
+            const randomName = Array(16)
+              .fill(null)
+              .map(() => Math.round(Math.random() * 16).toString(16))
+              .join('');
+            
+            // Clean the original filename to remove special characters and spaces
+            const cleanOriginalName = file.originalname
+              .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
+              .replace(/_+/g, '_') // Replace multiple underscores with single
+              .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+            
+            const fileName = `${timestamp}_${randomName}_day${day}_${cleanOriginalName}`;
+            const filePath = appConfig().storageUrl.package + fileName;
+            await SojebStorage.put(filePath, file.buffer);
+            day_wise_images[day].push(fileName);
+            console.log(`📁 Generated day ${day} filename: ${fileName} from original: ${file.originalname}`);
+          }
+        }
+      }
+
+      // Handle package_trip_plan_images (alternative field name) - merge with trip_plans_images
+      if (files?.package_trip_plan_images) {
+        for (const file of files.package_trip_plan_images) {
+          // Generate unique filename with timestamp and clean name
+          const timestamp = Date.now();
+          const randomName = Array(16)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          
+          // Clean the original filename to remove special characters and spaces
+          const cleanOriginalName = file.originalname
+            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
+            .replace(/_+/g, '_') // Replace multiple underscores with single
+            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+          
+          const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
+          const filePath = appConfig().storageUrl.package + fileName;
+          await SojebStorage.put(filePath, file.buffer);
+          trip_plans_images.push(fileName); // Add to the same array as trip_plans_images
+          console.log(`📁 Generated package_trip_plan_images filename: ${fileName} from original: ${file.originalname}`);
+        }
+      }
+
       console.log('Files uploaded:', { 
         package_files, 
         trip_plans_images, 
+        day_wise_images,
         room_photos 
       });
 
@@ -1076,22 +1172,54 @@ export class VendorPackageService {
         
         // Create package_trip_plans relationship
         if (tripPlansArray.length > 0) {
+          // If no day-wise images are provided, distribute general trip plan images across days
+          let imagesToDistribute: string[] = [];
+          if (Object.keys(day_wise_images).length === 0 && trip_plans_images.length > 0) {
+            imagesToDistribute = trip_plans_images;
+            console.log('No day-wise images found, distributing general trip_plans_images across days:', imagesToDistribute);
+          }
+
           nested.package_trip_plans = {
-            create: tripPlansArray.map((tripPlan: any, index: number) => ({
-              title: tripPlan.title || `Trip Plan ${index + 1}`,
-              description: tripPlan.description || '',
-              time: tripPlan.time ? String(tripPlan.time) : tripPlan.meetingPoint ? String(tripPlan.meetingPoint) : '',
-              ticket_free: (() => {
-                const tf = tripPlan.ticket_free ?? tripPlan.tripPlan ?? [];
-                return typeof tf === 'string' ? tf : JSON.stringify(tf);
-              })(),
-              sort_order: index,
-              package_trip_plan_images: {
-                create: [] // Images will be handled separately if needed
+            create: tripPlansArray.map((tripPlan: any, index: number) => {
+              const dayNumber = index + 1;
+              let dayImages = day_wise_images[dayNumber] || [];
+              
+              // If no day-specific images but we have general images, distribute them
+              if (dayImages.length === 0 && imagesToDistribute.length > 0) {
+                // Distribute images evenly across days
+                const imagesPerDay = Math.ceil(imagesToDistribute.length / tripPlansArray.length);
+                const startIndex = index * imagesPerDay;
+                const endIndex = Math.min(startIndex + imagesPerDay, imagesToDistribute.length);
+                dayImages = imagesToDistribute.slice(startIndex, endIndex);
+                console.log(`Day ${dayNumber} getting images:`, dayImages);
               }
-            }))
+              
+              return {
+                title: tripPlan.title || `Trip Plan ${dayNumber}`,
+                description: tripPlan.description || '',
+                time: tripPlan.time ? String(tripPlan.time) : tripPlan.meetingPoint ? String(tripPlan.meetingPoint) : '',
+                ticket_free: (() => {
+                  const tf = tripPlan.ticket_free ?? tripPlan.tripPlan ?? [];
+                  return typeof tf === 'string' ? tf : JSON.stringify(tf);
+                })(),
+                sort_order: index,
+                package_trip_plan_images: {
+                  create: dayImages.map(imageFilename => ({
+                    image: imageFilename,
+                    image_alt: `Day ${dayNumber} trip plan image`,
+                    sort_order: 0
+                  }))
+                }
+              };
+            })
           };
-          console.log('Creating package_trip_plans:', tripPlansArray);
+          console.log('Creating package_trip_plans with day-wise images:', tripPlansArray.map((plan, index) => ({
+            title: plan.title,
+            day: index + 1,
+            images: day_wise_images[index + 1] || []
+          })));
+          console.log('Full day_wise_images object:', day_wise_images);
+          console.log('Available trip_plans_images:', trip_plans_images);
         }
       }
 
@@ -1523,6 +1651,21 @@ export class VendorPackageService {
           console.log('Processed room_photos:', processedRoomPhotos);
           return { ...roomType, room_photos: processedRoomPhotos };
         }),
+        package_trip_plans: (result.package_trip_plans || []).map(tripPlan => ({
+          ...tripPlan,
+          package_trip_plan_images: tripPlan.package_trip_plan_images.map(image => {
+            const imageUrl = this.generateFileUrl(image.image, 'package');
+            console.log('Processing createWithFiles trip plan image:', {
+              originalImage: image.image,
+              generatedUrl: imageUrl,
+              storagePath: appConfig().storageUrl.package
+            });
+            return {
+              ...image,
+              image_url: imageUrl
+            };
+          })
+        })),
         user: result.user
           ? {
               ...result.user,
