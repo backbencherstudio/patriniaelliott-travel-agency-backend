@@ -137,6 +137,19 @@ export class ExtraServiceDto {
   is_available?: boolean;
 }
 
+// DTO for Package Policy Item
+export class PackagePolicyItemDto {
+  @ApiProperty({ required: true, description: 'Title of the policy item' })
+  @IsString()
+  @IsNotEmpty()
+  title: string;
+
+  @ApiProperty({ required: true, description: 'Description of the policy item' })
+  @IsString()
+  @IsNotEmpty()
+  description: string;
+}
+
 // DTO for Package Room Type
 export class PackageRoomTypeDto {
   @ApiProperty({ required: true })
@@ -567,5 +580,40 @@ export class CreateVendorPackageDto {
   @IsOptional()
   @IsString()
   trip_plans?: string;
+
+  @ApiProperty({ 
+    required: false, 
+    description: 'Package policies array',
+    type: [PackagePolicyItemDto],
+    example: [
+      {"title": "transportation", "description": "Check-in and city orientation"},
+      {"title": "meals", "description": "Check-in and city orientation"},
+      {"title": "guide_tours", "description": "Check-in and city orientation"},
+      {"title": "add_ons", "description": "Check-in and city orientation"},
+      {"title": "cancellation_policy", "description": "Check-in and city orientation"}
+    ]
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    console.log('🔧 DTO Transform - Raw value:', value);
+    console.log('🔧 DTO Transform - Value type:', typeof value);
+    
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        console.log('🔧 DTO Transform - Parsed value:', parsed);
+        return parsed;
+      } catch (error) {
+        console.log('🔧 DTO Transform - Parse error:', error);
+        return value;
+      }
+    }
+    console.log('🔧 DTO Transform - Returning original value:', value);
+    return value;
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PackagePolicyItemDto)
+  package_policies?: PackagePolicyItemDto[];
 }
 

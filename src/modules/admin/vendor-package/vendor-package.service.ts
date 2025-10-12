@@ -233,6 +233,17 @@ export class VendorPackageService {
             }
           }
         },
+        // Include package policies
+        package_policies: {
+          where: { deleted_at: null },
+          select: {
+            id: true,
+            description: true,
+            package_policies: true,
+            created_at: true,
+            updated_at: true
+          }
+        },
         },
       }),
       this.prisma.package.count({ where }),
@@ -476,6 +487,17 @@ export class VendorPackageService {
             }
           }
         },
+        // Include package policies
+        package_policies: {
+          where: { deleted_at: null },
+          select: {
+            id: true,
+            description: true,
+            package_policies: true,
+            created_at: true,
+            updated_at: true
+          }
+        },
       }
     });
 
@@ -580,6 +602,8 @@ export class VendorPackageService {
           };
         })
       })),
+      // Include package_policies in the response
+      package_policies: data.package_policies || [],
       user: data.user ? {
         ...data.user,
         avatar_url: data.user.avatar ? this.generateFileUrl(data.user.avatar, 'avatar') : null
@@ -695,12 +719,73 @@ export class VendorPackageService {
         }
       }
       
+      // Handle package_policies separately before updating the package
+      const { package_policies, ...packageUpdateData } = updateVendorPackageDto;
+      
       const updatedPackage = await this.prisma.package.update({
         where: {
           id: packageId
         },
-        data: updateVendorPackageDto
+        data: packageUpdateData
       });
+
+      // Parse package_policies if it's a JSON string
+      let parsedPackagePolicies = package_policies;
+      if (typeof package_policies === 'string') {
+        try {
+          parsedPackagePolicies = JSON.parse(package_policies);
+          console.log('Parsed package_policies from JSON string in update:', parsedPackagePolicies);
+        } catch (error) {
+          console.error('Failed to parse package_policies JSON in update:', error);
+          parsedPackagePolicies = undefined;
+        }
+      }
+
+      // Handle package_policies if provided
+      if (parsedPackagePolicies && Array.isArray(parsedPackagePolicies)) {
+        try {
+          console.log('=== UPDATE PACKAGE POLICIES DEBUG ===');
+          console.log('Received package_policies for update:', package_policies);
+          
+          // Delete existing package policies
+          await this.prisma.packagePolicy.deleteMany({
+            where: {
+              packages: {
+                some: {
+                  id: packageId
+                }
+              }
+            }
+          });
+          
+          // Create new package policy with the provided data
+          const items = parsedPackagePolicies.filter(
+            (policy) => policy.title && policy.description && policy.description.trim() !== ''
+          );
+          
+          if (items.length > 0) {
+            const createdPolicy = await this.prisma.packagePolicy.create({
+              data: {
+                description: (updateVendorPackageDto as any)?.policy_description ?? null,
+                package_policies: items as any,
+              },
+            });
+            
+            await this.prisma.package.update({
+              where: { id: packageId },
+              data: {
+                package_policies: {
+                  connect: { id: createdPolicy.id },
+                },
+              },
+            });
+            console.log('Updated package policies successfully');
+          }
+          console.log('=== END UPDATE PACKAGE POLICIES DEBUG ===');
+        } catch (e) {
+          console.error('Failed to update package policies:', e?.message || e);
+        }
+      }
 
       // Recompute and persist computed_price after vendor update
       try {
@@ -939,6 +1024,11 @@ export class VendorPackageService {
       });
 
       // Extract nested data from DTO
+      console.log('=== DTO EXTRACTION DEBUG ===');
+      console.log('Original DTO package_policies:', createVendorPackageDto.package_policies);
+      console.log('DTO type:', typeof createVendorPackageDto.package_policies);
+      console.log('DTO isArray:', Array.isArray(createVendorPackageDto.package_policies));
+      
       const { 
         package_room_types, 
         package_availabilities, 
@@ -950,8 +1040,29 @@ export class VendorPackageService {
         close_date_ranges,
         destinations,
         trip_plans,
+        package_policies: rawPackagePolicies,
         ...packageData 
       } = createVendorPackageDto;
+      
+      // Parse package_policies if it's a JSON string
+      let package_policies = rawPackagePolicies;
+      if (typeof rawPackagePolicies === 'string') {
+        try {
+          package_policies = JSON.parse(rawPackagePolicies);
+          console.log('✅ Parsed package_policies from JSON string:', package_policies);
+          console.log('✅ Parsed package_policies length:', package_policies?.length);
+        } catch (error) {
+          console.error('❌ Failed to parse package_policies JSON:', error);
+          package_policies = undefined;
+        }
+      } else {
+        console.log('ℹ️ package_policies is not a string, type:', typeof rawPackagePolicies);
+      }
+      
+      console.log('🎯 Final package_policies:', package_policies);
+      console.log('🎯 Final package_policies type:', typeof package_policies);
+      console.log('🎯 Final package_policies isArray:', Array.isArray(package_policies));
+      console.log('=== END DTO EXTRACTION DEBUG ===');
       
       // Extract room_photos separately to avoid including it in package data
       let roomPhotosFromDto = (createVendorPackageDto as any).room_photos;
@@ -1048,7 +1159,8 @@ export class VendorPackageService {
         duration_type: cleanPackageData.duration_type,
         name: cleanPackageData.name,
         description: cleanPackageData.description,
-        price: cleanPackageData.price
+        price: cleanPackageData.price,
+        package_policies: cleanPackageData.package_policies
       });
       
       if (cleanPackageData.type) {
@@ -1085,7 +1197,8 @@ export class VendorPackageService {
         duration_type: cleanPackageData.duration_type,
         name: cleanPackageData.name,
         description: cleanPackageData.description,
-        price: cleanPackageData.price
+        price: cleanPackageData.price,
+        package_policies: cleanPackageData.package_policies
       });
 
       // Coerce numeric scalars to correct types where needed
@@ -1540,22 +1653,51 @@ export class VendorPackageService {
 
       // After package creation, optionally create and link PackagePolicy built from dto items
       try {
-        const items = [
-          { title: 'transportation', description: (createVendorPackageDto as any)?.transportation },
-          { title: 'meals', description: (createVendorPackageDto as any)?.meals },
-          { title: 'guide_tours', description: (createVendorPackageDto as any)?.guide },
-          { title: 'add_ons', description: (createVendorPackageDto as any)?.addOns },
-          { title: 'cancellation_policy', description: (createVendorPackageDto as any)?.cancellation_policy },
-        ].filter((i) => typeof i.description === 'string' && i.description.trim() !== '');
+        console.log('=== PACKAGE POLICIES DEBUG ===');
+        console.log('Received package_policies:', package_policies);
+        console.log('Type of package_policies:', typeof package_policies);
+        console.log('Is Array?', Array.isArray(package_policies));
+        
+        let items = [];
+        
+        // Check if package_policies array is provided directly
+        if (package_policies && Array.isArray(package_policies)) {
+          console.log('✅ Using package_policies array directly');
+          console.log('✅ Raw package_policies:', package_policies);
+          console.log('✅ Raw package_policies length:', package_policies.length);
+          
+          items = package_policies.filter(
+            (policy) => policy.title && policy.description && policy.description.trim() !== ''
+          );
+          console.log('✅ Filtered items from package_policies array:', items);
+          console.log('✅ Filtered items length:', items.length);
+        } else {
+          console.log('Using fallback individual fields');
+          // Fallback to individual fields for backward compatibility
+          items = [
+            { title: 'transportation', description: (createVendorPackageDto as any)?.transportation },
+            { title: 'meals', description: (createVendorPackageDto as any)?.meals },
+            { title: 'guide_tours', description: (createVendorPackageDto as any)?.guide },
+            { title: 'add_ons', description: (createVendorPackageDto as any)?.addOns },
+            { title: 'cancellation_policy', description: (createVendorPackageDto as any)?.cancellation_policy },
+          ].filter((i) => typeof i.description === 'string' && i.description.trim() !== '');
+          console.log('Filtered items from individual fields:', items);
+        }
+
+        console.log('Final items to save:', items);
+        console.log('Items length:', items.length);
 
         const policyDescription = (createVendorPackageDto as any)?.policy_description;
         if (items.length > 0 || (typeof policyDescription === 'string' && policyDescription.trim() !== '')) {
+          console.log('Creating PackagePolicy with items:', items);
           const createdPolicy = await this.prisma.packagePolicy.create({
             data: {
               description: policyDescription ?? null,
               package_policies: items as any,
             },
           });
+          console.log('Created PackagePolicy:', createdPolicy);
+          
           await this.prisma.package.update({
             where: { id: result.id },
             data: {
@@ -1564,9 +1706,14 @@ export class VendorPackageService {
               },
             },
           });
+          console.log('Linked PackagePolicy to Package');
+        } else {
+          console.log('No items to save, skipping PackagePolicy creation');
         }
+        console.log('=== END PACKAGE POLICIES DEBUG ===');
       } catch (e) {
         console.error('Failed to create/link PackagePolicy:', e?.message || e);
+        console.error('Full error:', e);
       }
 
       // Re-fetch the package to include newly linked relations (package_policies, trip plans)
@@ -1991,6 +2138,16 @@ export class VendorPackageService {
           package_files: true,
           package_room_types: true,
           package_availabilities: true,
+          package_policies: {
+            where: { deleted_at: null },
+            select: {
+              id: true,
+              description: true,
+              package_policies: true,
+              created_at: true,
+              updated_at: true
+            }
+          },
           user: true
         }
       });
@@ -2005,6 +2162,64 @@ export class VendorPackageService {
         await this.prisma.package.update({ where: { id: result.id }, data: { computed_price } });
       } catch (e) {
         console.error('Failed to compute/persist computed_price (vendor updateWithFiles):', e?.message || e);
+      }
+
+      // Parse package_policies if it's a JSON string in updateWithFiles
+      let parsedPackagePolicies = normalizedPackageData.package_policies;
+      if (typeof normalizedPackageData.package_policies === 'string') {
+        try {
+          parsedPackagePolicies = JSON.parse(normalizedPackageData.package_policies);
+          console.log('Parsed package_policies from JSON string in updateWithFiles:', parsedPackagePolicies);
+        } catch (error) {
+          console.error('Failed to parse package_policies JSON in updateWithFiles:', error);
+          parsedPackagePolicies = undefined;
+        }
+      }
+
+      // Handle package_policies if provided in updateWithFiles
+      if (parsedPackagePolicies && Array.isArray(parsedPackagePolicies)) {
+        try {
+          console.log('=== UPDATE WITH FILES PACKAGE POLICIES DEBUG ===');
+          console.log('Received package_policies for updateWithFiles:', normalizedPackageData.package_policies);
+          
+          // Delete existing package policies
+          await this.prisma.packagePolicy.deleteMany({
+            where: {
+              packages: {
+                some: {
+                  id: result.id
+                }
+              }
+            }
+          });
+          
+          // Create new package policy with the provided data
+          const items = parsedPackagePolicies.filter(
+            (policy) => policy.title && policy.description && policy.description.trim() !== ''
+          );
+          
+          if (items.length > 0) {
+            const createdPolicy = await this.prisma.packagePolicy.create({
+              data: {
+                description: (normalizedPackageData as any)?.policy_description ?? null,
+                package_policies: items as any,
+              },
+            });
+            
+            await this.prisma.package.update({
+              where: { id: result.id },
+              data: {
+                package_policies: {
+                  connect: { id: createdPolicy.id },
+                },
+              },
+            });
+            console.log('Updated package policies successfully in updateWithFiles');
+          }
+          console.log('=== END UPDATE WITH FILES PACKAGE POLICIES DEBUG ===');
+        } catch (e) {
+          console.error('Failed to update package policies in updateWithFiles:', e?.message || e);
+        }
       }
 
       // Post-process to attach public URLs using existing image function

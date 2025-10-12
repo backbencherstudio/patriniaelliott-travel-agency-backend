@@ -153,6 +153,11 @@ export class VendorPackageController {
     try {
       const user_id = req.user.userId;
       console.log('User ID:', user_id);
+      console.log('=== CONTROLLER DEBUG ===');
+      console.log('Raw package_policies from DTO:', createVendorPackageDto.package_policies);
+      console.log('package_policies type:', typeof createVendorPackageDto.package_policies);
+      console.log('package_policies isArray:', Array.isArray(createVendorPackageDto.package_policies));
+      console.log('=== END CONTROLLER DEBUG ===');
       console.log('Files received:', {
         package_files: files?.package_files?.length || 0,
         trip_plans_images: files?.trip_plans_images?.length || 0,
