@@ -11,6 +11,19 @@ const Stripe = new stripe(STRIPE_SECRET_KEY, {
 });
 
 const STRIPE_WEBHOOK_SECRET = appConfig().payment.stripe.webhook_secret;
+
+console.log('--------STRIPE_WEBHOOK_SECRET------------------------');
+console.log(STRIPE_WEBHOOK_SECRET);
+console.log('--------------------------------');
+
+console.log('===============================================');
+
+
+console.log('--------STRIPE_SECRET_KEY------------------------');
+console.log(STRIPE_SECRET_KEY);
+console.log('--------------------------------');
+
+
 /**
  * Stripe payment method helper
  */
