@@ -1366,6 +1366,7 @@ export class VendorPackageService {
                   const tf = tripPlan.ticket_free ?? tripPlan.tripPlan ?? [];
                   return typeof tf === 'string' ? tf : JSON.stringify(tf);
                 })(),
+                day_wise_data: tripPlan.day_wise_data || null, // Map day_wise_data from trip_plans
                 sort_order: index,
                 package_trip_plan_images: {
                   create: dayImages.map(imageFilename => ({
@@ -1394,7 +1395,8 @@ export class VendorPackageService {
           ...rootTripPlanPayload,
           ticket_free: typeof rootTripPlanPayload.ticket_free === 'string' 
             ? rootTripPlanPayload.ticket_free 
-            : JSON.stringify(rootTripPlanPayload.ticket_free ?? [])
+            : JSON.stringify(rootTripPlanPayload.ticket_free ?? []),
+          day_wise_data: rootTripPlanPayload.day_wise_data || null // Map day_wise_data from root payload
         };
         nested.package_trip_plans = {
           create: [normalizedRoot]

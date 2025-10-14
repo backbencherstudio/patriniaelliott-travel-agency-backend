@@ -553,6 +553,7 @@ model PackageTripPlan {
   sort_order               Int?                   @default(0)
   package_id               String?
   title                    String?
+  day_wise_data            Json?
   description              String?
   ticket_free              String?
   time                     String?
