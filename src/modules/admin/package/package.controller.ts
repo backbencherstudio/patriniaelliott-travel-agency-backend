@@ -24,7 +24,7 @@ import { JwtAuthGuard } from '../../../modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guard/role/roles.guard';
 import { Roles } from '../../../common/guard/role/roles.decorator';
 import { Role } from '../../../common/guard/role/role.enum';
-import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { AnyFilesInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Express, Request, Response } from 'express';
 import { diskStorage } from 'multer';
 import appConfig from '../../../config/app.config';
@@ -181,11 +181,9 @@ export class PackageController {
   @Post()
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
-    FileFieldsInterceptor(
-      [{ name: 'package_files' }, { name: 'trip_plans_images' }],
-      {
-        storage: diskStorage({
-          destination: (req, file, cb) => {
+    AnyFilesInterceptor({
+      storage: diskStorage({
+        destination: (req, file, cb) => {
             // DEBUG: Multer destination callback logging
             console.log('🔍 [MULTER DEBUG] Destination callback called...');
             console.log('🔍 [MULTER DEBUG] NODE_ENV:', process.env.NODE_ENV);
@@ -249,7 +247,7 @@ export class PackageController {
             cb(null, filename);
           },
         }),
-        fileFilter: (req, file, cb) => {
+      fileFilter: (req, file, cb) => {
           // Validate file types
           const allowedMimeTypes = [
             'image/jpeg',
@@ -265,35 +263,22 @@ export class PackageController {
             cb(new BadRequestException(`Invalid file type: ${file.mimetype}. Only images are allowed.`), false);
           }
         },
-        limits: {
-          fileSize: 10 * 1024 * 1024, // 10MB limit
-          files: 10 // Maximum 10 files
-        }
-      },
-    ),
+      limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+        files: 30 // Allow more files across dynamic fields
+      }
+    }),
   )
   async create(
     @Req() req: Request,
     @Body() createPackageDto: CreatePackageDto,
-    @UploadedFiles(
-      new ParseFilePipe({
-        validators: [],
-        fileIsRequired: false,
-        errorHttpStatusCode: 400,
-      }),
-    )
-    files: {
-      package_files?: Express.Multer.File[];
-      trip_plans_images?: Express.Multer.File[];
-    },
+    @UploadedFiles(new ParseFilePipe({ validators: [], fileIsRequired: false, errorHttpStatusCode: 400 }))
+    uploadedFiles: Express.Multer.File[],
   ) {
     try {
       // DEBUG: Log request details
       console.log('🔍 [PACKAGE CREATE DEBUG] Starting package creation...');
-      console.log('🔍 [PACKAGE CREATE DEBUG] Files received:', {
-        package_files: files.package_files?.length || 0,
-        trip_plans_images: files.trip_plans_images?.length || 0
-      });
+      console.log('🔍 [PACKAGE CREATE DEBUG] Files received (raw count):', Array.isArray(uploadedFiles) ? uploadedFiles.length : 0);
       console.log('🔍 [PACKAGE CREATE DEBUG] Package data:', {
         name: createPackageDto.name,
         type: createPackageDto.type,
@@ -345,19 +330,28 @@ export class PackageController {
         }
       }
 
-      // Validate uploaded files
-      if (files.package_files) {
-        for (const file of files.package_files) {
-          if (!file.mimetype.startsWith('image/')) {
-            throw new BadRequestException(`Invalid file type: ${file.originalname}. Only images are allowed.`);
+      // Group uploaded files by field name and validate
+      const grouped: { 
+        package_files?: Express.Multer.File[]; 
+        trip_plans_images?: Express.Multer.File[]; 
+        trip_plans_by_index?: Record<number, Express.Multer.File[]>;
+      } = { trip_plans_by_index: {} } as any;
+
+      if (Array.isArray(uploadedFiles)) {
+        for (const f of uploadedFiles) {
+          if (!f.mimetype.startsWith('image/')) {
+            throw new BadRequestException(`Invalid file type: ${f.originalname}. Only images are allowed.`);
           }
-        }
-      }
-      
-      if (files.trip_plans_images) {
-        for (const file of files.trip_plans_images) {
-          if (!file.mimetype.startsWith('image/')) {
-            throw new BadRequestException(`Invalid file type: ${file.originalname}. Only images are allowed.`);
+          if (f.fieldname === 'package_files') {
+            (grouped.package_files ??= []).push(f);
+          } else if (f.fieldname === 'trip_plans_images') {
+            (grouped.trip_plans_images ??= []).push(f);
+          } else {
+            const match = /^trip_plans_(\d+)_images$/.exec(f.fieldname);
+            if (match) {
+              const idx = Number(match[1]);
+              (grouped.trip_plans_by_index[idx] ??= []).push(f);
+            }
           }
         }
       }
@@ -366,7 +360,7 @@ export class PackageController {
       let record = await this.packageService.create(
         user_id,
         createPackageDto,
-        files,
+        grouped as any,
       );
       // Enrich with image URLs like in findOne/findAll and attach computed price
       if (record && record.success && record.data) {
@@ -384,8 +378,18 @@ export class PackageController {
       console.error('Package creation error:', error);
       
       // Clean up uploaded files on error
-      if (files.package_files || files.trip_plans_images) {
-        this.cleanupUploadedFiles(files);
+      try {
+        const storagePath = process.env.NODE_ENV === 'production' 
+          ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')
+          : path.join(process.cwd(), 'public', 'storage', 'package');
+        if (Array.isArray(uploadedFiles)) {
+          for (const f of uploadedFiles) {
+            const filePath = path.join(storagePath, f.filename);
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+          }
+        }
+      } catch (cleanupErr) {
+        console.error('Failed during error cleanup:', cleanupErr);
       }
       
       if (error instanceof BadRequestException) {
@@ -671,11 +675,9 @@ export class PackageController {
   @Patch(':id')
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
-    FileFieldsInterceptor(
-      [{ name: 'package_files' }, { name: 'trip_plans_images' }],
-      {
-        storage: diskStorage({
-          destination: (req, file, cb) => {
+    AnyFilesInterceptor({
+      storage: diskStorage({
+        destination: (req, file, cb) => {
             // DEBUG: Multer destination callback logging
             console.log('🔍 [MULTER DEBUG] Destination callback called...');
             console.log('🔍 [MULTER DEBUG] NODE_ENV:', process.env.NODE_ENV);
@@ -739,7 +741,7 @@ export class PackageController {
             cb(null, filename);
           },
         }),
-        fileFilter: (req, file, cb) => {
+      fileFilter: (req, file, cb) => {
           // Validate file types
           const allowedMimeTypes = [
             'image/jpeg',
@@ -755,46 +757,45 @@ export class PackageController {
             cb(new BadRequestException(`Invalid file type: ${file.mimetype}. Only images are allowed.`), false);
           }
         },
-        limits: {
-          fileSize: 10 * 1024 * 1024, // 10MB limit
-          files: 10 // Maximum 10 files
-        }
-      },
-    ),
+      limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+        files: 30 // Allow more files across dynamic fields
+      }
+    }),
   )
   async update(
     @Param('id') id: string,
     @Body() updatePackageDto: UpdatePackageDto,
     @Req() req: Request,
-    @UploadedFiles(
-      new ParseFilePipe({
-        validators: [],
-        fileIsRequired: false,
-        errorHttpStatusCode: 400,
-      }),
-    )
-    files: {
-      package_files?: Express.Multer.File[];
-      trip_plans_images?: Express.Multer.File[];
-    },
+    @UploadedFiles(new ParseFilePipe({ validators: [], fileIsRequired: false, errorHttpStatusCode: 400 }))
+    uploadedFiles: Express.Multer.File[],
   ) {
     try {
       // Ensure storage directories exist
       this.ensureStorageDirectories();
       
-      // Validate uploaded files
-      if (files.package_files) {
-        for (const file of files.package_files) {
-          if (!file.mimetype.startsWith('image/')) {
-            throw new BadRequestException(`Invalid file type: ${file.originalname}. Only images are allowed.`);
+      // Group uploaded files by field name and validate
+      const grouped: { 
+        package_files?: Express.Multer.File[]; 
+        trip_plans_images?: Express.Multer.File[]; 
+        trip_plans_by_index?: Record<number, Express.Multer.File[]>;
+      } = { trip_plans_by_index: {} } as any;
+
+      if (Array.isArray(uploadedFiles)) {
+        for (const f of uploadedFiles) {
+          if (!f.mimetype.startsWith('image/')) {
+            throw new BadRequestException(`Invalid file type: ${f.originalname}. Only images are allowed.`);
           }
-        }
-      }
-      
-      if (files.trip_plans_images) {
-        for (const file of files.trip_plans_images) {
-          if (!file.mimetype.startsWith('image/')) {
-            throw new BadRequestException(`Invalid file type: ${file.originalname}. Only images are allowed.`);
+          if (f.fieldname === 'package_files') {
+            (grouped.package_files ??= []).push(f);
+          } else if (f.fieldname === 'trip_plans_images') {
+            (grouped.trip_plans_images ??= []).push(f);
+          } else {
+            const match = /^trip_plans_(\d+)_images$/.exec(f.fieldname);
+            if (match) {
+              const idx = Number(match[1]);
+              (grouped.trip_plans_by_index[idx] ??= []).push(f);
+            }
           }
         }
       }
@@ -804,15 +805,25 @@ export class PackageController {
         id,
         user_id,
         updatePackageDto,
-        files,
+        grouped as any,
       );
       return record;
     } catch (error) {
       console.error('Package update error:', error);
       
       // Clean up uploaded files on error
-      if (files.package_files || files.trip_plans_images) {
-        this.cleanupUploadedFiles(files);
+      try {
+        const storagePath = process.env.NODE_ENV === 'production' 
+          ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')
+          : path.join(process.cwd(), 'public', 'storage', 'package');
+        if (Array.isArray(uploadedFiles)) {
+          for (const f of uploadedFiles) {
+            const filePath = path.join(storagePath, f.filename);
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+          }
+        }
+      } catch (cleanupErr) {
+        console.error('Failed during error cleanup:', cleanupErr);
       }
       
       if (error instanceof BadRequestException) {

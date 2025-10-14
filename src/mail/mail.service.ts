@@ -58,6 +58,7 @@ export class MailService {
       console.log(error);
     }
   }
+  
 
   async sendVerificationLink(params: {
     email: string;

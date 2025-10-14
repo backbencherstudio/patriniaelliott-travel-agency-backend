@@ -98,17 +98,18 @@ export class VendorPackageController {
         { name: 'package_files' }, 
         { name: 'trip_plans_images' },
         { name: 'package_trip_plan_images' }, // Add this field for compatibility
-        // Dynamic day-wise trip plan images
-        { name: 'day_1_images' },
-        { name: 'day_2_images' },
-        { name: 'day_3_images' },
-        { name: 'day_4_images' },
-        { name: 'day_5_images' },
-        { name: 'day_6_images' },
-        { name: 'day_7_images' },
-        { name: 'day_8_images' },
-        { name: 'day_9_images' },
-        { name: 'day_10_images' },
+        
+        // Dynamic trip plans images (trip_plans_0_images, trip_plans_1_images, etc.)
+        { name: 'trip_plans_0_images' },
+        { name: 'trip_plans_1_images' },
+        { name: 'trip_plans_2_images' },
+        { name: 'trip_plans_3_images' },
+        { name: 'trip_plans_4_images' },
+        { name: 'trip_plans_5_images' },
+        { name: 'trip_plans_6_images' },
+        { name: 'trip_plans_7_images' },
+        { name: 'trip_plans_8_images' },
+        { name: 'trip_plans_9_images' },
         { name: 'room_photos', maxCount: 10 } // Add room_photos for gallery images
       ],
       {
@@ -147,6 +148,17 @@ export class VendorPackageController {
       day_8_images?: Express.Multer.File[];
       day_9_images?: Express.Multer.File[];
       day_10_images?: Express.Multer.File[];
+      // Dynamic trip plans images (trip_plans_0_images, trip_plans_1_images, etc.)
+      trip_plans_0_images?: Express.Multer.File[];
+      trip_plans_1_images?: Express.Multer.File[];
+      trip_plans_2_images?: Express.Multer.File[];
+      trip_plans_3_images?: Express.Multer.File[];
+      trip_plans_4_images?: Express.Multer.File[];
+      trip_plans_5_images?: Express.Multer.File[];
+      trip_plans_6_images?: Express.Multer.File[];
+      trip_plans_7_images?: Express.Multer.File[];
+      trip_plans_8_images?: Express.Multer.File[];
+      trip_plans_9_images?: Express.Multer.File[];
       room_photos?: Express.Multer.File[]; // Add room_photos files
     },
   ) {
