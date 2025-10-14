@@ -587,21 +587,28 @@ export class VendorPackageService {
           description: service.extra_service.description
         }
       })),
-      package_trip_plans: data.package_trip_plans.map(tripPlan => ({
-        ...tripPlan,
-        package_trip_plan_images: tripPlan.package_trip_plan_images.map(image => {
-          const imageUrl = this.generateFileUrl(image.image, 'package');
-          console.log('Processing single package trip plan image:', {
-            originalImage: image.image,
-            generatedUrl: imageUrl,
-            storagePath: appConfig().storageUrl.package
-          });
-          return {
-            ...image,
-            image_url: imageUrl
-          };
-        })
-      })),
+      package_trip_plans: data.package_trip_plans.map(tripPlan => {
+        console.log('Processing trip plan:', {
+          id: tripPlan.id,
+          title: tripPlan.title,
+          imagesCount: tripPlan.package_trip_plan_images?.length || 0
+        });
+        return {
+          ...tripPlan,
+          package_trip_plan_images: tripPlan.package_trip_plan_images.map(image => {
+            const imageUrl = this.generateFileUrl(image.image, 'package');
+            console.log('Processing single package trip plan image:', {
+              originalImage: image.image,
+              generatedUrl: imageUrl,
+              storagePath: appConfig().storageUrl.package
+            });
+            return {
+              ...image,
+              image_url: imageUrl
+            };
+          })
+        };
+      }),
       // Include package_policies in the response
       package_policies: data.package_policies || [],
       user: data.user ? {
@@ -627,6 +634,8 @@ export class VendorPackageService {
     }
 
     console.log('Found package:', processedData);
+    console.log('Package trip plans count:', data.package_trip_plans?.length || 0);
+    console.log('Package trip plans data:', data.package_trip_plans);
     return {
       success: true,
       data: {
@@ -863,6 +872,17 @@ export class VendorPackageService {
       day_8_images?: Express.Multer.File[];
       day_9_images?: Express.Multer.File[];
       day_10_images?: Express.Multer.File[];
+      // Dynamic trip plans images (trip_plans_0_images, trip_plans_1_images, etc.)
+      trip_plans_0_images?: Express.Multer.File[];
+      trip_plans_1_images?: Express.Multer.File[];
+      trip_plans_2_images?: Express.Multer.File[];
+      trip_plans_3_images?: Express.Multer.File[];
+      trip_plans_4_images?: Express.Multer.File[];
+      trip_plans_5_images?: Express.Multer.File[];
+      trip_plans_6_images?: Express.Multer.File[];
+      trip_plans_7_images?: Express.Multer.File[];
+      trip_plans_8_images?: Express.Multer.File[];
+      trip_plans_9_images?: Express.Multer.File[];
       room_photos?: Express.Multer.File[]; // Add room_photos files
     }
   ) {
@@ -1013,6 +1033,37 @@ export class VendorPackageService {
           await SojebStorage.put(filePath, file.buffer);
           trip_plans_images.push(fileName); // Add to the same array as trip_plans_images
           console.log(`📁 Generated package_trip_plan_images filename: ${fileName} from original: ${file.originalname}`);
+        }
+      }
+
+      // Handle dynamic trip_plans_X_images fields
+      for (let i = 0; i <= 9; i++) {
+        const fieldName = `trip_plans_${i}_images` as keyof typeof files;
+        const tripPlanImages = files?.[fieldName];
+        
+        if (tripPlanImages && tripPlanImages.length > 0) {
+          console.log(`📁 Processing ${fieldName} with ${tripPlanImages.length} files`);
+          
+          for (const file of tripPlanImages) {
+            // Generate unique filename with timestamp and clean name
+            const timestamp = Date.now();
+            const randomName = Array(16)
+              .fill(null)
+              .map(() => Math.round(Math.random() * 16).toString(16))
+              .join('');
+            
+            // Clean the original filename to remove special characters and spaces
+            const cleanOriginalName = file.originalname
+              .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
+              .replace(/_+/g, '_') // Replace multiple underscores with single
+              .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+            
+            const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
+            const filePath = appConfig().storageUrl.package + fileName;
+            await SojebStorage.put(filePath, file.buffer);
+            trip_plans_images.push(fileName); // Add to the same array as trip_plans_images
+            console.log(`📁 Generated ${fieldName} filename: ${fileName} from original: ${file.originalname}`);
+          }
         }
       }
 
@@ -1859,6 +1910,18 @@ export class VendorPackageService {
     files?: {
       package_files?: Express.Multer.File[];
       trip_plans_images?: Express.Multer.File[];
+      package_trip_plan_images?: Express.Multer.File[]; // Add this field for compatibility
+      // Dynamic trip plans images (trip_plans_0_images, trip_plans_1_images, etc.)
+      trip_plans_0_images?: Express.Multer.File[];
+      trip_plans_1_images?: Express.Multer.File[];
+      trip_plans_2_images?: Express.Multer.File[];
+      trip_plans_3_images?: Express.Multer.File[];
+      trip_plans_4_images?: Express.Multer.File[];
+      trip_plans_5_images?: Express.Multer.File[];
+      trip_plans_6_images?: Express.Multer.File[];
+      trip_plans_7_images?: Express.Multer.File[];
+      trip_plans_8_images?: Express.Multer.File[];
+      trip_plans_9_images?: Express.Multer.File[];
       room_photos?: Express.Multer.File[]; // Add room_photos files
     }
   ) {
@@ -1928,6 +1991,61 @@ export class VendorPackageService {
           await SojebStorage.put(filePath, file.buffer);
           trip_plans_images.push(fileName);
           console.log(`📁 Generated filename: ${fileName} from original: ${file.originalname}`);
+        }
+      }
+
+      // Handle package_trip_plan_images (alternative field name) - merge with trip_plans_images
+      if (files?.package_trip_plan_images) {
+        for (const file of files.package_trip_plan_images) {
+          // Generate unique filename with timestamp and clean name
+          const timestamp = Date.now();
+          const randomName = Array(16)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          
+          // Clean the original filename to remove special characters and spaces
+          const cleanOriginalName = file.originalname
+            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
+            .replace(/_+/g, '_') // Replace multiple underscores with single
+            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+          
+          const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
+          const filePath = appConfig().storageUrl.package + fileName;
+          await SojebStorage.put(filePath, file.buffer);
+          trip_plans_images.push(fileName); // Add to the same array as trip_plans_images
+          console.log(`📁 Generated package_trip_plan_images filename: ${fileName} from original: ${file.originalname}`);
+        }
+      }
+
+      // Handle dynamic trip_plans_X_images fields
+      for (let i = 0; i <= 9; i++) {
+        const fieldName = `trip_plans_${i}_images` as keyof typeof files;
+        const tripPlanImages = files?.[fieldName];
+        
+        if (tripPlanImages && tripPlanImages.length > 0) {
+          console.log(`📁 Processing ${fieldName} with ${tripPlanImages.length} files`);
+          
+          for (const file of tripPlanImages) {
+            // Generate unique filename with timestamp and clean name
+            const timestamp = Date.now();
+            const randomName = Array(16)
+              .fill(null)
+              .map(() => Math.round(Math.random() * 16).toString(16))
+              .join('');
+            
+            // Clean the original filename to remove special characters and spaces
+            const cleanOriginalName = file.originalname
+              .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
+              .replace(/_+/g, '_') // Replace multiple underscores with single
+              .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+            
+            const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
+            const filePath = appConfig().storageUrl.package + fileName;
+            await SojebStorage.put(filePath, file.buffer);
+            trip_plans_images.push(fileName); // Add to the same array as trip_plans_images
+            console.log(`📁 Generated ${fieldName} filename: ${fileName} from original: ${file.originalname}`);
+          }
         }
       }
       

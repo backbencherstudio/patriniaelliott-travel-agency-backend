@@ -22,6 +22,7 @@ export class PackageService {
     files: {
       package_files?: Express.Multer.File[];
       trip_plans_images?: Express.Multer.File[];
+      trip_plans_by_index?: Record<number, Express.Multer.File[]>;
     },
   ) {
     try {
@@ -216,7 +217,7 @@ export class PackageService {
         console.log('Processing trip_plans:', createPackageDto.trip_plans);
         const trip_plans = JSON.parse(createPackageDto.trip_plans);
         console.log('Parsed trip_plans:', trip_plans);
-        for (const trip_plan of trip_plans) {
+        for (const [idx, trip_plan] of trip_plans.entries()) {
           console.log('Processing trip_plan:', trip_plan);
           const trip_plan_data = {
             title: trip_plan.title,
@@ -236,7 +237,20 @@ export class PackageService {
           console.log('Trip plan created successfully:', trip_plan_record.id);
           if (trip_plan_record) {
             // add trip plan images to trip plan
-            if (files.trip_plans_images && files.trip_plans_images.length > 0) {
+            const indexedImages = (files as any)?.trip_plans_by_index?.[idx] as Express.Multer.File[] | undefined;
+            if (indexedImages && indexedImages.length > 0) {
+              const trip_plan_images_data = indexedImages.map(
+                (image) => ({
+                  image: image.filename,
+                  image_alt: image.originalname,
+                  package_trip_plan_id: trip_plan_record.id,
+                }),
+              );
+              await this.prisma.packageTripPlanImage.createMany({
+                data: trip_plan_images_data,
+              });
+            } else if (files.trip_plans_images && files.trip_plans_images.length > 0) {
+              // Legacy fallback: apply all provided trip_plans_images to each created plan (existing behavior)
               const trip_plan_images_data = files.trip_plans_images.map(
                 (image) => ({
                   image: image.filename,
@@ -486,6 +500,15 @@ export class PackageService {
           await SojebStorage.delete(
             appConfig().storageUrl.package + image.filename,
           );
+        }
+      }
+      // delete indexed trip plans images from storage
+      if (files && (files as any).trip_plans_by_index) {
+        for (const key of Object.keys((files as any).trip_plans_by_index)) {
+          const list: Express.Multer.File[] = (files as any).trip_plans_by_index[key] || [];
+          for (const image of list) {
+            await SojebStorage.delete(appConfig().storageUrl.package + image.filename);
+          }
         }
       }
       return {
@@ -1062,6 +1085,7 @@ export class PackageService {
     files: {
       package_files?: Express.Multer.File[];
       trip_plans_images?: Express.Multer.File[];
+      trip_plans_by_index?: Record<number, Express.Multer.File[]>;
     },
   ) {
     try {
@@ -1211,7 +1235,7 @@ export class PackageService {
         }
 
         // add new trip plans to package
-        for (const trip_plan of trip_plans) {
+        for (const [idx, trip_plan] of trip_plans.entries()) {
           const trip_plan_data = {
             title: trip_plan.title,
             description: trip_plan.description,
@@ -1223,10 +1247,23 @@ export class PackageService {
             });
             if (trip_plan_record) {
               // add trip plan images to trip plan
-              if (
+              const indexedImages = (files as any)?.trip_plans_by_index?.[idx] as Express.Multer.File[] | undefined;
+              if (indexedImages && indexedImages.length > 0) {
+                const trip_plan_images_data = indexedImages.map(
+                  (image) => ({
+                    image: image.filename,
+                    image_alt: image.originalname,
+                    package_trip_plan_id: trip_plan_record.id,
+                  }),
+                );
+                await this.prisma.packageTripPlanImage.createMany({
+                  data: trip_plan_images_data,
+                });
+              } else if (
                 files.trip_plans_images &&
                 files.trip_plans_images.length > 0
               ) {
+                // Legacy fallback
                 const trip_plan_images_data = files.trip_plans_images.map(
                   (image) => ({
                     image: image.filename,
@@ -1269,7 +1306,20 @@ export class PackageService {
             }
 
             // add trip plan images to trip plan
-            if (files.trip_plans_images && files.trip_plans_images.length > 0) {
+            const indexedImages = (files as any)?.trip_plans_by_index?.[idx] as Express.Multer.File[] | undefined;
+            if (indexedImages && indexedImages.length > 0) {
+              const trip_plan_images_data = indexedImages.map(
+                (image) => ({
+                  image: image.filename,
+                  image_alt: image.originalname,
+                  package_trip_plan_id: trip_plan.id,
+                }),
+              );
+              await this.prisma.packageTripPlanImage.createMany({
+                data: trip_plan_images_data,
+              });
+            } else if (files.trip_plans_images && files.trip_plans_images.length > 0) {
+              // Legacy fallback
               const trip_plan_images_data = files.trip_plans_images.map(
                 (image) => ({
                   image: image.filename,
@@ -1493,6 +1543,15 @@ export class PackageService {
           await SojebStorage.delete(
             appConfig().storageUrl.package + image.filename,
           );
+        }
+      }
+      // delete indexed trip plans images from storage
+      if (files && (files as any).trip_plans_by_index) {
+        for (const key of Object.keys((files as any).trip_plans_by_index)) {
+          const list: Express.Multer.File[] = (files as any).trip_plans_by_index[key] || [];
+          for (const image of list) {
+            await SojebStorage.delete(appConfig().storageUrl.package + image.filename);
+          }
         }
       }
 

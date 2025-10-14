@@ -45,6 +45,9 @@ export class MailProcessor extends WorkerHost {
             template: job.data.template,
             context: job.data.context,
           });
+          console.log("==================");
+          console.log('OTP code sent to from',job.data.from);
+          console.log("==================");
           break;
         case 'sendVerificationLink':
           this.logger.log('Sending verification link');
