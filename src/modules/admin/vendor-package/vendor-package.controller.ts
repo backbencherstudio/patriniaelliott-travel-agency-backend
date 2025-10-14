@@ -137,7 +137,17 @@ export class VendorPackageController {
       package_files?: Express.Multer.File[];
       trip_plans_images?: Express.Multer.File[];
       package_trip_plan_images?: Express.Multer.File[]; // Add this field for compatibility
-      
+      // Dynamic day-wise trip plan images
+      day_1_images?: Express.Multer.File[];
+      day_2_images?: Express.Multer.File[];
+      day_3_images?: Express.Multer.File[];
+      day_4_images?: Express.Multer.File[];
+      day_5_images?: Express.Multer.File[];
+      day_6_images?: Express.Multer.File[];
+      day_7_images?: Express.Multer.File[];
+      day_8_images?: Express.Multer.File[];
+      day_9_images?: Express.Multer.File[];
+      day_10_images?: Express.Multer.File[];
       // Dynamic trip plans images (trip_plans_0_images, trip_plans_1_images, etc.)
       trip_plans_0_images?: Express.Multer.File[];
       trip_plans_1_images?: Express.Multer.File[];
@@ -154,6 +164,28 @@ export class VendorPackageController {
   ) {
     try {
       const user_id = req.user.userId;
+      console.log('User ID:', user_id);
+      console.log('=== CONTROLLER DEBUG ===');
+      console.log('Raw package_policies from DTO:', createVendorPackageDto.package_policies);
+      console.log('package_policies type:', typeof createVendorPackageDto.package_policies);
+      console.log('package_policies isArray:', Array.isArray(createVendorPackageDto.package_policies));
+      console.log('=== END CONTROLLER DEBUG ===');
+      console.log('Files received:', {
+        package_files: files?.package_files?.length || 0,
+        trip_plans_images: files?.trip_plans_images?.length || 0,
+        package_trip_plan_images: files?.package_trip_plan_images?.length || 0,
+        day_1_images: files?.day_1_images?.length || 0,
+        day_2_images: files?.day_2_images?.length || 0,
+        day_3_images: files?.day_3_images?.length || 0,
+        day_4_images: files?.day_4_images?.length || 0,
+        day_5_images: files?.day_5_images?.length || 0,
+        day_6_images: files?.day_6_images?.length || 0,
+        day_7_images: files?.day_7_images?.length || 0,
+        day_8_images: files?.day_8_images?.length || 0,
+        day_9_images: files?.day_9_images?.length || 0,
+        day_10_images: files?.day_10_images?.length || 0,
+        room_photos: files?.room_photos?.length || 0
+      });
       
       const result = await this.vendorPackageService.createWithFiles(
         createVendorPackageDto, 
