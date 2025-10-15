@@ -135,10 +135,16 @@ export const packageSearchQuerySchema = z.object({
     limit: z
         .string()
         .optional()
-        .transform((val) => (val ? Number(val) : 10)),
+        .transform((val) => (val ? Number(val) : 10))
+        .refine((val) => val > 0 && val <= 100, {
+            message: "limit must be between 1 and 100",
+        }),
 
     page: z
         .string()
         .optional()
-        .transform((val) => (val ? Number(val) : 1)),
+        .transform((val) => (val ? Number(val) : 1))
+        .refine((val) => val > 0, {
+            message: "page must be greater than 0",
+        }),
 });

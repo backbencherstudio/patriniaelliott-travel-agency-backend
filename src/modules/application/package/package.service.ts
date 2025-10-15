@@ -34,7 +34,7 @@ export class PackageService {
       tags,
       page = 1,
       limit = 10,
-      sort_by = 'created_at_desc'
+      sort_by = 'created_at_desc',
     } = searchDto;
 
     // Calculate total guests
@@ -44,6 +44,7 @@ export class PackageService {
     const where: any = {
       deleted_at: null,
       status: 1, // Active packages
+      approved_at: { not: null },
     };
 
     // Search term
@@ -1056,7 +1057,7 @@ export class PackageService {
 
       let { budget_end, budget_start, cursor, destinations, duration_end, duration_start, free_cancellation, languages, limit, page, q, ratings, type } = query.data
 
-      const where_condition = {};
+      const where_condition = { deleted_at: null };
       const query_condition = {};
       if (q) {
         where_condition['OR'] = [
@@ -1127,8 +1128,10 @@ export class PackageService {
           free_cancellation = [free_cancellation];
         }
         where_condition['cancellation_policy'] = {
-          id: {
-            in: free_cancellation,
+          is: {
+            id: {
+              in: free_cancellation,
+            },
           },
         };
       }
@@ -1138,9 +1141,13 @@ export class PackageService {
         if (!Array.isArray(destinations)) {
           destinations = [destinations];
         }
-
-        where_condition['country'] = {
-          in: destinations,
+        // Filter by destination relation instead of country field
+        where_condition['package_destinations'] = {
+          some: {
+            destination_id: {
+              in: destinations,
+            },
+          },
         };
       }
 
@@ -1170,11 +1177,10 @@ export class PackageService {
       }
 
       // offset based pagination
-      if (page) {
+      if (page && limit) {
         query_condition['skip'] = (page - 1) * limit;
-      }
-
-      if (limit) {
+        query_condition['take'] = limit;
+      } else if (limit) {
         query_condition['take'] = limit;
       }
 
@@ -1182,9 +1188,10 @@ export class PackageService {
         where: {
           ...where_condition,
           status: 1,
+          approved_at: { not: null },
         },
         orderBy: {
-          id: 'asc',
+          created_at: 'desc',
         },
         ...query_condition,
         select: {
@@ -1284,7 +1291,7 @@ export class PackageService {
         },
       });
 
-      // 👉 Add rating summary for each package
+      // 👉 Add rating summary and process image URLs for each package
       const packagesWithRatingSummary = packages.map(({ package_room_types, ...pkg }) => {
         const totalReviews = pkg.reviews.length;
         const ratingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -1298,6 +1305,7 @@ export class PackageService {
           }
         });
 
+        // Process room types with image URLs
         const processedRoomTypes = package_room_types.map(roomType => {
           let processedRoomPhotos = roomType.room_photos;
           if (Array.isArray(roomType.room_photos)) {
@@ -1307,12 +1315,29 @@ export class PackageService {
           return { ...roomType, room_photos: processedRoomPhotos };
         });
 
+        // Process package files with image URLs
+        const processedPackageFiles = pkg.package_files.map(file => ({
+          ...file,
+          file_url: SojebStorage.url(appConfig().storageUrl.package + file.file)
+        }));
+
+        // Process trip plan images with image URLs
+        const processedTripPlans = pkg.package_trip_plans.map(tripPlan => ({
+          ...tripPlan,
+          package_trip_plan_images: tripPlan.package_trip_plan_images.map(image => ({
+            ...image,
+            image_url: SojebStorage.url(appConfig().storageUrl.package + image.image)
+          }))
+        }));
+
         const averageRating = totalReviews > 0 ? totalRating / totalReviews : 0;
 
         return {
           ...pkg,
           address: `${pkg.city}, ${pkg.country}`,
           package_room_types: processedRoomTypes,
+          package_files: processedPackageFiles,
+          package_trip_plans: processedTripPlans,
           room_photos: processedRoomTypes?.[0]?.room_photos,
           rating_summary: {
             averageRating,
@@ -1322,28 +1347,31 @@ export class PackageService {
         };
       });
 
-      const total = await this.prisma.package.count({ where: where_condition });
+      const total = await this.prisma.package.count({ where: { ...where_condition, status: 1, approved_at: { not: null } } });
 
-      // add image url package_files
-      // if (packages && packages.length > 0) {
-      //   for (const record of packages) {
-      //     if (record.package_files) {
-      //       for (const file of record.package_files) {
-      //         file['file_url'] = SojebStorage.url(
-      //           appConfig().storageUrl.package + file.file,
-      //         );
-      //       }
-      //     }
-      //   }
-      // }
+
+      // Calculate pagination metadata
+      const currentPage = page || 1;
+      const currentLimit = limit || 10;
+      const totalPages = Math.ceil(total / currentLimit);
+      const hasNextPage = currentPage < totalPages;
+      const hasPrevPage = currentPage > 1;
+      const nextPage = hasNextPage ? currentPage + 1 : null;
+      const prevPage = hasPrevPage ? currentPage - 1 : null;
 
       const meta = {
         total,
-        page,
-        limit: limit,
-        totalPages: page * limit < total,
-        hasNextPage: page * limit < total,
-        hasPrevPage: page > 1,
+        page: currentPage,
+        limit: currentLimit,
+        totalPages,
+        hasNextPage,
+        hasPrevPage,
+        nextPage,
+        prevPage,
+        showing: {
+          from: total === 0 ? 0 : (currentPage - 1) * currentLimit + 1,
+          to: Math.min(currentPage * currentLimit, total)
+        }
       }
 
       return {

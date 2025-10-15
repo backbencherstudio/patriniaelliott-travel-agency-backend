@@ -100,37 +100,60 @@ export class VendorUserVerificationAdminService {
     const allApproved = userDocuments.every(d => d.status === 'approved');
     let vendorApproved = false;
 
-    // If all documents are approved, automatically approve vendor verification
-    
-      const verification = await this.prisma.vendorVerification.findUnique({ 
-        where: { user_id: doc.user_id } 
+    // Check current user type and update if needed (immediately on any document approval)
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: doc.user_id },
+      select: { type: true }
+    });
+
+    if (currentUser && currentUser.type !== 'vendor' && currentUser.type !== 'admin') {
+      // Set user type to vendor only if current type is not vendor and not admin
+      await this.prisma.user.update({
+        where: { id: doc.user_id },
+        data: { type: 'vendor', approved_at: new Date() },
       });
-
-      console.log("testing...........");
-      
-      if (verification && verification.status !== 'approved') {
-        await this.prisma.vendorVerification.update({
-          where: { user_id: doc.user_id },
-          data: { 
-            status: 'approved', 
-            verified_at: new Date(), 
-            updated_at: new Date() 
-          },
-        });
-
-        // Set user type to vendor
-        await this.prisma.user.update({
-          where: { id: doc.user_id },
-          data: { type: 'vendor', approved_at: new Date() },
-        });
-
+      console.log(`User type changed from "${currentUser.type}" to "vendor"`);
+      vendorApproved = true; // Set to true when user type changes to vendor
+    } else {
+      // User is already vendor or admin, just update approved_at
+      await this.prisma.user.update({
+        where: { id: doc.user_id },
+        data: { approved_at: new Date() },
+      });
+      console.log(`User type was "${currentUser.type}", only updated approved_at`);
+      // If user is already vendor, consider it as vendor approved
+      if (currentUser && currentUser.type === 'vendor') {
         vendorApproved = true;
       }
+    }
+
+    // // If all documents are approved, automatically approve vendor verification
+    // if (allApproved) {
+    //   const verification = await this.prisma.vendorVerification.findUnique({ 
+    //     where: { user_id: doc.user_id } 
+    //   });
+
+    //   console.log("All documents approved, checking vendor verification...");
+      
+    //   if (verification && verification.status !== 'approved') {
+    //     await this.prisma.vendorVerification.update({
+    //       where: { user_id: doc.user_id },
+    //       data: { 
+    //         status: 'approved', 
+    //         verified_at: new Date(), 
+    //         updated_at: new Date() 
+    //       },
+    //     });
+
+    //     vendorApproved = true;
+    //     console.log("Vendor verification approved");
+    //   }
+    // }
 
     return { 
       success: true, 
       message: vendorApproved 
-        ? 'Document approved and vendor verification completed automatically' 
+        ? 'Document approved and user is now a vendor' 
         : 'Document approved',
       vendorApproved
     };
