@@ -74,6 +74,13 @@ export class VendorPackageService {
       deleted_at: null
     };
 
+    // Always restrict to vendor-owned and approved packages
+    // User must be a vendor
+    where.user = { is: { type: 'vendor' } };
+    // Package must be approved (status 1) and have an approval timestamp
+    where.status = 1;
+    where.approved_at = { not: null };
+
     // Add user_id filter only if provided
     if (user_id) {
       where.user_id = user_id;
@@ -233,16 +240,10 @@ export class VendorPackageService {
             }
           }
         },
-        // Include package policies
+        // Include package policies (only inner JSON array to reduce payload)
         package_policies: {
           where: { deleted_at: null },
-          select: {
-            id: true,
-            description: true,
-            package_policies: true,
-            created_at: true,
-            updated_at: true
-          }
+          select: { package_policies: true }
         },
         },
       }),
@@ -316,6 +317,9 @@ export class VendorPackageService {
   
     // Process the data to add file URLs, avatar URLs, and rating summary
     const processedData = packages.map(pkg => {
+      const normalizedPolicies = Array.isArray((pkg as any).package_policies)
+        ? ((pkg as any).package_policies[0]?.package_policies ?? [])
+        : [];
       const processedPackageFiles = pkg.package_files.map(file => ({
         ...file,
         file_url: this.generateFileUrl(file.file, 'package'),
@@ -377,6 +381,10 @@ export class VendorPackageService {
 
       return {
         ...pkg,
+        // Return package_policies as an object containing the array
+        package_policies: {
+          data: normalizedPolicies
+        },
         package_files: processedPackageFiles,
         package_room_types: processedRoomTypes,
         package_extra_services: processedExtraServices,
@@ -609,8 +617,10 @@ export class VendorPackageService {
           })
         };
       }),
-      // Include package_policies in the response
-      package_policies: data.package_policies || [],
+      // Include package_policies in the response as an object
+      package_policies: {
+        data: data.package_policies || []
+      },
       user: data.user ? {
         ...data.user,
         avatar_url: data.user.avatar ? this.generateFileUrl(data.user.avatar, 'avatar') : null
@@ -1066,19 +1076,6 @@ export class VendorPackageService {
           }
         }
       }
-
-      console.log('Files uploaded:', { 
-        package_files, 
-        trip_plans_images, 
-        day_wise_images,
-        room_photos 
-      });
-
-      // Extract nested data from DTO
-      console.log('=== DTO EXTRACTION DEBUG ===');
-      console.log('Original DTO package_policies:', createVendorPackageDto.package_policies);
-      console.log('DTO type:', typeof createVendorPackageDto.package_policies);
-      console.log('DTO isArray:', Array.isArray(createVendorPackageDto.package_policies));
       
       const { 
         package_room_types, 
@@ -1366,6 +1363,7 @@ export class VendorPackageService {
                   const tf = tripPlan.ticket_free ?? tripPlan.tripPlan ?? [];
                   return typeof tf === 'string' ? tf : JSON.stringify(tf);
                 })(),
+                day_wise_data: tripPlan.day_wise_data || null, // Map day_wise_data from trip_plans
                 sort_order: index,
                 package_trip_plan_images: {
                   create: dayImages.map(imageFilename => ({
@@ -1394,7 +1392,8 @@ export class VendorPackageService {
           ...rootTripPlanPayload,
           ticket_free: typeof rootTripPlanPayload.ticket_free === 'string' 
             ? rootTripPlanPayload.ticket_free 
-            : JSON.stringify(rootTripPlanPayload.ticket_free ?? [])
+            : JSON.stringify(rootTripPlanPayload.ticket_free ?? []),
+          day_wise_data: rootTripPlanPayload.day_wise_data || null // Map day_wise_data from root payload
         };
         nested.package_trip_plans = {
           create: [normalizedRoot]
@@ -1820,6 +1819,12 @@ export class VendorPackageService {
       // Post-process to attach public URLs using existing image function
       const processedResult = {
         ...result,
+        // Return package_policies as an object containing the array
+        package_policies: {
+          data: Array.isArray((result as any).package_policies)
+            ? ((result as any).package_policies[0]?.package_policies ?? [])
+            : []
+        },
         package_files: (result.package_files || []).map((file) => ({
           ...file,
           file_url: this.generateFileUrl(file.file, 'package'),
@@ -2343,6 +2348,12 @@ export class VendorPackageService {
       // Post-process to attach public URLs using existing image function
       const processedResult = {
         ...result,
+        // Return package_policies as an object containing the array
+        package_policies: {
+          data: Array.isArray((result as any).package_policies)
+            ? ((result as any).package_policies[0]?.package_policies ?? [])
+            : []
+        },
         package_files: (result.package_files || []).map((file) => ({
           ...file,
           file_url: this.generateFileUrl(file.file, 'package'),
