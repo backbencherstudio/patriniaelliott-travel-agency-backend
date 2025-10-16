@@ -1055,9 +1055,13 @@ export class PackageService {
         });
       }
 
-      let { budget_end, budget_start, cursor, destinations, duration_end, duration_start, free_cancellation, languages, limit, page, q, ratings, type } = query.data
+      let { budget_end, budget_start, cursor, destinations, duration_end, duration_start, free_cancellation, languages, limit, page, q, ratings, type, popular_area } = query.data
 
+<<<<<<< HEAD
       const where_condition = { deleted_at: null };
+=======
+      const where_condition: any = {};
+>>>>>>> b5fb001705e5932c3acabaa68c59e661bd50b558
       const query_condition = {};
       if (q) {
         where_condition['OR'] = [
@@ -1088,9 +1092,9 @@ export class PackageService {
         //   lte: DateHelper.format(duration_end),
         // };
       }
-      if (budget_start) {
+      if (budget_end) {
         where_condition['price'] = {
-          gte: Number(budget_start),
+          gte: Number(budget_start - .1),
           // lte: Number(budget_end),
         };
 
@@ -1099,28 +1103,33 @@ export class PackageService {
         }
       }
 
-      if (ratings.length) {
-        // if not array
+      if (ratings?.length) {
+        // Ensure it's always an array
         if (!Array.isArray(ratings)) {
           ratings = [ratings];
         }
 
-        const minRating = Math.min(...ratings);
-        const maxRating = Math.max(...ratings);
+        const numericRatings = ratings.map((r) => Number(r));
 
-        where_condition['reviews'] = {
-          some: {
-            rating_value: {
-              // in: ratings.map((rating) => Number(rating)),
-              gte: minRating,
+        if (numericRatings.length > 1) {
+          where_condition['reviews'] = {
+            some: {
+              rating_value: {
+                in: numericRatings,
+              },
             },
-          },
-        };
-
-        if (ratings.length > 1) {
-          where_condition['reviews']['some']['rating_value']['lte'] = maxRating;
+          };
+        } else {
+          where_condition['reviews'] = {
+            some: {
+              rating_value: {
+                equals: numericRatings[0],
+              },
+            },
+          };
         }
       }
+
 
       if (free_cancellation.length) {
         // if not array
@@ -1136,11 +1145,11 @@ export class PackageService {
         };
       }
 
-      if (destinations.length) {
-        // if not array
+      if (destinations?.length) {
         if (!Array.isArray(destinations)) {
           destinations = [destinations];
         }
+<<<<<<< HEAD
         // Filter by destination relation instead of country field
         where_condition['package_destinations'] = {
           some: {
@@ -1149,7 +1158,46 @@ export class PackageService {
             },
           },
         };
+=======
+        if (destinations.length > 1) {
+          where_condition.OR = destinations.map((d) => ({
+            country: {
+              contains: d,
+              mode: 'insensitive',
+            },
+          }));
+        } else {
+          where_condition.country = {
+            contains: destinations[0],
+            mode: 'insensitive',
+          };
+        }
+>>>>>>> b5fb001705e5932c3acabaa68c59e661bd50b558
       }
+
+      if (popular_area?.length) {
+        if (!Array.isArray(popular_area)) {
+          popular_area = [popular_area];
+        }
+
+        if (popular_area.length > 1) {
+          where_condition.OR = [
+            ...(where_condition.OR || []),
+            ...popular_area.map((area) => ({
+              city: {
+                contains: area,
+                mode: 'insensitive',
+              },
+            })),
+          ];
+        } else {
+          where_condition.city = {
+            contains: popular_area[0],
+            mode: 'insensitive',
+          };
+        }
+      }
+
 
       if (languages.length) {
         if (!Array.isArray(languages)) {
@@ -1183,6 +1231,10 @@ export class PackageService {
       } else if (limit) {
         query_condition['take'] = limit;
       }
+
+      console.log('===========condition=========================');
+      console.log({ where_condition, query_condition });
+      console.log('====================================');
 
       const packages = await this.prisma.package.findMany({
         where: {
