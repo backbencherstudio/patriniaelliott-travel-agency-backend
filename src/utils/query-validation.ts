@@ -124,6 +124,10 @@ export const packageSearchQuerySchema = z.object({
         .union([z.string(), z.array(z.string())])
         .optional()
         .transform((val) => (val ? (Array.isArray(val) ? val : [val]) : [])),
+    popular_area: z
+        .union([z.string(), z.array(z.string())])
+        .optional()
+        .transform((val) => (val ? (Array.isArray(val) ? val : [val]) : [])),
 
     languages: z
         .union([z.string(), z.array(z.string())])
