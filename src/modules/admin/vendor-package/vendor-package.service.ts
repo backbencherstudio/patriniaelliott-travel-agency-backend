@@ -381,8 +381,10 @@ export class VendorPackageService {
 
       return {
         ...pkg,
-        // Flatten package_policies to be the inner array directly
-        package_policies: normalizedPolicies,
+        // Return package_policies as an object containing the array
+        package_policies: {
+          data: normalizedPolicies
+        },
         package_files: processedPackageFiles,
         package_room_types: processedRoomTypes,
         package_extra_services: processedExtraServices,
@@ -615,8 +617,10 @@ export class VendorPackageService {
           })
         };
       }),
-      // Include package_policies in the response
-      package_policies: data.package_policies || [],
+      // Include package_policies in the response as an object
+      package_policies: {
+        data: data.package_policies || []
+      },
       user: data.user ? {
         ...data.user,
         avatar_url: data.user.avatar ? this.generateFileUrl(data.user.avatar, 'avatar') : null
@@ -1815,10 +1819,12 @@ export class VendorPackageService {
       // Post-process to attach public URLs using existing image function
       const processedResult = {
         ...result,
-        // Flatten package_policies to be the inner array directly in create response
-        package_policies: Array.isArray((result as any).package_policies)
-          ? ((result as any).package_policies[0]?.package_policies ?? [])
-          : [],
+        // Return package_policies as an object containing the array
+        package_policies: {
+          data: Array.isArray((result as any).package_policies)
+            ? ((result as any).package_policies[0]?.package_policies ?? [])
+            : []
+        },
         package_files: (result.package_files || []).map((file) => ({
           ...file,
           file_url: this.generateFileUrl(file.file, 'package'),
@@ -2342,6 +2348,12 @@ export class VendorPackageService {
       // Post-process to attach public URLs using existing image function
       const processedResult = {
         ...result,
+        // Return package_policies as an object containing the array
+        package_policies: {
+          data: Array.isArray((result as any).package_policies)
+            ? ((result as any).package_policies[0]?.package_policies ?? [])
+            : []
+        },
         package_files: (result.package_files || []).map((file) => ({
           ...file,
           file_url: this.generateFileUrl(file.file, 'package'),

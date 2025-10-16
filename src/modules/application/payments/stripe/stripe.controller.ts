@@ -11,12 +11,12 @@ import { WithdrawDto } from './dto/withdraw.dto';
 
 @ApiBearerAuth()
 @ApiTags('Stripe')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.VENDOR)
+
 @Controller('/')
 export class StripeController {
     constructor(private stripeService: StripeService) { }
 
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Create stripe account' })
     @Post('/payments/stripe/create-account')
     async create(
@@ -27,6 +27,8 @@ export class StripeController {
         return this.stripeService.createAccount(user_id, body)
     }
 
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.VENDOR)
     @ApiOperation({ summary: 'Get stripe accounts' })
     @Get('/payments/accounts')
     async index(
@@ -36,6 +38,8 @@ export class StripeController {
         return this.stripeService.index(user_id)
     }
 
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.VENDOR)
     @ApiOperation({ summary: 'Get stripe accounts' })
     @Get('/payments/transactions/ballance')
     async getBallance(
@@ -45,6 +49,8 @@ export class StripeController {
         return this.stripeService.getBallance(user_id)
     }
 
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.VENDOR)
     @ApiOperation({ summary: 'Get account by id' })
     @Get('/payments/accounts/:id')
     async getAccountByID(
@@ -55,6 +61,8 @@ export class StripeController {
         return this.stripeService.getAccountById(user_id, id)
     }
 
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.VENDOR)
     @ApiOperation({ summary: 'Get Onboarding account' })
     @Get('/payments/stripe/onboarding-link/:stripe_account_id')
     async onboarding(
@@ -65,6 +73,8 @@ export class StripeController {
         return this.stripeService.getOnboardingLink(user_id, stripe_account_id)
     }
 
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.VENDOR)
     @ApiOperation({ summary: 'Get stripe account status' })
     @Get('/payments/:id/status')
     async accountStatus(
@@ -74,7 +84,8 @@ export class StripeController {
         const user_id = req.user.userId;
         return this.stripeService.accountStatus(user_id, id)
     }
-
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.VENDOR)
     @ApiOperation({ summary: 'Get transactions' })
     @Get('/payments/transactions')
     async transactions(
@@ -84,7 +95,8 @@ export class StripeController {
         const user_id = req.user.userId;
         return this.stripeService.transactions(user_id, query)
     }
-
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.VENDOR)
     @ApiOperation({ summary: 'Create withdraw' })
     @Post('/payments/transactions/withdraw')
     async withdraw(
@@ -94,7 +106,8 @@ export class StripeController {
         const user_id = req.user.userId;
         return this.stripeService.withdraw({ amount: body.amount, method: body.method, vendor_id: user_id, })
     }
-
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.VENDOR)
     @ApiOperation({ summary: 'Get withdraw' })
     @Get('/payments/transactions/withdraw')
     async withdrawal(
@@ -105,6 +118,8 @@ export class StripeController {
         return this.stripeService.withdrawal(user_id, query)
     }
 
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.VENDOR)
     @ApiOperation({ summary: 'Get withdraw by ID' })
     @Get('/payments/transactions/withdraw/:id')
     async withdrawByID(
@@ -115,6 +130,8 @@ export class StripeController {
         return this.stripeService.withdrawByID(user_id, id)
     }
 
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.VENDOR)
     @ApiOperation({ summary: 'Delete withdraw by ID' })
     @Delete('/payments/transactions/withdraw/:id')
     async deleteWithdraw(

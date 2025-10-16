@@ -2396,10 +2396,15 @@ export class PackageService {
         },
       })
 
-      const src_url = '/public/storage/package/'
-
       const topDestinations = packages
-        .map((pkg) => ({ id: pkg.id, img: src_url + pkg.package_files?.[0]?.file, country: pkg.country, count: pkg._count.booking_items }))
+        .map((pkg) => ({
+          id: pkg.id,
+          img: pkg.package_files?.[0]?.file 
+            ? this.generateFileUrl(pkg.package_files[0].file, 'package')
+            : null,
+          country: pkg.country,
+          count: pkg._count.booking_items
+        }))
         .sort((a, b) => b.count - a.count)
         .slice(0, limit ? limit : 10)
       return {
