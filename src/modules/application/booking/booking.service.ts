@@ -774,7 +774,8 @@ export class BookingService {
                 date: booking.created_at,
                 total: paymentIntent.amount / 100,
                 payment_method: payment_method.brand
-              }
+              },
+              user: transaction.booking.booking_items[0].package.user
             }
 
             return {
