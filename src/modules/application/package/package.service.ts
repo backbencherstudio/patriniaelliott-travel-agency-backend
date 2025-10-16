@@ -1057,11 +1057,7 @@ export class PackageService {
 
       let { budget_end, budget_start, cursor, destinations, duration_end, duration_start, free_cancellation, languages, limit, page, q, ratings, type, popular_area } = query.data
 
-<<<<<<< HEAD
-      const where_condition = { deleted_at: null };
-=======
       const where_condition: any = {};
->>>>>>> b5fb001705e5932c3acabaa68c59e661bd50b558
       const query_condition = {};
       if (q) {
         where_condition['OR'] = [
@@ -1149,16 +1145,6 @@ export class PackageService {
         if (!Array.isArray(destinations)) {
           destinations = [destinations];
         }
-<<<<<<< HEAD
-        // Filter by destination relation instead of country field
-        where_condition['package_destinations'] = {
-          some: {
-            destination_id: {
-              in: destinations,
-            },
-          },
-        };
-=======
         if (destinations.length > 1) {
           where_condition.OR = destinations.map((d) => ({
             country: {
@@ -1172,7 +1158,6 @@ export class PackageService {
             mode: 'insensitive',
           };
         }
->>>>>>> b5fb001705e5932c3acabaa68c59e661bd50b558
       }
 
       if (popular_area?.length) {
