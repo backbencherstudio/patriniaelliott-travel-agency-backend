@@ -27,8 +27,7 @@ export class StripeController {
         return this.stripeService.createAccount(user_id, body)
     }
 
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(Role.ADMIN, Role.VENDOR)
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Get stripe accounts' })
     @Get('/payments/accounts')
     async index(
