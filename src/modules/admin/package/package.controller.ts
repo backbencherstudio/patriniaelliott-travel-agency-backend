@@ -45,9 +45,10 @@ export class PackageController {
       console.log('🔍 [STORAGE DEBUG] NODE_ENV:', process.env.NODE_ENV);
       console.log('🔍 [STORAGE DEBUG] process.cwd():', process.cwd());
       
-      const storagePath = process.env.NODE_ENV === 'production' 
-              ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')  // Production: /project/dist/public/storage/package
-              : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
+      const storageRoot = appConfig().storageUrl.rootUrl;
+      const storagePath = process.env.NODE_ENV === 'production'
+              ? path.join(storageRoot, 'package')
+              : path.join(process.cwd(), 'public', 'storage', 'package');
       
       console.log('🔍 [STORAGE DEBUG] Resolved storagePath:', storagePath);
       console.log('🔍 [STORAGE DEBUG] Storage path exists:', fs.existsSync(storagePath));
@@ -84,9 +85,10 @@ export class PackageController {
     trip_plans_images?: Express.Multer.File[];
   }) {
     try {
-      const storagePath = process.env.NODE_ENV === 'production' 
-              ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')  // Production: /project/dist/public/storage/package
-              : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
+      const storageRoot = appConfig().storageUrl.rootUrl;
+      const storagePath = process.env.NODE_ENV === 'production'
+              ? path.join(storageRoot, 'package')
+              : path.join(process.cwd(), 'public', 'storage', 'package');
       
       if (files.package_files) {
         for (const file of files.package_files) {
@@ -196,9 +198,10 @@ export class PackageController {
             });
             
             // Ensure storage directories exist
-            const storagePath = process.env.NODE_ENV === 'production' 
-              ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')  // Production: /project/dist/public/storage/package
-              : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
+            const storageRoot = appConfig().storageUrl.rootUrl;
+            const storagePath = process.env.NODE_ENV === 'production'
+              ? path.join(storageRoot, 'package')
+              : path.join(process.cwd(), 'public', 'storage', 'package');
             
             console.log('🔍 [MULTER DEBUG] Resolved storagePath:', storagePath);
             console.log('🔍 [MULTER DEBUG] Storage path exists:', fs.existsSync(storagePath));
@@ -690,9 +693,10 @@ export class PackageController {
             });
             
             // Ensure storage directories exist
-            const storagePath = process.env.NODE_ENV === 'production' 
-              ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')  // Production: /project/dist/public/storage/package
-              : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
+            const storageRoot = appConfig().storageUrl.rootUrl;
+            const storagePath = process.env.NODE_ENV === 'production'
+              ? path.join(storageRoot, 'package')
+              : path.join(process.cwd(), 'public', 'storage', 'package');
             
             console.log('🔍 [MULTER DEBUG] Resolved storagePath:', storagePath);
             console.log('🔍 [MULTER DEBUG] Storage path exists:', fs.existsSync(storagePath));
