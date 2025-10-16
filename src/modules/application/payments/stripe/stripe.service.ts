@@ -128,7 +128,7 @@ export class StripeService {
                 throw new NotFoundException('User not found');
             }
 
-            const accountLink = await StripePayment.AccountLinkCreate({ account_id: stripe_account_id, refresh_url: `${process.env.FRONTEND_URL}/vendor/payment?reauth=true`, return_url: `${process.env.FRONTEND_URL}/vendor/payment?success=true` })
+            const accountLink = await StripePayment.AccountLinkCreate({ account_id: stripe_account_id, refresh_url: `${process.env.FRONTEND_URL}/vendor/payment?reauth=true`, return_url: `${process.env.FRONTEND_URL}/user-verification?success=true` })
 
             return {
                 success: true,
