@@ -27,8 +27,7 @@ export class StripeController {
         return this.stripeService.createAccount(user_id, body)
     }
 
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(Role.ADMIN, Role.VENDOR)
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Get stripe accounts' })
     @Get('/payments/accounts')
     async index(
@@ -61,8 +60,7 @@ export class StripeController {
         return this.stripeService.getAccountById(user_id, id)
     }
 
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(Role.ADMIN, Role.VENDOR)
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Get Onboarding account' })
     @Get('/payments/stripe/onboarding-link/:stripe_account_id')
     async onboarding(
@@ -73,8 +71,7 @@ export class StripeController {
         return this.stripeService.getOnboardingLink(user_id, stripe_account_id)
     }
 
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(Role.ADMIN, Role.VENDOR)
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Get stripe account status' })
     @Get('/payments/:id/status')
     async accountStatus(

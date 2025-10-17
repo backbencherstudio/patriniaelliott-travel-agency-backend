@@ -21,8 +21,8 @@ async function bootstrap() {
   app.enableCors();
   app.use(helmet());
   // Use consistent path resolution for static assets (same as storage config)
-  const publicPath = process.env.NODE_ENV === 'production' 
-    ? join(__dirname, 'public')  // Production: /usr/src/app/public (Docker container)
+  const publicPath = process.env.NODE_ENV === 'production'
+    ? join(__dirname, 'public')  // Production: resolve relative to compiled dist
     : join(__dirname, '..', 'public');       // Development: /project/public
 
   app.useStaticAssets(publicPath, {

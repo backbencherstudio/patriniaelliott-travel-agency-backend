@@ -69,8 +69,8 @@ export default () => ({
    */
   storageUrl: {
     // Use absolute paths based on environment to ensure consistent file storage
-    rootUrl: process.env.NODE_ENV === 'production' 
-      ? join(__dirname, '..', 'public', 'storage')  // Production: /usr/src/app/public/storage (Docker container)
+    rootUrl: process.env.NODE_ENV === 'production'
+      ? join(__dirname, '..', 'public', 'storage')  // Production: resolve relative to compiled dist/config
       : './public/storage',  // Development: ./public/storage
     rootUrlPublic: '/public/storage',
     swapan: '/public/storage',
