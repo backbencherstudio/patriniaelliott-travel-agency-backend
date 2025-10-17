@@ -380,8 +380,8 @@ export class PackageController {
       // Clean up uploaded files on error
       try {
         const storagePath = process.env.NODE_ENV === 'production' 
-          ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')
-          : path.join(process.cwd(), 'public', 'storage', 'package');
+          ? path.join(process.cwd(), 'public', 'storage', 'package')  // Production: /usr/src/app/public/storage/package (Docker container)
+          : path.join(process.cwd(), 'public', 'storage', 'package');         // Development: /project/public/storage/package;
         if (Array.isArray(uploadedFiles)) {
           for (const f of uploadedFiles) {
             const filePath = path.join(storagePath, f.filename);
@@ -814,8 +814,8 @@ export class PackageController {
       // Clean up uploaded files on error
       try {
         const storagePath = process.env.NODE_ENV === 'production' 
-          ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')
-          : path.join(process.cwd(), 'public', 'storage', 'package');
+          ? path.join(process.cwd(), 'public', 'storage', 'package')  // Production: /usr/src/app/public/storage/package (Docker container)
+          : path.join(process.cwd(), 'public', 'storage', 'package');         // Development: /project/public/storage/package;
         if (Array.isArray(uploadedFiles)) {
           for (const f of uploadedFiles) {
             const filePath = path.join(storagePath, f.filename);
