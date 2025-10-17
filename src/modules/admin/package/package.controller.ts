@@ -46,7 +46,7 @@ export class PackageController {
       console.log('🔍 [STORAGE DEBUG] process.cwd():', process.cwd());
       
       const storagePath = process.env.NODE_ENV === 'production' 
-              ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')  // Production: /project/dist/public/storage/package
+              ? path.join(process.cwd(), 'public', 'storage', 'package')  // Production: /usr/src/app/public/storage/package (Docker container)
               : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
       
       console.log('🔍 [STORAGE DEBUG] Resolved storagePath:', storagePath);
@@ -85,7 +85,7 @@ export class PackageController {
   }) {
     try {
       const storagePath = process.env.NODE_ENV === 'production' 
-              ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')  // Production: /project/dist/public/storage/package
+              ? path.join(process.cwd(), 'public', 'storage', 'package')  // Production: /usr/src/app/public/storage/package (Docker container)
               : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
       
       if (files.package_files) {
@@ -197,7 +197,7 @@ export class PackageController {
             
             // Ensure storage directories exist
             const storagePath = process.env.NODE_ENV === 'production' 
-              ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')  // Production: /project/dist/public/storage/package
+              ? path.join(process.cwd(), 'public', 'storage', 'package')  // Production: /usr/src/app/public/storage/package (Docker container)
               : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
             
             console.log('🔍 [MULTER DEBUG] Resolved storagePath:', storagePath);
@@ -691,7 +691,7 @@ export class PackageController {
             
             // Ensure storage directories exist
             const storagePath = process.env.NODE_ENV === 'production' 
-              ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')  // Production: /project/dist/public/storage/package
+              ? path.join(process.cwd(), 'public', 'storage', 'package')  // Production: /usr/src/app/public/storage/package (Docker container)
               : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
             
             console.log('🔍 [MULTER DEBUG] Resolved storagePath:', storagePath);
