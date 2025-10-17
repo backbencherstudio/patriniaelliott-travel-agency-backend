@@ -22,8 +22,8 @@ async function bootstrap() {
   app.use(helmet());
   // Use consistent path resolution for static assets (same as storage config)
   const publicPath = process.env.NODE_ENV === 'production'
-    ? join(__dirname, 'public')  // Production: resolve relative to compiled dist
-    : join(__dirname, '..', 'public');       // Development: /project/public
+    ? join(__dirname, '..', 'public')  // Production: resolve relative to compiled dist (go up from dist to public)
+    : join(process.cwd(), 'public');       // Development: /project/public
 
   app.useStaticAssets(publicPath, {
     index: false,
