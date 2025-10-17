@@ -36,9 +36,9 @@ async function bootstrap() {
     },
   });
 
-  app.use('/storage', (req, res, next) => {
+  app.use('/public/storage', (req, res, next) => {
     try {
-      const filePath = join(publicPath, req.path);
+      const filePath = join(publicPath, 'storage', req.path);
       
       console.log('🔍 [STATIC FILE DEBUG] Static file requested:', req.path);
       console.log('🔍 [STATIC FILE DEBUG] publicPath:', publicPath);
