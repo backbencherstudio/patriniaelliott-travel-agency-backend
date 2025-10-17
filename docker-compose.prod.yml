@@ -12,6 +12,9 @@ services:
       - DATABASE_URL=postgresql://postgres:root@postgres/backend
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - APP_URL=https://backend.naamstay.com
+    volumes:
+      - ./public:/usr/src/app/public
     depends_on:
       - postgres
       - redis
