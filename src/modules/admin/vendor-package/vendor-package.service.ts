@@ -16,10 +16,12 @@ import {
   CalendarInitDto,
   CalendarStatus
 } from './dto/calendar-availability.dto';
+import { DiskOption } from '@/src/common/lib/Disk/Option';
 
 
 @Injectable()
 export class VendorPackageService {
+  private _config: DiskOption;
   constructor(private readonly prisma: PrismaService) {}
 
   private ensureStorageDirectory() {
@@ -38,13 +40,6 @@ export class VendorPackageService {
     const storagePath = type === 'package' ? appConfig().storageUrl.package : appConfig().storageUrl.avatar;
     const fullPath = storagePath + filePath;
     const url = SojebStorage.url(fullPath);
-    console.log('generateFileUrl debug:', {
-      filePath,
-      type,
-      storagePath,
-      fullPath,
-      generatedUrl: url
-    });
     return url;
   }
 
@@ -350,11 +345,6 @@ export class VendorPackageService {
         ...tripPlan,
         package_trip_plan_images: tripPlan.package_trip_plan_images.map(image => {
           const imageUrl = this.generateFileUrl(image.image, 'package');
-          console.log('Processing trip plan image:', {
-            originalImage: image.image,
-            generatedUrl: imageUrl,
-            storagePath: appConfig().storageUrl.package
-          });
           return {
             ...image,
             image_url: imageUrl
@@ -425,7 +415,6 @@ export class VendorPackageService {
     };
   }
   async getVendorIdWise(user_id: string) {
-    console.log('Searching for user_id:', user_id);
   
     const data = await this.prisma.package.findUnique({
       where: {
@@ -596,20 +585,10 @@ export class VendorPackageService {
         }
       })),
       package_trip_plans: data.package_trip_plans.map(tripPlan => {
-        console.log('Processing trip plan:', {
-          id: tripPlan.id,
-          title: tripPlan.title,
-          imagesCount: tripPlan.package_trip_plan_images?.length || 0
-        });
         return {
           ...tripPlan,
           package_trip_plan_images: tripPlan.package_trip_plan_images.map(image => {
             const imageUrl = this.generateFileUrl(image.image, 'package');
-            console.log('Processing single package trip plan image:', {
-              originalImage: image.image,
-              generatedUrl: imageUrl,
-              storagePath: appConfig().storageUrl.package
-            });
             return {
               ...image,
               image_url: imageUrl
@@ -642,10 +621,6 @@ export class VendorPackageService {
     if (calendarConfig) {
       (processedData as any).calendar_configuration = calendarConfig;
     }
-
-    console.log('Found package:', processedData);
-    console.log('Package trip plans count:', data.package_trip_plans?.length || 0);
-    console.log('Package trip plans data:', data.package_trip_plans);
     return {
       success: true,
       data: {
@@ -753,7 +728,6 @@ export class VendorPackageService {
       if (typeof package_policies === 'string') {
         try {
           parsedPackagePolicies = JSON.parse(package_policies);
-          console.log('Parsed package_policies from JSON string in update:', parsedPackagePolicies);
         } catch (error) {
           console.error('Failed to parse package_policies JSON in update:', error);
           parsedPackagePolicies = undefined;
@@ -763,8 +737,6 @@ export class VendorPackageService {
       // Handle package_policies if provided
       if (parsedPackagePolicies && Array.isArray(parsedPackagePolicies)) {
         try {
-          console.log('=== UPDATE PACKAGE POLICIES DEBUG ===');
-          console.log('Received package_policies for update:', package_policies);
           
           // Delete existing package policies
           await this.prisma.packagePolicy.deleteMany({
@@ -798,9 +770,7 @@ export class VendorPackageService {
                 },
               },
             });
-            console.log('Updated package policies successfully');
           }
-          console.log('=== END UPDATE PACKAGE POLICIES DEBUG ===');
         } catch (e) {
           console.error('Failed to update package policies:', e?.message || e);
         }
@@ -902,11 +872,6 @@ export class VendorPackageService {
       if (!existingUser) {
         throw new Error('User not found');
       }
-      // Test URL generation using existing function
-      console.log('=== URL Generation Test ===');
-      console.log('APP_URL:', process.env.APP_URL);
-      const testUrl = this.generateFileUrl('test.jpg', 'package');
-      console.log('Test URL generated:', testUrl);
       
       // Ensure storage directory exists
       this.ensureStorageDirectory();
@@ -934,9 +899,19 @@ export class VendorPackageService {
           
           const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
+          const filePath2 = path.join(
+            appConfig().storageUrl.rootUrl,
+            appConfig().storageUrl.package
+          ) + fileName;
+          
           await SojebStorage.put(filePath, file.buffer);
           package_files.push(fileName);
-          console.log(`📁 Generated filename: ${fileName} from original: ${file.originalname}`);
+          console.log('----------filePath and fileName----------------------');
+          console.log({root: appConfig().storageUrl.rootUrl, package: appConfig().storageUrl.package});
+          
+          console.log({filePath, filePath2});
+          console.log('--------------------------------');
+          
         }
       }
       
@@ -960,16 +935,12 @@ export class VendorPackageService {
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           trip_plans_images.push(fileName);
-          console.log(`📁 Generated filename: ${fileName} from original: ${file.originalname}`);
         }
       }
       
       // Upload room photos
       if (files?.room_photos) {
-        console.log(`Found ${files.room_photos.length} room_photos files to upload`);
         for (const file of files.room_photos) {
-          console.log(`Uploading room photo: ${file.originalname} (${file.size} bytes)`);
-          // Generate unique filename with timestamp and clean name (consistent with package controller)
           const timestamp = Date.now();
           const randomName = Array(16)
             .fill(null)
@@ -987,10 +958,9 @@ export class VendorPackageService {
           await SojebStorage.put(filePath, file.buffer);
           
           room_photos.push(fileName);
-          console.log(`📁 Generated filename: ${fileName} from original: ${file.originalname}`);
         }
       } else {
-        console.log('No room_photos files found in request');
+        
       }
       
       // Upload day-wise trip plan images
@@ -1017,7 +987,7 @@ export class VendorPackageService {
             const filePath = appConfig().storageUrl.package + fileName;
             await SojebStorage.put(filePath, file.buffer);
             day_wise_images[day].push(fileName);
-            console.log(`📁 Generated day ${day} filename: ${fileName} from original: ${file.originalname}`);
+            
           }
         }
       }
@@ -1042,7 +1012,7 @@ export class VendorPackageService {
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           trip_plans_images.push(fileName); // Add to the same array as trip_plans_images
-          console.log(`📁 Generated package_trip_plan_images filename: ${fileName} from original: ${file.originalname}`);
+          
         }
       }
 
@@ -1052,7 +1022,6 @@ export class VendorPackageService {
         const tripPlanImages = files?.[fieldName];
         
         if (tripPlanImages && tripPlanImages.length > 0) {
-          console.log(`📁 Processing ${fieldName} with ${tripPlanImages.length} files`);
           
           for (const file of tripPlanImages) {
             // Generate unique filename with timestamp and clean name
@@ -1072,7 +1041,7 @@ export class VendorPackageService {
             const filePath = appConfig().storageUrl.package + fileName;
             await SojebStorage.put(filePath, file.buffer);
             trip_plans_images.push(fileName); // Add to the same array as trip_plans_images
-            console.log(`📁 Generated ${fieldName} filename: ${fileName} from original: ${file.originalname}`);
+            
           }
         }
       }
@@ -1097,20 +1066,11 @@ export class VendorPackageService {
       if (typeof rawPackagePolicies === 'string') {
         try {
           package_policies = JSON.parse(rawPackagePolicies);
-          console.log('✅ Parsed package_policies from JSON string:', package_policies);
-          console.log('✅ Parsed package_policies length:', package_policies?.length);
         } catch (error) {
-          console.error('❌ Failed to parse package_policies JSON:', error);
           package_policies = undefined;
         }
       } else {
-        console.log('ℹ️ package_policies is not a string, type:', typeof rawPackagePolicies);
       }
-      
-      console.log('🎯 Final package_policies:', package_policies);
-      console.log('🎯 Final package_policies type:', typeof package_policies);
-      console.log('🎯 Final package_policies isArray:', Array.isArray(package_policies));
-      console.log('=== END DTO EXTRACTION DEBUG ===');
       
       // Extract room_photos separately to avoid including it in package data
       let roomPhotosFromDto = (createVendorPackageDto as any).room_photos;
@@ -1120,7 +1080,6 @@ export class VendorPackageService {
         try {
           roomPhotosFromDto = JSON.parse(roomPhotosFromDto);
         } catch (error) {
-          console.log('Failed to parse room_photos string:', error);
           roomPhotosFromDto = [];
         }
       }
@@ -1151,7 +1110,6 @@ export class VendorPackageService {
       for (const key of invalidPackageFields) {
         if (key in cleanPackageData) {
           delete cleanPackageData[key];
-          console.log(`Removed invalid field: ${key}`);
         }
       }
 
@@ -1161,7 +1119,6 @@ export class VendorPackageService {
           const parsedExtra = typeof extra_services === 'string' ? JSON.parse(extra_services) : extra_services;
           (cleanPackageData as any).extra_services = parsedExtra;
         } catch (e) {
-          console.warn('Failed to parse extra_services JSON. Leaving as-is.');
           (cleanPackageData as any).extra_services = extra_services as any;
         }
       }
@@ -1201,16 +1158,6 @@ export class VendorPackageService {
         return value;
       };
       
-      // Clean string fields
-      console.log('Before cleaning:', {
-        type: cleanPackageData.type,
-        duration_type: cleanPackageData.duration_type,
-        name: cleanPackageData.name,
-        description: cleanPackageData.description,
-        price: cleanPackageData.price,
-        package_policies: cleanPackageData.package_policies
-      });
-      
       if (cleanPackageData.type) {
         cleanPackageData.type = cleanStringValue(cleanPackageData.type).toLowerCase();
       }
@@ -1238,15 +1185,6 @@ export class VendorPackageService {
         if (cleanPackageData[field]) {
           cleanPackageData[field] = cleanStringValue(cleanPackageData[field]);
         }
-      });
-      
-      console.log('After cleaning:', {
-        type: cleanPackageData.type,
-        duration_type: cleanPackageData.duration_type,
-        name: cleanPackageData.name,
-        description: cleanPackageData.description,
-        price: cleanPackageData.price,
-        package_policies: cleanPackageData.package_policies
       });
 
       // Coerce numeric scalars to correct types where needed
@@ -1288,14 +1226,6 @@ export class VendorPackageService {
           }
         }
       }
-      
-      console.log('Extracted fields:', {
-        destinations: destinations,
-        trip_plans: trip_plans,
-        package_room_types: package_room_types,
-        package_availabilities: package_availabilities
-      });
-      
       // Parse bedrooms JSON if provided
       if (cleanPackageData.bedrooms && typeof cleanPackageData.bedrooms === 'string') {
         try {
@@ -1305,13 +1235,6 @@ export class VendorPackageService {
           // Keep as string if parsing fails
         }
       }
-      
-      console.log('Extracted DTO data:', {
-        hasPackageRoomTypes: !!package_room_types,
-        packageRoomTypesLength: package_room_types?.length || 0,
-        roomPhotosLength: room_photos.length,
-        packageData: Object.keys(cleanPackageData)
-      });
 
       // Collect nested relations before constructing final data
       const nested: any = {};
@@ -1337,7 +1260,6 @@ export class VendorPackageService {
           let imagesToDistribute: string[] = [];
           if (Object.keys(day_wise_images).length === 0 && trip_plans_images.length > 0) {
             imagesToDistribute = trip_plans_images;
-            console.log('No day-wise images found, distributing general trip_plans_images across days:', imagesToDistribute);
           }
 
           nested.package_trip_plans = {
@@ -1352,7 +1274,6 @@ export class VendorPackageService {
                 const startIndex = index * imagesPerDay;
                 const endIndex = Math.min(startIndex + imagesPerDay, imagesToDistribute.length);
                 dayImages = imagesToDistribute.slice(startIndex, endIndex);
-                console.log(`Day ${dayNumber} getting images:`, dayImages);
               }
               
               return {
@@ -1375,13 +1296,6 @@ export class VendorPackageService {
               };
             })
           };
-          console.log('Creating package_trip_plans with day-wise images:', tripPlansArray.map((plan, index) => ({
-            title: plan.title,
-            day: index + 1,
-            images: day_wise_images[index + 1] || []
-          })));
-          console.log('Full day_wise_images object:', day_wise_images);
-          console.log('Available trip_plans_images:', trip_plans_images);
         }
       }
 
@@ -1398,7 +1312,6 @@ export class VendorPackageService {
         nested.package_trip_plans = {
           create: [normalizedRoot]
         };
-        console.log('Creating package_trip_plans from root fields:', normalizedRoot);
       }
 
       // add extra services JSON directly on package if present
@@ -1459,7 +1372,6 @@ export class VendorPackageService {
       // Explicitly handle country field - set as string to avoid relationship issues
       if (createVendorPackageDto.country) {
         data.country = createVendorPackageDto.country;
-        console.log('Setting country as string:', createVendorPackageDto.country);
       } else if ((createVendorPackageDto as any).country_id) {
         // If country_id is provided, look up the country name and set as string
         try {
@@ -1470,9 +1382,7 @@ export class VendorPackageService {
           
           if (country) {
             data.country = country.name;
-            console.log('Found country name from ID:', country.name);
           } else {
-            console.log('Country ID not found in database. Skipping country field.');
           }
         } catch (error) {
           console.error('Error looking up country by ID:', error);
@@ -1517,7 +1427,6 @@ export class VendorPackageService {
               destination_id: dest.id
             }))
           };
-          console.log('Creating package_destinations:', destinationsArray);
         }
       }
 
@@ -1533,13 +1442,10 @@ export class VendorPackageService {
               // Option 1: Assign all uploaded photos to the first room type
               if (index === 0) {
                 roomPhotos = room_photos;
-                console.log(`Assigning ${room_photos.length} uploaded room photos to first room type: ${roomType.name}`);
               }
               // Option 2: If you want to distribute photos across multiple room types, you can modify this logic
               // For example: assign first 5 photos to first room type, next 5 to second, etc.
             }
-            
-            console.log(`Room type ${index + 1} (${roomType.name}) will have ${roomPhotos.length} photos:`, roomPhotos);
             
             // Parse bedrooms JSON for room type if provided
             let parsedBedrooms = roomType.bedrooms;
@@ -1569,8 +1475,6 @@ export class VendorPackageService {
           })
         };
       } else if (room_photos.length > 0 || roomPhotosFromDto) {
-        // If no room types provided but room_photos are uploaded or provided in DTO, create a default room type
-        console.log('No room types provided, but room photos available. Creating default room type.');
         
         let photosToUse;
         if (room_photos.length > 0) {
@@ -1642,14 +1546,6 @@ export class VendorPackageService {
       // Always require admin approval for vendor-created packages
       data.approved_at = null;
 
-      console.log('Final data object for Prisma:', {
-        hasPackageRoomTypes: !!data.package_room_types,
-        packageRoomTypesData: data.package_room_types,
-        roomPhotosInData: data.package_room_types?.create?.[0]?.room_photos || [],
-        countryField: data.country,
-        dataKeys: Object.keys(data)
-      });
-
       // Compute computed_price before create
       try {
         const basePrice = Number((cleanPackageData as any)?.price ?? 0);
@@ -1661,9 +1557,6 @@ export class VendorPackageService {
       } catch (e) {
         console.error('Failed to precompute computed_price (vendor createWithFiles):', e?.message || e);
       }
-
-      // Create package with nested data
-      console.log('Final data being sent to Prisma:', JSON.stringify(data, null, 2));
       let result = await this.prisma.package.create({
         data,
         include: {
@@ -1703,27 +1596,16 @@ export class VendorPackageService {
 
       // After package creation, optionally create and link PackagePolicy built from dto items
       try {
-        console.log('=== PACKAGE POLICIES DEBUG ===');
-        console.log('Received package_policies:', package_policies);
-        console.log('Type of package_policies:', typeof package_policies);
-        console.log('Is Array?', Array.isArray(package_policies));
         
         let items = [];
         
         // Check if package_policies array is provided directly
         if (package_policies && Array.isArray(package_policies)) {
-          console.log('✅ Using package_policies array directly');
-          console.log('✅ Raw package_policies:', package_policies);
-          console.log('✅ Raw package_policies length:', package_policies.length);
           
           items = package_policies.filter(
             (policy) => policy.title && policy.description && policy.description.trim() !== ''
           );
-          console.log('✅ Filtered items from package_policies array:', items);
-          console.log('✅ Filtered items length:', items.length);
         } else {
-          console.log('Using fallback individual fields');
-          // Fallback to individual fields for backward compatibility
           items = [
             { title: 'transportation', description: (createVendorPackageDto as any)?.transportation },
             { title: 'meals', description: (createVendorPackageDto as any)?.meals },
@@ -1731,22 +1613,16 @@ export class VendorPackageService {
             { title: 'add_ons', description: (createVendorPackageDto as any)?.addOns },
             { title: 'cancellation_policy', description: (createVendorPackageDto as any)?.cancellation_policy },
           ].filter((i) => typeof i.description === 'string' && i.description.trim() !== '');
-          console.log('Filtered items from individual fields:', items);
         }
-
-        console.log('Final items to save:', items);
-        console.log('Items length:', items.length);
 
         const policyDescription = (createVendorPackageDto as any)?.policy_description;
         if (items.length > 0 || (typeof policyDescription === 'string' && policyDescription.trim() !== '')) {
-          console.log('Creating PackagePolicy with items:', items);
           const createdPolicy = await this.prisma.packagePolicy.create({
             data: {
               description: policyDescription ?? null,
               package_policies: items as any,
             },
           });
-          console.log('Created PackagePolicy:', createdPolicy);
           
           await this.prisma.package.update({
             where: { id: result.id },
@@ -1756,11 +1632,8 @@ export class VendorPackageService {
               },
             },
           });
-          console.log('Linked PackagePolicy to Package');
         } else {
-          console.log('No items to save, skipping PackagePolicy creation');
         }
-        console.log('=== END PACKAGE POLICIES DEBUG ===');
       } catch (e) {
         console.error('Failed to create/link PackagePolicy:', e?.message || e);
         console.error('Full error:', e);
@@ -1808,9 +1681,6 @@ export class VendorPackageService {
           take: 5,
           orderBy: { date: 'asc' }
         });
-        console.log('=== Calendar Verification ===');
-        console.log('Calendar records created:', calendarRecords.length);
-        console.log('Sample calendar records:', calendarRecords);
       }
 
       // Get calendar configuration
@@ -1830,39 +1700,24 @@ export class VendorPackageService {
           file_url: this.generateFileUrl(file.file, 'package'),
         })),
         package_room_types: (result.package_room_types || []).map((roomType) => {
-          console.log('Processing room type:', roomType.name);
-          console.log('Original room_photos:', roomType.room_photos);
-          console.log('Environment check:', {
-            APP_URL: process.env.APP_URL,
-            publicUrl: appConfig().storageUrl.rootUrlPublic,
-            packagePath: appConfig().storageUrl.package
-          });
           
           let processedRoomPhotos = roomType.room_photos;
           if (Array.isArray(roomType.room_photos)) {
             processedRoomPhotos = roomType.room_photos.map((photo: any) => {
-              console.log('Processing photo:', photo);
               if (typeof photo === 'string') {
                 const photoUrl = this.generateFileUrl(photo, 'package');
-                console.log('Generated URL for photo:', photoUrl);
                 return photoUrl;
               }
               return photo;
             });
           }
           
-          console.log('Processed room_photos:', processedRoomPhotos);
           return { ...roomType, room_photos: processedRoomPhotos };
         }),
         package_trip_plans: (result.package_trip_plans || []).map(tripPlan => ({
           ...tripPlan,
           package_trip_plan_images: tripPlan.package_trip_plan_images.map(image => {
             const imageUrl = this.generateFileUrl(image.image, 'package');
-            console.log('Processing createWithFiles trip plan image:', {
-              originalImage: image.image,
-              generatedUrl: imageUrl,
-              storagePath: appConfig().storageUrl.package
-            });
             return {
               ...image,
               image_url: imageUrl
@@ -1884,7 +1739,6 @@ export class VendorPackageService {
       // Generate full URLs for room_photos in the return value
       const roomPhotosWithUrls = room_photos.map(filename => {
         const fullUrl = this.generateFileUrl(filename, 'package');
-        console.log(`Generated full URL for room photo: ${filename} -> ${fullUrl}`);
         return fullUrl;
       });
 
@@ -1971,7 +1825,7 @@ export class VendorPackageService {
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           package_files.push(fileName);
-          console.log(`📁 Generated filename: ${fileName} from original: ${file.originalname}`);
+          
         }
       }
       
@@ -1995,7 +1849,7 @@ export class VendorPackageService {
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           trip_plans_images.push(fileName);
-          console.log(`📁 Generated filename: ${fileName} from original: ${file.originalname}`);
+          
         }
       }
 
@@ -2019,7 +1873,7 @@ export class VendorPackageService {
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           trip_plans_images.push(fileName); // Add to the same array as trip_plans_images
-          console.log(`📁 Generated package_trip_plan_images filename: ${fileName} from original: ${file.originalname}`);
+          
         }
       }
 
@@ -2029,7 +1883,6 @@ export class VendorPackageService {
         const tripPlanImages = files?.[fieldName];
         
         if (tripPlanImages && tripPlanImages.length > 0) {
-          console.log(`📁 Processing ${fieldName} with ${tripPlanImages.length} files`);
           
           for (const file of tripPlanImages) {
             // Generate unique filename with timestamp and clean name
@@ -2049,16 +1902,14 @@ export class VendorPackageService {
             const filePath = appConfig().storageUrl.package + fileName;
             await SojebStorage.put(filePath, file.buffer);
             trip_plans_images.push(fileName); // Add to the same array as trip_plans_images
-            console.log(`📁 Generated ${fieldName} filename: ${fileName} from original: ${file.originalname}`);
+            
           }
         }
       }
       
       // Upload room photos
       if (files?.room_photos) {
-        console.log(`PUT Update - Found ${files.room_photos.length} room_photos files to upload`);
         for (const file of files.room_photos) {
-          console.log(`PUT Update - Uploading room photo: ${file.originalname} (${file.size} bytes)`);
           // Generate unique filename with timestamp and clean name (consistent with package controller)
           const timestamp = Date.now();
           const randomName = Array(16)
@@ -2076,17 +1927,9 @@ export class VendorPackageService {
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
           room_photos.push(fileName);
-          console.log(`PUT Update - Successfully uploaded room photo: ${fileName}`);
         }
       } else {
-        console.log('PUT Update - No room_photos files found in request');
       }
-
-      console.log('PUT Update - Files uploaded:', { 
-        package_files, 
-        trip_plans_images, 
-        room_photos 
-      });
 
       // Extract nested data from DTO
       const { package_room_types, package_availabilities, ...packageData } = updateVendorPackageDto;
@@ -2142,13 +1985,6 @@ export class VendorPackageService {
           // Keep as string if parsing fails
         }
       }
-      
-      console.log('PUT Update - Extracted DTO data:', {
-        hasPackageRoomTypes: !!package_room_types,
-        packageRoomTypesLength: package_room_types?.length || 0,
-        roomPhotosLength: room_photos.length,
-        packageData: Object.keys(normalizedPackageData)
-      });
 
       // Build the data object for Prisma
       const data: any = {
@@ -2188,13 +2024,11 @@ export class VendorPackageService {
               // Option 1: Assign all uploaded photos to the first room type
               if (index === 0) {
                 roomPhotos = room_photos;
-                console.log(`PUT Update - Assigning ${room_photos.length} uploaded room photos to first room type: ${roomType.name}`);
               }
               // Option 2: If you want to distribute photos across multiple room types, you can modify this logic
               // For example: assign first 5 photos to first room type, next 5 to second, etc.
             }
             
-            console.log(`PUT Update - Room type ${index + 1} (${roomType.name}) will have ${roomPhotos.length} photos:`, roomPhotos);
             
             // Parse bedrooms JSON for room type if provided
             let parsedBedrooms = roomType.bedrooms;
@@ -2224,8 +2058,6 @@ export class VendorPackageService {
           })
         };
       } else if (room_photos.length > 0) {
-        // If no room types provided but room_photos are uploaded, create a default room type
-        console.log('PUT Update - No room types provided, but room photos uploaded. Creating default room type.');
         data.package_room_types = {
           deleteMany: {}, // Delete existing room types
           create: [{
@@ -2292,7 +2124,6 @@ export class VendorPackageService {
       if (typeof normalizedPackageData.package_policies === 'string') {
         try {
           parsedPackagePolicies = JSON.parse(normalizedPackageData.package_policies);
-          console.log('Parsed package_policies from JSON string in updateWithFiles:', parsedPackagePolicies);
         } catch (error) {
           console.error('Failed to parse package_policies JSON in updateWithFiles:', error);
           parsedPackagePolicies = undefined;
@@ -2302,9 +2133,6 @@ export class VendorPackageService {
       // Handle package_policies if provided in updateWithFiles
       if (parsedPackagePolicies && Array.isArray(parsedPackagePolicies)) {
         try {
-          console.log('=== UPDATE WITH FILES PACKAGE POLICIES DEBUG ===');
-          console.log('Received package_policies for updateWithFiles:', normalizedPackageData.package_policies);
-          
           // Delete existing package policies
           await this.prisma.packagePolicy.deleteMany({
             where: {
@@ -2337,9 +2165,7 @@ export class VendorPackageService {
                 },
               },
             });
-            console.log('Updated package policies successfully in updateWithFiles');
           }
-          console.log('=== END UPDATE WITH FILES PACKAGE POLICIES DEBUG ===');
         } catch (e) {
           console.error('Failed to update package policies in updateWithFiles:', e?.message || e);
         }
@@ -2359,23 +2185,17 @@ export class VendorPackageService {
           file_url: this.generateFileUrl(file.file, 'package'),
         })),
         package_room_types: (result.package_room_types || []).map((roomType) => {
-          console.log('PUT Update - Processing room type:', roomType.name);
-          console.log('PUT Update - Original room_photos:', roomType.room_photos);
           
           let processedRoomPhotos = roomType.room_photos;
           if (Array.isArray(roomType.room_photos)) {
             processedRoomPhotos = roomType.room_photos.map((photo: any) => {
-              console.log('PUT Update - Processing photo:', photo);
               if (typeof photo === 'string') {
                 const photoUrl = this.generateFileUrl(photo, 'package');
-                console.log('PUT Update - Generated URL for photo:', photoUrl);
                 return photoUrl;
               }
               return photo;
             });
           }
-          
-          console.log('PUT Update - Processed room_photos:', processedRoomPhotos);
           return { ...roomType, room_photos: processedRoomPhotos };
         }),
         user: result.user
@@ -3295,8 +3115,6 @@ export class VendorPackageService {
           room_type_id: null
         }
       });
-      
-      console.log('Calendar configuration stored:', configRecord);
       return configRecord;
     } catch (error) {
       console.error('Failed to store calendar configuration:', error);
@@ -3333,13 +3151,6 @@ export class VendorPackageService {
     closeDateRanges?: Array<{start_date: Date; end_date: Date; reason?: string}>
   ) {
     try {
-      console.log('=== Calendar Initialization Debug ===');
-      console.log('Package ID:', packageId);
-      console.log('Start Date:', startDate);
-      console.log('End Date:', endDate);
-      console.log('Close Dates:', closeDates);
-      console.log('Close Date Ranges:', closeDateRanges);
-
       // Use provided dates or default to next 12 months
       const calendarStart = startDate || new Date();
       const calendarEnd = endDate || (() => {
@@ -3348,11 +3159,7 @@ export class VendorPackageService {
         return end;
       })();
 
-      console.log('Calendar Start:', calendarStart);
-      console.log('Calendar End:', calendarEnd);
-
       const dates = this.generateDateRange(calendarStart, calendarEnd);
-      console.log('Generated dates count:', dates.length);
       
       // Create calendar data with close dates
       const calendarData = dates.map(date => {
@@ -3396,23 +3203,10 @@ export class VendorPackageService {
         };
       });
 
-      console.log('Calendar data prepared:', calendarData.length, 'records');
-      console.log('Sample calendar data:', calendarData.slice(0, 3));
-
       // Batch insert PropertyCalendar records
       const result = await this.prisma.propertyCalendar.createMany({
         data: calendarData
       });
-
-      console.log('PropertyCalendar createMany result:', result);
-      console.log(`Calendar initialized for package ${packageId} with ${dates.length} dates`);
-      
-      if (closeDates && closeDates.length > 0) {
-        console.log(`Closed ${closeDates.length} specific dates`);
-      }
-      if (closeDateRanges && closeDateRanges.length > 0) {
-        console.log(`Closed ${closeDateRanges.length} date ranges`);
-      }
     } catch (error) {
       console.error('Failed to initialize calendar:', error);
       console.error('Error details:', {
