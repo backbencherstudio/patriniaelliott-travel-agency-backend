@@ -40,24 +40,17 @@ export class PackageController {
    * Ensure storage directories exist
    */
   private ensureStorageDirectories() {
-    try {
-      console.log('🔍 [STORAGE DEBUG] ensureStorageDirectories called...');
-      console.log('🔍 [STORAGE DEBUG] NODE_ENV:', process.env.NODE_ENV);
-      console.log('🔍 [STORAGE DEBUG] process.cwd():', process.cwd());
+    try {     
       
       const storagePath = process.env.NODE_ENV === 'production' 
-              ? path.join(process.cwd(), 'public', 'storage', 'package')  // Production: /usr/src/app/public/storage/package (Docker container)
+              ? path.join(process.cwd(), '..', 'public', 'storage', 'package')  // Production: /usr/src/app/public/storage/package (go up from dist to public)
               : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
       
-      console.log('🔍 [STORAGE DEBUG] Resolved storagePath:', storagePath);
-      console.log('🔍 [STORAGE DEBUG] Storage path exists:', fs.existsSync(storagePath));
+      
       
       if (!fs.existsSync(storagePath)) {
-        console.log('🔍 [STORAGE DEBUG] Creating storage directory...');
         fs.mkdirSync(storagePath, { recursive: true });
-        console.log('✅ [STORAGE DEBUG] Created storage directory:', storagePath);
       } else {
-        console.log('✅ [STORAGE DEBUG] Storage directory already exists:', storagePath);
       }
       
       // Test write permissions
@@ -65,7 +58,6 @@ export class PackageController {
         const testFile = path.join(storagePath, 'test-write.txt');
         fs.writeFileSync(testFile, 'test');
         fs.unlinkSync(testFile);
-        console.log('✅ [STORAGE DEBUG] Write permissions test: SUCCESS');
       } catch (writeError) {
         console.error('❌ [STORAGE DEBUG] Write permissions test: FAILED', writeError);
       }
@@ -85,7 +77,7 @@ export class PackageController {
   }) {
     try {
       const storagePath = process.env.NODE_ENV === 'production' 
-              ? path.join(process.cwd(), 'public', 'storage', 'package')  // Production: /usr/src/app/public/storage/package (Docker container)
+              ? path.join(process.cwd(), '..', 'public', 'storage', 'package')  // Production: /usr/src/app/public/storage/package (go up from dist to public)
               : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
       
       if (files.package_files) {
@@ -93,7 +85,6 @@ export class PackageController {
           const filePath = path.join(storagePath, file.filename);
           if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
-            console.log('Cleaned up package file:', file.filename);
           }
         }
       }
@@ -103,7 +94,6 @@ export class PackageController {
           const filePath = path.join(storagePath, file.filename);
           if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
-            console.log('Cleaned up trip plan image:', file.filename);
           }
         }
       }
@@ -122,25 +112,11 @@ export class PackageController {
       // Add URLs to package files
       if (packageData.package_files && packageData.package_files.length > 0) {
         packageData.package_files.forEach((file, index) => {
-          if (file.file) {
-            console.log(`📄 File ${index + 1}:`, {
-              id: file.id,
-              filename: file.file,
-              filenameLength: file.file.length,
-              originalName: file.file_alt,
-              type: file.type
-            });
-            
-            // Check if filename is truncated
-            if (file.file.length < 10) {
-              console.log(`⚠️  WARNING: Filename seems too short: "${file.file}"`);
-            }
-            
+          if (file.file) {         
             // Encode the filename to handle special characters and spaces
             const encodedFilename = encodeURIComponent(file.file);
             file.file_url = `${baseUrl}/public/storage/package/${encodedFilename}`;
           } else {
-            console.log(`⚠️  File ${index + 1} missing file property:`, file);
           }
         });
       }
@@ -151,18 +127,11 @@ export class PackageController {
           if (tripPlan.package_trip_plan_images && tripPlan.package_trip_plan_images.length > 0) {
             tripPlan.package_trip_plan_images.forEach((image, imgIndex) => {
               if (image.image) {
-                console.log(`📸 Trip plan ${tripIndex + 1} image ${imgIndex + 1}:`, {
-                  id: image.id,
-                  filename: image.image,
-                  tripPlanTitle: tripPlan.title
-                });
                 
                 // Encode the filename to handle special characters and spaces
                 const encodedFilename = encodeURIComponent(image.image);
                 image.image_url = `${baseUrl}/public/storage/package/${encodedFilename}`;
-                console.log(`🖼️  Generated URL for trip plan image: ${image.image} -> ${image.image_url}`);
               } else {
-                console.log(`⚠️  Trip plan ${tripIndex + 1} image ${imgIndex + 1} missing image property:`, image);
               }
             });
           }
@@ -183,42 +152,24 @@ export class PackageController {
   @UseInterceptors(
     AnyFilesInterceptor({
       storage: diskStorage({
-        destination: (req, file, cb) => {
-            // DEBUG: Multer destination callback logging
-            console.log('🔍 [MULTER DEBUG] Destination callback called...');
-            console.log('🔍 [MULTER DEBUG] NODE_ENV:', process.env.NODE_ENV);
-            console.log('🔍 [MULTER DEBUG] process.cwd():', process.cwd());
-            console.log('🔍 [MULTER DEBUG] File info:', {
-              fieldname: file.fieldname,
-              originalname: file.originalname,
-              mimetype: file.mimetype,
-              size: file.size
-            });
+        destination: (req, file, cb) => {        
             
             // Ensure storage directories exist
             const storagePath = process.env.NODE_ENV === 'production' 
-              ? path.join(process.cwd(), 'public', 'storage', 'package')  // Production: /usr/src/app/public/storage/package (Docker container)
+              ? path.join(process.cwd(), '..', 'public', 'storage', 'package')  // Production: /usr/src/app/public/storage/package (go up from dist to public)
               : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
             
-            console.log('🔍 [MULTER DEBUG] Resolved storagePath:', storagePath);
-            console.log('🔍 [MULTER DEBUG] Storage path exists:', fs.existsSync(storagePath));
             
             try {
               if (!fs.existsSync(storagePath)) {
-                console.log('🔍 [MULTER DEBUG] Creating directory:', storagePath);
                 fs.mkdirSync(storagePath, { recursive: true });
-                console.log('✅ [MULTER DEBUG] Directory created successfully');
               } else {
-                console.log('✅ [MULTER DEBUG] Directory already exists');
               }
               
               // Test write permissions
               const testFile = path.join(storagePath, 'test-write-permission.txt');
               fs.writeFileSync(testFile, 'test');
               fs.unlinkSync(testFile);
-              console.log('✅ [MULTER DEBUG] Write permissions: OK');
-              
-              console.log('🔍 [MULTER DEBUG] Calling callback with storagePath:', storagePath);
               cb(null, storagePath);
             } catch (error) {
               console.error('❌ [MULTER DEBUG] Error in destination callback:', error);
@@ -241,9 +192,6 @@ export class PackageController {
               .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
             
             const filename = `${timestamp}_${randomName}_${cleanOriginalName}`;
-            console.log('🔍 [MULTER FILENAME DEBUG] Generated filename:', filename);
-            console.log('🔍 [MULTER FILENAME DEBUG] Original filename:', file.originalname);
-            console.log('🔍 [MULTER FILENAME DEBUG] Calling callback with filename:', filename);
             cb(null, filename);
           },
         }),
@@ -276,14 +224,7 @@ export class PackageController {
     uploadedFiles: Express.Multer.File[],
   ) {
     try {
-      // DEBUG: Log request details
-      console.log('🔍 [PACKAGE CREATE DEBUG] Starting package creation...');
-      console.log('🔍 [PACKAGE CREATE DEBUG] Files received (raw count):', Array.isArray(uploadedFiles) ? uploadedFiles.length : 0);
-      console.log('🔍 [PACKAGE CREATE DEBUG] Package data:', {
-        name: createPackageDto.name,
-        type: createPackageDto.type,
-        price: createPackageDto.price
-      });
+      
       
       // Ensure storage directories exist
       this.ensureStorageDirectories();
@@ -379,9 +320,11 @@ export class PackageController {
       
       // Clean up uploaded files on error
       try {
-        const storagePath = process.env.NODE_ENV === 'production' 
-          ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')
-          : path.join(process.cwd(), 'public', 'storage', 'package');
+        const storagePath = path.join(process.cwd(), 'public', 'storage', 'package');
+        console.log('-----------storagePath---------------------');
+        console.log(storagePath);
+        console.log('--------------------------------');
+        
         if (Array.isArray(uploadedFiles)) {
           for (const f of uploadedFiles) {
             const filePath = path.join(storagePath, f.filename);
@@ -423,7 +366,6 @@ export class PackageController {
       // Add full URLs to images for all packages
       if (packages.success && packages.data && Array.isArray(packages.data)) {
         packages.data = packages.data.map(pkg => this.addImageUrls(pkg));
-        console.log(`🖼️  Added image URLs to ${packages.data.length} packages`);
       }
 
       return packages;
@@ -480,37 +422,12 @@ export class PackageController {
       if (query.status !== undefined) {
         where_condition.status = parseInt(query.status.toString());
       }
-
-      console.log('🔍 [DEBUG] Pagination params:', {
-        page,
-        limit,
-        skip,
-        sort_by: validSortBy,
-        sort_order,
-        user_id,
-        where_condition
-      });
-
-      console.log('🔍 [DEBUG] Service method exists:', typeof this.packageService.findAllWithPagination);
       
-      // First, let's test if we can get any packages at all
-      console.log('🔍 [DEBUG] Testing basic package retrieval...');
       const testPackages = await this.packageService.findAll(user_id, null, {}, { user_id, deleted_at: null });
-      console.log('🔍 [DEBUG] Test packages result:', {
-        success: testPackages.success,
-        dataLength: testPackages.data?.length || 0,
-        message: testPackages.message || 'No message'
-      });
       
       // If no packages found, let's try without the deleted_at filter
       if (testPackages.success && testPackages.data?.length === 0) {
-        console.log('🔍 [DEBUG] No packages found with deleted_at filter, trying without...');
         const testPackages2 = await this.packageService.findAll(user_id, null, {}, { user_id });
-        console.log('🔍 [DEBUG] Test packages result (no deleted_at filter):', {
-          success: testPackages2.success,
-          dataLength: testPackages2.data?.length || 0,
-          message: testPackages2.message || 'No message'
-        });
       }
 
       // Try the pagination method first, fallback to regular findAll if it fails
@@ -530,8 +447,6 @@ export class PackageController {
           }
         );
       } catch (paginationError) {
-        console.log('🔍 [DEBUG] Pagination method failed, falling back to regular findAll:', paginationError);
-        
         // Fallback to regular findAll and add pagination manually
         const allPackages = await this.packageService.findAll(user_id, null, filters, where_condition);
         
@@ -565,17 +480,9 @@ export class PackageController {
         }
       }
 
-      console.log('🔍 [DEBUG] Service response:', {
-        success: packages.success,
-        dataLength: packages.success ? (packages as any).data?.length || 0 : 0,
-        hasPagination: packages.success ? !!(packages as any).pagination : false,
-        pagination: packages.success ? (packages as any).pagination : null
-      });
-
       // Add full URLs to images for all packages
       if (packages.success && (packages as any).data && Array.isArray((packages as any).data)) {
         (packages as any).data = (packages as any).data.map((pkg: any) => this.addImageUrls(pkg));
-        console.log(`🖼️  Added image URLs to ${(packages as any).data.length} packages for user ${user_id}`);
       }
 
       return packages;
@@ -678,41 +585,22 @@ export class PackageController {
     AnyFilesInterceptor({
       storage: diskStorage({
         destination: (req, file, cb) => {
-            // DEBUG: Multer destination callback logging
-            console.log('🔍 [MULTER DEBUG] Destination callback called...');
-            console.log('🔍 [MULTER DEBUG] NODE_ENV:', process.env.NODE_ENV);
-            console.log('🔍 [MULTER DEBUG] process.cwd():', process.cwd());
-            console.log('🔍 [MULTER DEBUG] File info:', {
-              fieldname: file.fieldname,
-              originalname: file.originalname,
-              mimetype: file.mimetype,
-              size: file.size
-            });
             
             // Ensure storage directories exist
             const storagePath = process.env.NODE_ENV === 'production' 
-              ? path.join(process.cwd(), 'public', 'storage', 'package')  // Production: /usr/src/app/public/storage/package (Docker container)
-              : path.join(process.cwd(), 'public', 'storage', 'package')         // Development: /project/public/storage/package;
-            
-            console.log('🔍 [MULTER DEBUG] Resolved storagePath:', storagePath);
-            console.log('🔍 [MULTER DEBUG] Storage path exists:', fs.existsSync(storagePath));
+              ? path.join(process.cwd(), '..', 'public', 'storage', 'package')  // Production: /usr/src/app/public/storage/package (go up from dist to public)
+              : path.join(process.cwd(), 'public', 'storage', 'package')
             
             try {
               if (!fs.existsSync(storagePath)) {
-                console.log('🔍 [MULTER DEBUG] Creating directory:', storagePath);
                 fs.mkdirSync(storagePath, { recursive: true });
-                console.log('✅ [MULTER DEBUG] Directory created successfully');
               } else {
-                console.log('✅ [MULTER DEBUG] Directory already exists');
               }
               
               // Test write permissions
               const testFile = path.join(storagePath, 'test-write-permission.txt');
               fs.writeFileSync(testFile, 'test');
               fs.unlinkSync(testFile);
-              console.log('✅ [MULTER DEBUG] Write permissions: OK');
-              
-              console.log('🔍 [MULTER DEBUG] Calling callback with storagePath:', storagePath);
               cb(null, storagePath);
             } catch (error) {
               console.error('❌ [MULTER DEBUG] Error in destination callback:', error);
@@ -735,9 +623,6 @@ export class PackageController {
               .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
             
             const filename = `${timestamp}_${randomName}_${cleanOriginalName}`;
-            console.log('🔍 [MULTER FILENAME DEBUG] Generated filename:', filename);
-            console.log('🔍 [MULTER FILENAME DEBUG] Original filename:', file.originalname);
-            console.log('🔍 [MULTER FILENAME DEBUG] Calling callback with filename:', filename);
             cb(null, filename);
           },
         }),
@@ -814,8 +699,8 @@ export class PackageController {
       // Clean up uploaded files on error
       try {
         const storagePath = process.env.NODE_ENV === 'production' 
-          ? path.join(process.cwd(), 'dist', 'public', 'storage', 'package')
-          : path.join(process.cwd(), 'public', 'storage', 'package');
+          ? path.join(process.cwd(), '..', 'public', 'storage', 'package')  // Production: /usr/src/app/public/storage/package (go up from dist to public)
+          : path.join(process.cwd(), 'public', 'storage', 'package');         // Development: /project/public/storage/package;
         if (Array.isArray(uploadedFiles)) {
           for (const f of uploadedFiles) {
             const filePath = path.join(storagePath, f.filename);

@@ -67,22 +67,15 @@ export class LocalAdapter implements IStorage {
    */
   async put(key: string, value: any) {
     try {
-      console.log('🔍 [LOCAL ADAPTER DEBUG] put() called with:', { key, valueType: typeof value });
-      console.log('🔍 [LOCAL ADAPTER DEBUG] path object:', path);
-      console.log('🔍 [LOCAL ADAPTER DEBUG] this._config.connection.rootUrl:', this._config.connection.rootUrl);
-      
       const filePath = path.join(this._config.connection.rootUrl, key);
-      console.log('🔍 [LOCAL ADAPTER DEBUG] Generated filePath:', filePath);
       
       const dirPath = path.dirname(filePath);
-      console.log('🔍 [LOCAL ADAPTER DEBUG] Generated dirPath:', dirPath);
-      
-      console.log('🔍 [LOCAL ADAPTER DEBUG] Creating directory:', dirPath);
       await fs.mkdir(dirPath, { recursive: true });
+      console.log('-----------dirPath---------------------');
+      console.log({filePath});
+      console.log('--------------------------------');
       
-      console.log('🔍 [LOCAL ADAPTER DEBUG] Writing file:', filePath);
       await fs.writeFile(filePath, value);
-      console.log('🔍 [LOCAL ADAPTER DEBUG] File written successfully:', filePath);
     } catch (err) {
       console.error('🔍 [LOCAL ADAPTER ERROR] put() failed:', err);
       throw err;
