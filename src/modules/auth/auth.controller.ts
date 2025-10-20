@@ -50,7 +50,6 @@ export class AuthController {
   @ApiOperation({ summary: 'Register a user' })
   @Post('register')
   async create(@Body() data: CreateUserDto) {
-    console.log(data);
     try {
       const name = data.name;
       // const first_name = data.first_name;
