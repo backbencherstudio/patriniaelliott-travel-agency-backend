@@ -3,7 +3,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { SojebStorage } from '../../../common/lib/Disk/SojebStorage';
 import appConfig from '../../../config/app.config';
 import { CreateReviewDto } from './dto/create-review.dto';
-import { MessageGateway } from '../../../modules/chat/message/message.gateway';
+import { NotificationGateway } from '../notification/notification.gateway';
 import { NotificationRepository } from '../../../common/repository/notification/notification.repository';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { SearchPackagesDto } from '../../admin/vendor-package/dto/search-packages.dto';
@@ -14,7 +14,7 @@ import { packageSearchQuerySchema } from '@/src/utils/query-validation';
 export class PackageService {
   constructor(
     private prisma: PrismaService,
-    private readonly messageGateway: MessageGateway,
+    private readonly notificationGateway: NotificationGateway,
   ) { }
 
   async searchPackages(searchDto: SearchPackagesDto) {
@@ -2132,16 +2132,16 @@ export class PackageService {
       }
 
       // check if user has review
-      const review = await this.prisma.review.findFirst({
+      const existingReview = await this.prisma.review.findFirst({
         where: { user_id: user_id, package_id: package_id },
       });
-      if (review) {
+      if (existingReview) {
         return {
           success: false,
           message: 'You have already reviewed this package',
         };
       }
-      await this.prisma.review.create({
+      const review = await this.prisma.review.create({
         data: {
           ...data,
           package_id: package_id,
@@ -2149,21 +2149,36 @@ export class PackageService {
         },
       });
 
-      // notify the user that the package is reviewed
-      await NotificationRepository.createNotification({
-        sender_id: user_id,
-        receiver_id: packageRecord.user_id,
-        text: 'Your package has been reviewed',
-        type: 'review',
-        entity_id: package_id,
+      // Create notifications using new repository method
+      await NotificationRepository.createFeedbackNotification({
+        review_id: review.id,
+        package_id: package_id,
+        user_id: user_id,
+        vendor_id: packageRecord.user_id,
       });
 
-      this.messageGateway.server.emit('notification', {
-        sender_id: user_id,
-        receiver_id: packageRecord.user_id,
-        text: 'Your package has been reviewed',
+      // Send real-time notifications
+      // Notify vendor
+      this.notificationGateway.server.emit('sendNotification', {
+        userId: packageRecord.user_id,
         type: 'review',
-        entity_id: package_id,
+        message: 'New feedback on your package',
+        data: review
+      });
+
+      // Get and notify all admins
+      const adminUsers = await this.prisma.user.findMany({
+        where: { type: 'admin' },
+        select: { id: true }
+      });
+      
+      adminUsers.forEach(admin => {
+        this.notificationGateway.server.emit('sendNotification', {
+          userId: admin.id,
+          type: 'review',
+          message: 'New feedback received',
+          data: review
+        });
       });
 
       return {
@@ -2214,28 +2229,43 @@ export class PackageService {
           message: 'You have not reviewed this package',
         };
       }
-      await this.prisma.review.update({
+      const updatedReview = await this.prisma.review.update({
         where: { id: review_id },
         data: {
           ...data,
         },
       });
 
-      // notify the user that the package is reviewed
-      await NotificationRepository.createNotification({
-        sender_id: user_id,
-        receiver_id: packageRecord.user_id,
-        text: 'Your package has been reviewed',
-        type: 'review',
-        entity_id: package_id,
+      // Create notifications using new repository method
+      await NotificationRepository.createFeedbackNotification({
+        review_id: updatedReview.id,
+        package_id: package_id,
+        user_id: user_id,
+        vendor_id: packageRecord.user_id,
       });
 
-      this.messageGateway.server.emit('notification', {
-        sender_id: user_id,
-        receiver_id: packageRecord.user_id,
-        text: 'Your package has been reviewed',
+      // Send real-time notifications
+      // Notify vendor
+      this.notificationGateway.server.emit('sendNotification', {
+        userId: packageRecord.user_id,
         type: 'review',
-        entity_id: package_id,
+        message: 'Feedback updated on your package',
+        data: updatedReview
+      });
+
+      // Get and notify all admins
+      const adminUsers = await this.prisma.user.findMany({
+        where: { type: 'admin' },
+        select: { id: true }
+      });
+      
+      adminUsers.forEach(admin => {
+        this.notificationGateway.server.emit('sendNotification', {
+          userId: admin.id,
+          type: 'review',
+          message: 'Feedback updated',
+          data: updatedReview
+        });
       });
 
       return {

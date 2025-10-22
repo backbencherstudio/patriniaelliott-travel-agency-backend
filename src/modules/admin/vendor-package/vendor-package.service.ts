@@ -34,7 +34,67 @@ export class VendorPackageService {
       fs.mkdirSync(storagePath, { recursive: true });
     }
   }
-
+  private computeEffectivePrice(date: Date, rules: {
+    base_price: number;
+    weekend_price: number;
+    flat_discount: number;
+    weekend_days: number[];
+  }): number {
+    const day = date.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const isWeekend = rules.weekend_days.includes(day);
+    const rawPrice = isWeekend ? rules.weekend_price : rules.base_price;
+    const finalPrice = Math.max(0, rawPrice - rules.flat_discount);
+    return finalPrice;
+  }
+  private async initializePropertyCalendarWithPricing(
+    packageId: string, 
+    userId: string,
+    pricingRules?: any,
+    calendarInitMonth?: string
+  ) {
+    try {
+      let startDate: Date;
+      let endDate: Date;
+  
+      if (calendarInitMonth) {
+        // Initialize specific month (e.g., "2025-10")
+        const [year, monthNum] = calendarInitMonth.split('-').map(Number);
+        startDate = new Date(year, monthNum - 1, 1);
+        endDate = new Date(year, monthNum, 0); // Last day of month
+      } else {
+        // Default: next 12 months
+        startDate = new Date();
+        endDate = new Date();
+        endDate.setMonth(endDate.getMonth() + 12);
+      }
+  
+      const dates = this.generateDateRange(startDate, endDate);
+      
+      const calendarData = dates.map(date => ({
+        package_id: packageId,
+        date: date,
+        status: 'available' as const,
+        reason: null,
+        room_type_id: null,
+        price: pricingRules ? this.computeEffectivePrice(date, {
+          base_price: pricingRules.base_price,
+          weekend_price: pricingRules.weekend_price,
+          flat_discount: pricingRules.flat_discount,
+          weekend_days: pricingRules.weekend_days,
+        }) : null,
+      }));
+  
+      // Batch insert PropertyCalendar records
+      await this.prisma.propertyCalendar.createMany({
+        data: calendarData
+      });
+  
+      console.log(`✅ Calendar initialized with pricing for ${dates.length} dates`);
+    } catch (error) {
+      console.error('❌ Failed to initialize calendar with pricing:', error);
+      // Don't throw to avoid breaking package creation
+    }
+  }
   // Use SojebStorage.url() for generating file URLs
   private generateFileUrl(filePath: string, type: 'package' | 'avatar' = 'package'): string {
     const storagePath = type === 'package' ? appConfig().storageUrl.package : appConfig().storageUrl.avatar;
@@ -905,12 +965,7 @@ export class VendorPackageService {
           ) + fileName;
           
           await SojebStorage.put(filePath, file.buffer);
-          package_files.push(fileName);
-          console.log('----------filePath and fileName----------------------');
-          console.log({root: appConfig().storageUrl.rootUrl, package: appConfig().storageUrl.package});
-          
-          console.log({filePath, filePath2});
-          console.log('--------------------------------');
+          package_files.push(fileName);        
           
         }
       }
@@ -1058,6 +1113,8 @@ export class VendorPackageService {
         destinations,
         trip_plans,
         package_policies: rawPackagePolicies,
+        pricing_rules,
+        calendar_init_month,
         ...packageData 
       } = createVendorPackageDto;
       
@@ -1361,6 +1418,12 @@ export class VendorPackageService {
       if ('policy_description' in data) {
         delete data.policy_description;
       }
+      if ('pricing_rules' in data) {
+        delete data.pricing_rules;
+      }
+      if ('calendar_init_month' in data) {
+        delete data.calendar_init_month;
+      }
 
       // Normalize bedrooms only (do not use total_bedrooms scalar on Package)
       try {
@@ -1418,7 +1481,6 @@ export class VendorPackageService {
           const invalidIds = destinationIds.filter(id => !existingIds.includes(id));
           
           if (invalidIds.length > 0) {
-            console.error('Invalid destination IDs:', invalidIds);
             throw new Error(`The following destination IDs do not exist: ${invalidIds.join(', ')}`);
           }
           
@@ -1636,10 +1698,36 @@ export class VendorPackageService {
         }
       } catch (e) {
         console.error('Failed to create/link PackagePolicy:', e?.message || e);
-        console.error('Full error:', e);
       }
 
-      // Re-fetch the package to include newly linked relations (package_policies, trip plans)
+      // Save pricing rules if provided (before re-fetch)
+      if (pricing_rules) {
+        try {
+          // Validate pricing rules business logic
+          this.validatePricingRulesBusinessLogic(pricing_rules);
+          
+          const savedPricingRule = await this.prisma.packagePricingRule.create({
+            data: {
+              package_id: result.id,
+              base_price: pricing_rules.base_price,
+              weekend_price: pricing_rules.weekend_price,
+              flat_discount: pricing_rules.flat_discount,
+              weekly_discount_pct: pricing_rules.weekly_discount_pct,
+              weekend_days: pricing_rules.weekend_days,
+              min_stay_nights: pricing_rules.min_stay_nights,
+              max_stay_nights: pricing_rules.max_stay_nights,
+              advance_notice_hours: pricing_rules.advance_notice_hours,
+            },
+          });
+        } catch (error) {
+          console.error('❌ Failed to save pricing rules:', error);
+          // Don't throw to avoid breaking package creation
+        }
+      } else {
+        console.log('🔍 Debug - No pricing rules provided');
+      }
+
+      // Re-fetch the package to include newly linked relations (package_policies, trip plans, pricing rules)
       result = await this.prisma.package.findUnique({
         where: { id: result.id },
         include: {
@@ -1651,9 +1739,10 @@ export class VendorPackageService {
             include: { package_trip_plan_images: true },
           },
           package_policies: true,
+          package_pricing_rules: true,
           user: true,
         },
-      });
+      }) as any;
 
       // Store calendar configuration
       await this.storeCalendarConfiguration(
@@ -1685,7 +1774,6 @@ export class VendorPackageService {
 
       // Get calendar configuration
       const calendarConfig = await this.getCalendarConfiguration(result.id);
-
       // Post-process to attach public URLs using existing image function
       const processedResult = {
         ...result,
@@ -1734,6 +1822,12 @@ export class VendorPackageService {
           : null,
         // Add calendar configuration
         calendar_configuration: calendarConfig,
+        // Add pricing rules if they exist (get the first one since there should only be one per package)
+        pricing_rules: (result as any).package_pricing_rules && (result as any).package_pricing_rules.length > 0 
+          ? (result as any).package_pricing_rules[0] 
+          : null,
+        // Add calendar init month if provided
+        calendar_init_month: calendar_init_month || null,
       };
 
       // Generate full URLs for room_photos in the return value
@@ -1741,6 +1835,18 @@ export class VendorPackageService {
         const fullUrl = this.generateFileUrl(filename, 'package');
         return fullUrl;
       });
+
+      // Initialize calendar with pricing (if rules provided) or default
+      if (pricing_rules) {
+        await this.initializePropertyCalendarWithPricing(
+          result.id, 
+          user_id, 
+          pricing_rules,
+          calendar_init_month
+        );
+      } else {
+        await this.initializePropertyCalendarDefault(result.id, user_id);
+      }
 
       return {
         success: true,
@@ -2799,7 +2905,8 @@ export class VendorPackageService {
           status: entry.status,
           reason: entry.reason,
           room_type: entry.room_type,
-          room_type_id: entry.room_type_id
+          room_type_id: entry.room_type_id,
+          price: entry.price
         })),
         roomTypes: roomTypes
       }
@@ -2841,7 +2948,8 @@ export class VendorPackageService {
           where: { id: calendarEntry.id },
           data: {
             status: updateDto.status,
-            reason: updateDto.reason
+            reason: updateDto.reason,
+            ...(updateDto.price !== undefined ? { price: updateDto.price } : {})
           }
         });
       } else {
@@ -2852,7 +2960,8 @@ export class VendorPackageService {
             date: updateDto.date,
             status: updateDto.status,
             reason: updateDto.reason,
-            room_type_id: updateDto.room_type_id || null
+            room_type_id: updateDto.room_type_id || null,
+            ...(updateDto.price !== undefined ? { price: updateDto.price } : {})
           }
         });
       }
@@ -2907,7 +3016,8 @@ export class VendorPackageService {
         date: date,
         status: bulkUpdateDto.status,
         reason: bulkUpdateDto.reason,
-        room_type_id: bulkUpdateDto.room_type_id || null
+        room_type_id: bulkUpdateDto.room_type_id || null,
+        ...(bulkUpdateDto.price !== undefined ? { price: bulkUpdateDto.price } : {})
       }));
 
       // Use upsert to handle both insert and update
@@ -2926,7 +3036,8 @@ export class VendorPackageService {
               where: { id: existingEntry.id },
               data: {
                 status: data.status,
-                reason: data.reason
+                reason: data.reason,
+                ...(data.price !== undefined ? { price: data.price } : {})
               }
             });
           } else {
@@ -3026,7 +3137,8 @@ export class VendorPackageService {
             date: entry.date,
             status: entry.status,
             reason: entry.reason,
-            room_type_id: entry.room_type_id
+            room_type_id: entry.room_type_id,
+            price: entry.price
           }))
         }
       };
@@ -3225,5 +3337,312 @@ export class VendorPackageService {
       cleaned[trimmedKey] = obj[key];
     });
     return cleaned as T;
+  }
+
+  /**
+   * Validate pricing rules business logic constraints
+   */
+  private validatePricingRulesBusinessLogic(pricingRules: any) {
+    const {
+      base_price,
+      weekend_price,
+      flat_discount,
+      min_stay_nights,
+      max_stay_nights,
+      weekend_days
+    } = pricingRules;
+
+    // 1. Ensure minimum stay is not greater than maximum stay
+    if (min_stay_nights > max_stay_nights) {
+      throw new Error('Minimum stay nights cannot be greater than maximum stay nights');
+    }
+
+    // 2. Ensure flat discount doesn't make prices negative
+    if (flat_discount > Math.min(base_price, weekend_price)) {
+      throw new Error('Flat discount cannot be greater than the minimum of base price or weekend price');
+    }
+
+    // 3. Ensure weekend days are valid (0-6)
+    if (Array.isArray(weekend_days)) {
+      for (const day of weekend_days) {
+        if (!Number.isInteger(day) || day < 0 || day > 6) {
+          throw new Error('Weekend days must be integers between 0-6 (0=Sunday, 6=Saturday)');
+        }
+      }
+    }
+
+    // 4. Ensure prices are reasonable (base and weekend prices should be positive after discount)
+    const effectiveBasePrice = base_price - flat_discount;
+    const effectiveWeekendPrice = weekend_price - flat_discount;
+    
+    if (effectiveBasePrice <= 0 || effectiveWeekendPrice <= 0) {
+      throw new Error('Effective prices (after flat discount) must be greater than $0');
+    }
+
+    // 5. Ensure reasonable price differences
+    const priceDifference = Math.abs(base_price - weekend_price);
+    if (priceDifference > 100) {
+      throw new Error('Price difference between base and weekend prices cannot exceed $100');
+    }
+
+    // 6. Ensure minimum stay is reasonable for business
+    if (min_stay_nights > 30) {
+      throw new Error('Minimum stay cannot exceed 30 nights');
+    }
+
+    // 7. Ensure advance notice is reasonable
+    if (pricingRules.advance_notice_hours > 168) { // 1 week
+      throw new Error('Advance notice cannot exceed 168 hours (1 week)');
+    }
+  }
+
+  /**
+   * Update pricing rules for a package and optionally recompute calendar
+   */
+  async updatePricingRules(
+    packageId: string,
+    userId: string,
+    updateDto: {
+      pricing_rules: any;
+      recompute_calendar?: boolean;
+      recompute_start_date?: Date;
+      recompute_end_date?: Date;
+    }
+  ) {
+    try {
+      // Verify package ownership
+      const packageData = await this.prisma.package.findFirst({
+        where: {
+          id: packageId,
+          user_id: userId,
+          deleted_at: null
+        }
+      });
+
+      if (!packageData) {
+        throw new Error('Package not found or access denied');
+      }
+
+      // Additional business logic validation
+      this.validatePricingRulesBusinessLogic(updateDto.pricing_rules);
+
+      // Update or create pricing rules
+      const pricingRules = await this.prisma.packagePricingRule.upsert({
+        where: { package_id: packageId },
+        update: {
+          base_price: updateDto.pricing_rules.base_price,
+          weekend_price: updateDto.pricing_rules.weekend_price,
+          flat_discount: updateDto.pricing_rules.flat_discount,
+          weekly_discount_pct: updateDto.pricing_rules.weekly_discount_pct,
+          weekend_days: updateDto.pricing_rules.weekend_days,
+          min_stay_nights: updateDto.pricing_rules.min_stay_nights,
+          max_stay_nights: updateDto.pricing_rules.max_stay_nights,
+          advance_notice_hours: updateDto.pricing_rules.advance_notice_hours,
+        },
+        create: {
+          package_id: packageId,
+          base_price: updateDto.pricing_rules.base_price,
+          weekend_price: updateDto.pricing_rules.weekend_price,
+          flat_discount: updateDto.pricing_rules.flat_discount,
+          weekly_discount_pct: updateDto.pricing_rules.weekly_discount_pct,
+          weekend_days: updateDto.pricing_rules.weekend_days,
+          min_stay_nights: updateDto.pricing_rules.min_stay_nights,
+          max_stay_nights: updateDto.pricing_rules.max_stay_nights,
+          advance_notice_hours: updateDto.pricing_rules.advance_notice_hours,
+        }
+      });
+
+      let recomputeResult = null;
+
+      // Recompute calendar if requested
+      if (updateDto.recompute_calendar !== false) {
+        const startDate = updateDto.recompute_start_date || new Date();
+        const endDate = updateDto.recompute_end_date || (() => {
+          const end = new Date();
+          end.setMonth(end.getMonth() + 12);
+          return end;
+        })();
+
+        recomputeResult = await this.recomputeCalendarPrices(
+          packageId,
+          userId,
+          {
+            start_date: startDate,
+            end_date: endDate,
+            preserve_overrides: true
+          }
+        );
+      }
+
+      return {
+        success: true,
+        data: {
+          pricingRules,
+          recomputeResult: recomputeResult?.data || null
+        },
+        message: 'Pricing rules updated successfully'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  /**
+   * Recompute calendar prices for a date range
+   */
+  async recomputeCalendarPrices(
+    packageId: string,
+    userId: string,
+    recomputeDto: {
+      start_date?: Date;
+      end_date?: Date;
+      room_type_id?: string;
+      preserve_overrides?: boolean;
+    }
+  ) {
+    try {
+      // Verify package ownership
+      const packageData = await this.prisma.package.findFirst({
+        where: {
+          id: packageId,
+          user_id: userId,
+          deleted_at: null
+        }
+      });
+
+      if (!packageData) {
+        throw new Error('Package not found or access denied');
+      }
+
+      // Get pricing rules
+      const pricingRules = await this.prisma.packagePricingRule.findUnique({
+        where: { package_id: packageId }
+      });
+
+      if (!pricingRules) {
+        throw new Error('No pricing rules found for this package');
+      }
+
+      // Set date range
+      const startDate = recomputeDto.start_date || new Date();
+      const endDate = recomputeDto.end_date || (() => {
+        const end = new Date();
+        end.setMonth(end.getMonth() + 12);
+        return end;
+      })();
+
+      // Generate date range
+      const dates = this.generateDateRange(startDate, endDate);
+      
+      let updatedCount = 0;
+      let preservedCount = 0;
+
+      // Update each date
+      for (const date of dates) {
+        // Check if there's an existing calendar entry
+        const existingEntry = await this.prisma.propertyCalendar.findFirst({
+          where: {
+            package_id: packageId,
+            date: date,
+            room_type_id: recomputeDto.room_type_id || null
+          }
+        });
+
+        // Skip if preserving overrides and entry has a custom price
+        if (recomputeDto.preserve_overrides !== false && existingEntry?.price !== null) {
+          preservedCount++;
+          continue;
+        }
+
+        // Calculate new price using rules
+        const newPrice = this.computeEffectivePrice(date, {
+          base_price: pricingRules.base_price,
+          weekend_price: pricingRules.weekend_price,
+          flat_discount: pricingRules.flat_discount,
+          weekend_days: pricingRules.weekend_days as number[]
+        });
+
+        // Update or create calendar entry
+        if (existingEntry) {
+          await this.prisma.propertyCalendar.update({
+            where: { id: existingEntry.id },
+            data: { price: newPrice }
+          });
+        } else {
+          await this.prisma.propertyCalendar.create({
+            data: {
+              package_id: packageId,
+              date: date,
+              status: 'available',
+              reason: null,
+              room_type_id: recomputeDto.room_type_id || null,
+              price: newPrice
+            }
+          });
+        }
+
+        updatedCount++;
+      }
+
+      return {
+        success: true,
+        data: {
+          packageId,
+          dateRange: {
+            start: startDate,
+            end: endDate
+          },
+          totalDates: dates.length,
+          updatedCount,
+          preservedCount,
+          roomTypeId: recomputeDto.room_type_id || null
+        },
+        message: `Calendar recomputed: ${updatedCount} dates updated, ${preservedCount} overrides preserved`
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  /**
+   * Get pricing rules for a package
+   */
+  async getPricingRules(packageId: string, userId: string) {
+    try {
+      // Verify package ownership
+      const packageData = await this.prisma.package.findFirst({
+        where: {
+          id: packageId,
+          user_id: userId,
+          deleted_at: null
+        }
+      });
+
+      if (!packageData) {
+        throw new Error('Package not found or access denied');
+      }
+
+      // Get pricing rules
+      const pricingRules = await this.prisma.packagePricingRule.findUnique({
+        where: { package_id: packageId }
+      });
+
+      return {
+        success: true,
+        data: pricingRules,
+        message: pricingRules ? 'Pricing rules found' : 'No pricing rules found'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message
+      };
+    }
   }
 }

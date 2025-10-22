@@ -67,4 +67,120 @@ export class NotificationRepository {
 
     return notification;
   }
+
+  /**
+   * Create booking notifications for vendor and admin
+   * @param booking_id - The ID of the booking
+   * @param user_id - The ID of the user who made the booking
+   * @param vendor_id - The ID of the vendor
+   * @param admin_id - The ID of the admin (optional, null means all admins)
+   * @returns The created notifications
+   */
+  static async createBookingNotification({
+    booking_id,
+    user_id,
+    vendor_id,
+    admin_id
+  }: {
+    booking_id: string;
+    user_id: string;
+    vendor_id: string;
+    admin_id?: string;
+  }) {
+    const notifications = [];
+
+    // Notify vendor about new booking
+    const vendorNotification = await this.createNotification({
+      sender_id: user_id,
+      receiver_id: vendor_id,
+      text: 'New booking received for your package',
+      type: 'booking',
+      entity_id: booking_id,
+    });
+    notifications.push(vendorNotification);
+
+    // Notify admin about new booking
+    const adminNotification = await this.createNotification({
+      sender_id: user_id,
+      receiver_id: admin_id || null, // null means all admins
+      text: 'New booking created by user',
+      type: 'booking',
+      entity_id: booking_id,
+    });
+    notifications.push(adminNotification);
+
+    return notifications;
+  }
+
+  /**
+   * Create package notification for admin when vendor creates package
+   * @param package_id - The ID of the package
+   * @param vendor_id - The ID of the vendor
+   * @param admin_id - The ID of the admin (optional, null means all admins)
+   * @returns The created notification
+   */
+  static async createPackageNotification({
+    package_id,
+    vendor_id,
+    admin_id
+  }: {
+    package_id: string;
+    vendor_id: string;
+    admin_id?: string;
+  }) {
+    return await this.createNotification({
+      sender_id: vendor_id,
+      receiver_id: admin_id || null,
+      text: 'New package created by vendor, needs approval',
+      type: 'package',
+      entity_id: package_id,
+    });
+  }
+
+  /**
+   * Create feedback notifications for admin and vendor when user gives feedback
+   * @param review_id - The ID of the review
+   * @param package_id - The ID of the package
+   * @param user_id - The ID of the user who gave feedback
+   * @param vendor_id - The ID of the vendor
+   * @param admin_id - The ID of the admin (optional, null means all admins)
+   * @returns The created notifications
+   */
+  static async createFeedbackNotification({
+    review_id,
+    package_id,
+    user_id,
+    vendor_id,
+    admin_id
+  }: {
+    review_id: string;
+    package_id: string;
+    user_id: string;
+    vendor_id: string;
+    admin_id?: string;
+  }) {
+    const notifications = [];
+
+    // Notify admin about new feedback
+    const adminNotification = await this.createNotification({
+      sender_id: user_id,
+      receiver_id: admin_id || null,
+      text: 'New feedback received',
+      type: 'review',
+      entity_id: review_id,
+    });
+    notifications.push(adminNotification);
+
+    // Notify vendor about new feedback
+    const vendorNotification = await this.createNotification({
+      sender_id: user_id,
+      receiver_id: vendor_id,
+      text: 'New feedback on your package',
+      type: 'review',
+      entity_id: review_id,
+    });
+    notifications.push(vendorNotification);
+
+    return notifications;
+  }
 }

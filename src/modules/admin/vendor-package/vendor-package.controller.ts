@@ -27,6 +27,8 @@ import { Express, Request } from 'express';
 import { diskStorage } from 'multer';
 import appConfig from '../../../config/app.config';
 import { SearchPackagesDto } from './dto/search-packages.dto';
+import { UpdatePricingRulesDto } from './dto/update-pricing-rules.dto';
+import { RecomputeCalendarDto } from './dto/recompute-calendar.dto';
 import { memoryStorage } from 'multer';
 import { 
   CalendarQueryDto,
@@ -478,6 +480,70 @@ export class VendorPackageController {
         new Date(startDate),
         new Date(endDate),
         roomTypeId
+      );
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Get pricing rules for a package' })
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/pricing-rules')
+  async getPricingRules(
+    @Param('id') packageId: string,
+    @Req() req: any
+  ) {
+    try {
+      const user_id = req.user.userId;
+      return await this.vendorPackageService.getPricingRules(packageId, user_id);
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Update pricing rules for a package' })
+  @UseGuards(JwtAuthGuard)
+  @Put(':id/pricing-rules')
+  async updatePricingRules(
+    @Param('id') packageId: string,
+    @Body() updatePricingRulesDto: UpdatePricingRulesDto,
+    @Req() req: any
+  ) {
+    try {
+      const user_id = req.user.userId;
+      return await this.vendorPackageService.updatePricingRules(
+        packageId,
+        user_id,
+        updatePricingRulesDto
+      );
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Recompute calendar prices for a date range' })
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/calendar/recompute')
+  async recomputeCalendarPrices(
+    @Param('id') packageId: string,
+    @Body() recomputeCalendarDto: RecomputeCalendarDto,
+    @Req() req: any
+  ) {
+    try {
+      const user_id = req.user.userId;
+      return await this.vendorPackageService.recomputeCalendarPrices(
+        packageId,
+        user_id,
+        recomputeCalendarDto
       );
     } catch (error) {
       return {

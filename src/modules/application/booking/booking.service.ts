@@ -11,7 +11,9 @@ import appConfig from '../../../config/app.config';
 
 @Injectable()
 export class BookingService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+  ) { }
 
   /**
    * Add image URLs to package data
@@ -361,6 +363,11 @@ export class BookingService {
 
     return total;
   }
+
+  /**
+   * Enhanced booking calculation with calendar-based pricing and weekly discounts
+   */
+ 
 
   private calculateTotalAmountWithDiscount(
     items: any[], 

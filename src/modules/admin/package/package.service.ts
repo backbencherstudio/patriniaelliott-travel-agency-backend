@@ -7,13 +7,13 @@ import appConfig from '../../../config/app.config';
 import { DateHelper } from '../../../common/helper/date.helper';
 import { UserRepository } from '../../../common/repository/user/user.repository';
 import { NotificationRepository } from '../../../common/repository/notification/notification.repository';
-import { MessageGateway } from '../../../modules/chat/message/message.gateway';
+import { NotificationGateway } from '../../application/notification/notification.gateway';
 
 @Injectable()
 export class PackageService {
   constructor(
     private prisma: PrismaService,
-    private readonly messageGateway: MessageGateway,
+    private readonly notificationGateway: NotificationGateway,
   ) {}
 
   async create(
@@ -458,19 +458,25 @@ export class PackageService {
       }
 
       if (userDetails && userDetails.type != 'admin') {
-        // notify the admin that the package is created
-        await NotificationRepository.createNotification({
-          sender_id: user_id,
-          text: 'Package has been created',
-          type: 'package',
-          entity_id: record.id,
+        // Create notification using new repository method
+        await NotificationRepository.createPackageNotification({
+          package_id: record.id,
+          vendor_id: user_id,
         });
 
-        this.messageGateway.server.emit('notification', {
-          sender_id: user_id,
-          text: 'Package has been created',
-          type: 'package',
-          entity_id: record.id,
+        // Get and notify all admins
+        const adminUsers = await this.prisma.user.findMany({
+          where: { type: 'admin' },
+          select: { id: true }
+        });
+        
+        adminUsers.forEach(admin => {
+          this.notificationGateway.server.emit('sendNotification', {
+            userId: admin.id,
+            type: 'package',
+            message: 'New package created by vendor, needs approval',
+            data: record
+          });
         });
       }
 

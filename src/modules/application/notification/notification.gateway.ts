@@ -51,9 +51,17 @@ export class NotificationGateway
       password: appConfig().redis.password,
     });
 
-    this.redisSubClient.subscribe('notification', (err, message: string) => {
-      const data = JSON.parse(message);
-      this.server.emit('receiveNotification', data);
+    this.redisSubClient.subscribe('notification');
+    
+    this.redisSubClient.on('message', (channel: string, message: string) => {
+      if (channel === 'notification') {
+        const data = JSON.parse(message);
+        // Target specific user based on userId in the data
+        const targetSocketId = this.clients.get(data.userId);
+        if (targetSocketId) {
+          this.server.to(targetSocketId).emit('receiveNotification', data);
+        }
+      }
     });
   }
 
@@ -90,17 +98,19 @@ export class NotificationGateway
   @SubscribeMessage('sendNotification')
   async handleNotification(@MessageBody() data: any) {
     console.log(`Received notification: ${JSON.stringify(data)}`);
-    // Broadcast notification to all clients
-    // this.server.emit('receiveNotification', data);
-
-    // Emit notification to specific client
+    
+    // Target specific user instead of broadcasting to all
     const targetSocketId = this.clients.get(data.userId);
     if (targetSocketId) {
+      // Send to specific user
+      this.server.to(targetSocketId).emit('receiveNotification', data);
+      
+      // Also publish to Redis for distributed systems
       await this.redisPubClient.publish('notification', JSON.stringify(data));
-
-      // console.log(`Notification sent to user ${data.userId}`);
+      
+      console.log(`Notification sent to user ${data.userId}`);
     } else {
-      // console.log(`User ${data.userId} not connected`);
+      console.log(`User ${data.userId} not connected`);
     }
   }
 
@@ -110,8 +120,8 @@ export class NotificationGateway
   }
 
   @SubscribeMessage('findAllNotification')
-  findAll() {
-    return this.notificationService.findAll();
+  findAll(@MessageBody() data: any) {
+    return this.notificationService.findAll(data.userId);
   }
 
   @SubscribeMessage('findOneNotification')
@@ -128,7 +138,7 @@ export class NotificationGateway
   }
 
   @SubscribeMessage('removeNotification')
-  remove(@MessageBody() id: number) {
-    return this.notificationService.remove(id);
+  remove(@MessageBody() data: any) {
+    return this.notificationService.remove(data.id, data.userId);
   }
 }

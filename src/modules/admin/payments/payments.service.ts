@@ -7,6 +7,143 @@ import { BadRequestException, HttpException, Injectable, InternalServerErrorExce
 export class PaymentsService {
     constructor(private readonly prisma: PrismaService) { }
 
+    /**
+     * Generate date range between start and end dates
+     */
+    private generateDateRange(startDate: Date, endDate: Date): Date[] {
+        const dates: Date[] = [];
+        const currentDate = new Date(startDate);
+        
+        // Set time to start of day to avoid timezone issues
+        currentDate.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(0, 0, 0, 0);
+        
+        while (currentDate < end) {
+            dates.push(new Date(currentDate));
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
+        return dates;
+    }
+
+    /**
+     * Update calendar availability for booking dates
+     */
+    private async updateCalendarAvailability(
+        packageId: string,
+        startDate: Date,
+        endDate: Date,
+        roomTypeId?: string,
+        status: 'booked' | 'available' = 'booked'
+    ): Promise<void> {
+        try {
+            const dates = this.generateDateRange(startDate, endDate);
+            
+            for (const date of dates) {
+                // Check if calendar entry exists
+                const existingEntry = await this.prisma.propertyCalendar.findFirst({
+                    where: {
+                        package_id: packageId,
+                        date: date,
+                        room_type_id: roomTypeId || null,
+                    },
+                });
+
+                if (existingEntry) {
+                    // Update existing entry
+                    await this.prisma.propertyCalendar.update({
+                        where: { id: existingEntry.id },
+                        data: {
+                            status: status,
+                            reason: status === 'booked' ? 'Booking confirmed' : 'Booking cancelled',
+                            updated_at: new Date(),
+                        },
+                    });
+                } else {
+                    // Create new entry
+                    await this.prisma.propertyCalendar.create({
+                        data: {
+                            package_id: packageId,
+                            date: date,
+                            status: status,
+                            reason: status === 'booked' ? 'Booking confirmed' : 'Booking cancelled',
+                            room_type_id: roomTypeId || null,
+                        },
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error updating calendar availability:', error);
+            throw new Error(`Failed to update calendar availability: ${error.message}`);
+        }
+    }
+
+    /**
+     * Update calendar status based on booking status
+     */
+    private async updateCalendarStatusForBooking(
+        bookingId: string,
+        newStatus: string
+    ): Promise<void> {
+        try {
+            // Get booking items with their dates
+            const bookingItems = await this.prisma.bookingItem.findMany({
+                where: { booking_id: bookingId },
+                select: {
+                    package_id: true,
+                    start_date: true,
+                    end_date: true,
+                    packageRoomTypeId: true,
+                },
+            });
+
+            for (const item of bookingItems) {
+                if (item.start_date && item.end_date) {
+                    let calendarStatus: 'booked' | 'available';
+                    let reason: string;
+
+                    switch (newStatus.toLowerCase()) {
+                        case 'confirmed':
+                        case 'approved':
+                        case 'paid':
+                        case 'completed':
+                        case 'active':
+                        case 'in_progress':
+                            calendarStatus = 'booked';
+                            reason = 'Booking confirmed';
+                            break;
+                        case 'cancelled':
+                        case 'canceled':
+                        case 'refunded':
+                            calendarStatus = 'available';
+                            reason = 'Booking cancelled';
+                            break;
+                        case 'pending':
+                        case 'processing':
+                            // Don't update calendar for pending bookings
+                            continue;
+                        default:
+                            // For other statuses, keep as booked
+                            calendarStatus = 'booked';
+                            reason = `Booking status: ${newStatus}`;
+                    }
+
+                    await this.updateCalendarAvailability(
+                        item.package_id,
+                        item.start_date,
+                        item.end_date,
+                        item.packageRoomTypeId,
+                        calendarStatus
+                    );
+                }
+            }
+        } catch (error) {
+            console.error('Error updating calendar status for booking:', error);
+            throw new Error(`Failed to update calendar status: ${error.message}`);
+        }
+    }
+
     async getTransactions(requestQuery: any) {
         try {
             const query = dashboardTransactionsQuerySchema.safeParse(requestQuery);
@@ -293,6 +430,26 @@ export class PaymentsService {
                     reviewed_at: new Date()
                 }
             })
+
+            // Update booking status to cancelled and update calendar
+            if (status === 'succeeded') {
+                try {
+                    await this.prisma.booking.update({
+                        where: { id: booking_id },
+                        data: { 
+                            status: 'cancelled',
+                            payment_status: 'refunded'
+                        }
+                    });
+
+                    // Update calendar to make dates available
+                    await this.updateCalendarStatusForBooking(booking_id, 'cancelled');
+                    console.log(`Calendar updated for cancelled booking ${booking_id}`);
+                } catch (calendarError) {
+                    console.error(`Failed to update calendar for cancelled booking ${booking_id}:`, calendarError.message);
+                    // Don't fail the entire operation if calendar update fails
+                }
+            }
 
             return {
                 success: true,
