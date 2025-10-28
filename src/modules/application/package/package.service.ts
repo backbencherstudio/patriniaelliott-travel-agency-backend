@@ -366,7 +366,6 @@ export class PackageService {
 
       if (city) {
         locationConditions.push({ city: { contains: city, mode: 'insensitive' } });
-        console.log('City filter applied:', city);
       }
 
       if (country) {
@@ -397,7 +396,6 @@ export class PackageService {
           where.OR = countryConditions;
         }
 
-        console.log('Country filter applied:', country);
       }
 
       // If we have location conditions (city or combined city+country), apply them
@@ -447,20 +445,10 @@ export class PackageService {
       where.price = {};
       if (budget_start) {
         where.price.gte = Number(budget_start);
-        console.log('Budget start filter applied:', Number(budget_start));
       }
       if (budget_end) {
         where.price.lte = Number(budget_end);
-        console.log('Budget end filter applied:', Number(budget_end));
       }
-
-      console.log('Budget filter applied:', {
-        budget_start: budget_start ? Number(budget_start) : null,
-        budget_end: budget_end ? Number(budget_end) : null,
-        budget_start_type: typeof budget_start,
-        budget_end_type: typeof budget_end,
-        price_condition: where.price
-      });
     }
 
     // Rating filters - filter by reviews instead of average_rating
@@ -542,7 +530,6 @@ export class PackageService {
         };
       }
 
-      console.log('Free cancellation filter applied:', isFreeCancellation, 'Original value:', free_cancellation);
     }
 
     // Property type filters
@@ -676,28 +663,7 @@ export class PackageService {
     }
 
     // Calculate pagination
-    const skip = (page - 1) * limit;
-
-    // Log the final where condition for debugging
-    console.log('Final where condition:', JSON.stringify(where, null, 2));
-    console.log('Search parameters:', {
-      city,
-      country,
-      location,
-      search,
-      name,
-      free_cancellation,
-      budget_start: budget_start ? Number(budget_start) : null,
-      budget_end: budget_end ? Number(budget_end) : null,
-      budget_start_type: typeof budget_start,
-      budget_end_type: typeof budget_end
-    });
-    console.log('Country search details:', {
-      country,
-      hasCountryFilter: !!country,
-      searchInPackageCountry: !!country,
-      searchInDestinationCountry: !!country
-    });
+    const skip = (page - 1) * limit;    
 
     // Debug: Check what cancellation policies exist in the database
     if (free_cancellation !== undefined) {
@@ -710,7 +676,6 @@ export class PackageService {
             cancellation_policy: true
           }
         });
-        console.log('Sample cancellation policies in database:', samplePolicies);
 
         // Also check how many packages have cancellation policies
         const totalPackages = await this.prisma.package.count();
@@ -721,8 +686,6 @@ export class PackageService {
             }
           }
         });
-        console.log(`Total packages: ${totalPackages}, Packages with cancellation policies: ${packagesWithPolicies}`);
-
         // Test: Get packages without any filters to see if we can get any results
         const testPackages = await this.prisma.package.findMany({
           take: 5,
@@ -731,7 +694,6 @@ export class PackageService {
             status: 1
           }
         });
-        console.log('Test packages without filters:', testPackages.length);
       } catch (error) {
         console.log('Error fetching sample policies:', error.message);
       }
@@ -843,29 +805,11 @@ export class PackageService {
     const totalPages = Math.ceil(total / limit);
     const hasNextPage = page < totalPages;
     const hasPrevPage = page > 1;
-
-    // Log query results for debugging
-    console.log(`Query returned ${packages.length} packages out of ${total} total`);
-    if (packages.length > 0) {
-      console.log('Sample package cities:', packages.slice(0, 3).map(p => p.city));
-      console.log('Sample package countries:', packages.slice(0, 3).map(p => p.country));
-      console.log('Sample destination countries:', packages.slice(0, 3).map(p =>
-        p.package_destinations?.map(pd => pd.destination.country?.name).filter(Boolean)
-      ));
-      console.log('Sample cancellation policies:', packages.slice(0, 3).map(p => ({
-        package_id: p.id,
-        cancellation_policy_id: (p as any)?.cancellation_policy_id
-      })));
+    if (packages.length > 0) {     
 
       // Log price range of returned packages
       const prices = packages.map(p => Number(p.price)).filter(p => !isNaN(p));
-      if (prices.length > 0) {
-        console.log('Price range of returned packages:', {
-          min: Math.min(...prices),
-          max: Math.max(...prices),
-          count: prices.length,
-          all_prices: prices.slice(0, 10) // Show first 10 prices for debugging
-        });
+      if (prices.length > 0) {        
       } else {
         console.log('No packages with valid prices found');
       }
@@ -1216,10 +1160,6 @@ export class PackageService {
       } else if (limit) {
         query_condition['take'] = limit;
       }
-
-      console.log('===========condition=========================');
-      console.log({ where_condition, query_condition });
-      console.log('====================================');
 
       const packages = await this.prisma.package.findMany({
         where: {
@@ -1641,15 +1581,7 @@ export class PackageService {
     }
   ) {
     try {
-      const skip = (page - 1) * limit;
-
-      // Debug logging
-      console.log('getVendorPackage called with:', {
-        page,
-        limit,
-        user_id,
-        searchParams
-      });
+      const skip = (page - 1) * limit;      
 
       // Build where conditions
       const where: any = {
@@ -1758,9 +1690,6 @@ export class PackageService {
           typeof rating === 'number' && rating >= 0 && rating <= 5
         );
 
-        console.log('Ratings filter - Original:', searchParams.ratings);
-        console.log('Ratings filter - Valid:', validRatings);
-
         if (validRatings.length > 0) {
           // Only return packages that have at least one review with the specified rating
           // This ensures packages without reviews are excluded when rating filter is applied
@@ -1773,9 +1702,7 @@ export class PackageService {
               status: 1
             }
           };
-          console.log('Applied ratings filter to where clause:', where.reviews);
-          console.log('Looking for packages with reviews having rating values:', validRatings);
-        }
+         }
       }
 
       // Add budget range filter
@@ -1813,8 +1740,6 @@ export class PackageService {
           });
         }
       }
-
-      console.log('Final where clause for package query:', JSON.stringify(where, null, 2));
 
       const [packages, total] = await Promise.all([
         this.prisma.package.findMany({
@@ -1881,9 +1806,6 @@ export class PackageService {
         this.prisma.package.count({ where }),
       ]);
 
-      console.log(`Found ${packages.length} packages, total: ${total}`);
-      console.log('Package IDs:', packages.map(p => p.id));
-
       // Fetch rating aggregates for all returned package IDs in one query
       const packageIds = packages.map(p => p.id);
       const ratingAgg = await this.prisma.review.groupBy({
@@ -1897,7 +1819,6 @@ export class PackageService {
         _count: { rating_value: true },
       });
 
-      console.log('Rating aggregation results:', ratingAgg);
 
       const packageIdToRating = new Map<string, { averageRating: number; totalReviews: number }>();
       for (const row of ratingAgg as any[]) {
@@ -1906,8 +1827,6 @@ export class PackageService {
           totalReviews: row._count?.rating_value ?? 0,
         });
       }
-
-      console.log('Package ID to Rating mapping:', Object.fromEntries(packageIdToRating));
 
       // Debug: Check if any packages were returned without matching ratings
       if (searchParams?.ratings && Array.isArray(searchParams.ratings) && searchParams.ratings.length > 0) {
@@ -1931,7 +1850,6 @@ export class PackageService {
         _count: { rating_value: true },
       });
 
-      console.log('Rating distribution results:', distributionAgg);
 
       // Debug: Check actual review data for returned packages when rating filter is applied
       if (searchParams?.ratings && Array.isArray(searchParams.ratings) && searchParams.ratings.length > 0) {
@@ -1947,7 +1865,6 @@ export class PackageService {
           }
         });
 
-        console.log('Actual review data for returned packages:', actualReviews);
 
         // Check if any packages have reviews that don't match the filter
         const validRatings = searchParams.ratings.filter(rating =>
@@ -2383,13 +2300,10 @@ export class PackageService {
         where.price = {};
         if (budget_start) {
           where.price.gte = Number(budget_start);
-          console.log('Debug: Budget start filter applied:', Number(budget_start));
         }
         if (budget_end) {
           where.price.lte = Number(budget_end);
-          console.log('Debug: Budget end filter applied:', Number(budget_end));
         }
-        console.log('Debug: Final price condition:', where.price);
       }
 
       const packages = await this.prisma.package.findMany({
