@@ -439,6 +439,7 @@ model Package {
   property_calendars      PropertyCalendar[]
   reviews                 Review[]
   package_policies        PackagePolicy[]
+  package_pricing_rules   PackagePricingRule[]
 
   @@map("packages")
 }
@@ -1237,12 +1238,13 @@ model VendorWallet {
 }
 
 model PropertyCalendar {
-  id           String           @id @default(cuid())
+  id         String           @id @default(cuid())
   package_id   String
   date         DateTime
   status       String
   reason       String?
   room_type_id String?
+  price        Decimal?
   created_at   DateTime         @default(now())
   updated_at   DateTime         @default(now())
   package      Package          @relation(fields: [package_id], references: [id], onDelete: Cascade)
@@ -1310,3 +1312,22 @@ enum MessageStatus {
   DELIVERED
   READ
 }
+
+model PackagePricingRule {
+  id                    String   @id @default(cuid())
+  package_id            String   @unique
+  base_price            Decimal
+  weekend_price         Decimal
+  flat_discount         Decimal
+  weekly_discount_pct   Decimal?
+  weekend_days          Int[]
+  min_stay_nights       Int?
+  max_stay_nights       Int?
+  advance_notice_hours  Int?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  package               Package  @relation(fields: [package_id], references: [id], onDelete: Cascade)
+
+  @@map("package_pricing_rules")
+}
+

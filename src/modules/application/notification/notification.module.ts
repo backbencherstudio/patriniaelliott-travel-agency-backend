@@ -5,6 +5,6 @@ import { NotificationGateway } from './notification.gateway';
 @Global()
 @Module({
   providers: [NotificationGateway, NotificationService],
-  exports: [NotificationGateway],
+  exports: [NotificationGateway, NotificationService],
 })
 export class NotificationModule {}

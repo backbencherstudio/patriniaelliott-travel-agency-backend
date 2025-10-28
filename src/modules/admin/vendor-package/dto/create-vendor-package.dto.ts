@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsOptional, IsString, IsNumber, IsBoolean, IsDate, IsDecimal, IsArray, ValidateNested, IsObject } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { array } from 'zod';
+import { ValidatedPricingRuleDto } from './PricingRuleDto.dto';
 
 // DTO for Amenities
 export class AmenitiesDto {
@@ -615,5 +616,29 @@ export class CreateVendorPackageDto {
   @ValidateNested({ each: true })
   @Type(() => PackagePolicyItemDto)
   package_policies?: PackagePolicyItemDto[];
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  })
+      @ValidateNested()
+      @Type(() => ValidatedPricingRuleDto)
+      pricing_rules?: ValidatedPricingRuleDto;
+
+  @ApiProperty({
+    required: false,
+    description: 'Optional month to prefill calendar in YYYY-MM format (e.g., "2025-10"). Service may use this later.',
+    example: '2025-10'
+  })
+  @IsOptional()
+  @IsString()
+  calendar_init_month?: string;
 }
 

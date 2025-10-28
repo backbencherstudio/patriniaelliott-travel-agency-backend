@@ -22,11 +22,14 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuthGuard } from '@nestjs/passport';
+import { UserService } from '../chat/user/user.service';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService,
+    private userService: UserService,
+  ) {}
 
   @ApiOperation({ summary: 'Get user details' })
   @ApiBearerAuth()
@@ -45,12 +48,11 @@ export class AuthController {
         message: 'Failed to fetch user details',
       };
     }
-  }
+  }  
 
   @ApiOperation({ summary: 'Register a user' })
   @Post('register')
   async create(@Body() data: CreateUserDto) {
-    console.log(data);
     try {
       const name = data.name;
       // const first_name = data.first_name;
@@ -181,6 +183,62 @@ export class AuthController {
   }
 
   // --------------change password---------
+  @ApiOperation({ summary: 'Get all users for notification demo (authenticated)' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('users')
+  async getUsers(@Req() req: Request) {
+    try {
+      const usersResponse = await this.userService.findAll();
+      
+      // Filter users to only return necessary fields for notification demo
+      const filteredUsers = usersResponse.data.map(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        type: user.type
+      }));
+
+      return {
+        success: true,
+        data: filteredUsers
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to fetch users',
+        error: error.message
+      };
+    }
+  }
+
+  @ApiOperation({ summary: 'Get all users for notification demo (public)' })
+  @Get('demo-users')
+  async getDemoUsers() {
+    try {
+      const usersResponse = await this.userService.findAll();
+      
+      // Filter users to only return necessary fields for notification demo
+      const filteredUsers = usersResponse.data.map(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        type: user.type
+      }));
+
+      return {
+        success: true,
+        data: filteredUsers
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to fetch users',
+        error: error.message
+      };
+    }
+  }
+
 
   @ApiOperation({ summary: 'Forgot password' })
   @Post('forgot-password')

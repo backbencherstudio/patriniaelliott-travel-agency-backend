@@ -301,7 +301,7 @@ export class AuthService {
       });
 
       // send otp code to email
-      await this.mailService.sendOtpCodeToEmail({
+       await this.mailService.sendOtpCodeToEmail({
         email: email,
         name: name,
         otp: token,

@@ -11,7 +11,9 @@ import appConfig from '../../../config/app.config';
 
 @Injectable()
 export class BookingService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+  ) { }
 
   /**
    * Add image URLs to package data
@@ -150,14 +152,15 @@ export class BookingService {
         // Calculate price breakdown with actual database prices
         const packageTotal = processedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
         const extraServicesTotal = bookingExtraServices.reduce((sum, es) => sum + (parseFloat(es.price.toString()) * es.quantity), 0);
-        const baseTotal = packageTotal + extraServicesTotal;
+        const serviceFee = parseFloat(processedItems[0]?.package?.service_fee?.toString() || '0');
+        const baseTotal = packageTotal + extraServicesTotal + serviceFee;
         
         // Apply discount to base total
         let discount = 0;
         if (createBookingDto.discount_amount && createBookingDto.discount_amount > 0) {
           discount = createBookingDto.discount_amount;
         } else if (createBookingDto.discount_percentage && createBookingDto.discount_percentage > 0) {
-          discount = (baseTotal * createBookingDto.discount_percentage) / 100;
+          discount = (packageTotal * createBookingDto.discount_percentage) / 100;
         }
         
         const finalTotal = baseTotal - discount;
@@ -361,6 +364,11 @@ export class BookingService {
 
     return total;
   }
+
+  /**
+   * Enhanced booking calculation with calendar-based pricing and weekly discounts
+   */
+ 
 
   private calculateTotalAmountWithDiscount(
     items: any[], 
@@ -755,17 +763,81 @@ export class BookingService {
                 id: transaction.booking_id
               },
               include: {
-                booking_items: true
+                booking_items: true,
+                booking_extra_services: true
               }
             })
             const package_data = await this.prisma.package.findUnique({
-              where: { id: booking.booking_items[0].package_id }
+              where: { id: booking.booking_items[0].package_id },
+              include: {
+                reviews: {
+                  where: {
+                    status: 1, // Only active reviews
+                    deleted_at: null,
+                  },
+                  select: {
+                    rating_value: true,
+                  },
+                },
+              },
             })
+            
+            // Calculate rating summary
+            let rating_summary = null;
+            if (package_data.reviews && package_data.reviews.length > 0) {
+              const totalReviews = package_data.reviews.length;
+              const totalRating = package_data.reviews.reduce((sum, review) => sum + review.rating_value, 0);
+              const averageRating = totalRating / totalReviews;
+              
+              // Count ratings by value
+              const ratingCounts = {
+                5: 0,
+                4: 0,
+                3: 0,
+                2: 0,
+                1: 0,
+              };
+              
+              package_data.reviews.forEach(review => {
+                if (ratingCounts[review.rating_value] !== undefined) {
+                  ratingCounts[review.rating_value]++;
+                }
+              });
+              
+              rating_summary = {
+                average: parseFloat(averageRating.toFixed(2)),
+                total_reviews: totalReviews,
+                rating_distribution: ratingCounts,
+              };
+            }
+            
             const payment_method = await this.prisma.userCard.findUnique({
               where: {
                 stripe_payment_method_id: payment_method_id
               }
             })
+
+            // Extract file_url from package_files (after addImageUrls has added file_url)
+        const file_url = (package_data as any)?.package_files?.[0]?.file_url || null;
+        // Calculate price breakdown
+        const bookingItem = booking.booking_items?.[0];
+        const quantity = bookingItem?.quantity || 0;
+        const price = parseFloat(bookingItem?.price?.toString() || '0');
+        const serviceFee = parseFloat(package_data?.service_fee?.toString() || '0');
+        
+        const packageTotal = quantity * price;
+        const extraServices = booking.booking_extra_services ?? [];
+        const extraServicesTotal = extraServices.reduce((sum, es) => 
+          sum + (parseFloat((es.price ?? 0).toString()) * (es.quantity ?? 1)), 0);
+        console.log("===============swapan============")
+        console.log('Extra services:', extraServices);
+        console.log('Extra services total:', extraServicesTotal);
+        console.log("=================================")
+        
+        const subtotal = packageTotal + serviceFee + extraServicesTotal;
+        const discount = parseFloat(package_data?.discount?.toString() || '0');
+        const discountAmount = (packageTotal * discount) / 100;
+        const finalTotal = subtotal - discountAmount;        
 
             const data = {
               package_details: package_data,
@@ -775,7 +847,16 @@ export class BookingService {
                 total: paymentIntent.amount / 100,
                 payment_method: payment_method.brand
               },
-              user: transaction.booking.booking_items[0].package.user
+              user: transaction.booking.booking_items[0].package.user,
+              rating_summary: rating_summary,
+              file_url: file_url,
+              price_breakdown: {
+                package_total: packageTotal,
+                extra_services_total: extraServicesTotal,
+                base_total: subtotal,
+                discount_applied: discountAmount,
+                final_total: finalTotal,
+              }
             }
 
             return {
@@ -1139,9 +1220,16 @@ export class BookingService {
       console.log(`Query returned ${bookings.length} bookings`);
       console.log('=== findAll DEBUG END ===');
 
+      // Transform booking_items, booking_extra_services and booking_travellers array to object for each booking
+      const transformedBookings = bookings.map(booking => ({
+        ...booking,
+        booking_items: booking.booking_items?.[0] || null,// Convert array to single object
+        booking_travellers: booking.booking_travellers?.[0] || null, // Convert array to single object
+      }));
+
       return {
         success: true,
-        data: bookings,
+        data: transformedBookings,
         message: `Bookings retrieved successfully. Found ${bookings.length} booking(s).`,
         count: bookings.length,
         debug: {
@@ -1181,6 +1269,57 @@ export class BookingService {
                   id: true,
                   name: true,
                   description: true,
+                  discount: true,
+                  service_fee: true,
+                  price: true,
+                  computed_price: true,
+                  duration: true,
+                  duration_type: true,
+                  min_capacity: true,
+                  max_capacity: true,
+                  type: true,
+                  cancellation_policy_id: true,
+                  address: true,
+                  amenities: true,
+                  bathrooms: true,
+                  total_bedrooms: true,
+                  bedrooms: true,
+                  beds: true,
+                  booking_method: true,
+                  breakfast_available: true,
+                  check_in: true,
+                  check_out: true,
+                  language: true,
+                  tour_type: true,
+                  meting_points: true,
+                  city: true,
+                  commission_rate: true,
+                  country: true,
+                  host_earnings: true,
+                  house_rules: true,
+                  latitude: true,
+                  longitude: true,
+                  max_guests: true,
+                  parking: true,
+                  postal_code: true,
+                  rate_plans: true,
+                  size_sqm: true,
+                  extra_services: true,
+                  non_refundable_days: true,
+                  package_files: {
+                    select: {
+                      id: true,
+                      file: true,
+                      file_alt: true,
+                      type: true,
+                      is_featured: true,
+                    },
+                  },
+                  reviews: {
+                    where: {
+                      status: 1,
+                    },
+                  },
                 },
               },
               PackageRoomType: {
@@ -1193,6 +1332,7 @@ export class BookingService {
             },
           },
           booking_travellers: true,
+          
           booking_extra_services: {
             include: {
               extra_service: {
@@ -1207,13 +1347,104 @@ export class BookingService {
         },
       });
 
+      
+
       if (!booking) {
         throw new NotFoundException('Booking not found');
       }
 
+      // Add image URLs to package data
+      if (booking.booking_items && booking.booking_items.length > 0) {
+        booking.booking_items.forEach(item => {
+          if (item.package) {
+            item.package = this.addImageUrls(item.package);
+          }
+        });
+      }
+      let rating_summary = null;
+      const packageData = booking.booking_items?.[0]?.package;
+      if (packageData?.reviews && packageData.reviews.length > 0) {
+        const totalReviews = packageData.reviews.length;
+        const totalRating = packageData.reviews.reduce((sum, review) => sum + review.rating_value, 0);
+        const averageRating = totalRating / totalReviews;
+        
+        // Count ratings by value
+        const ratingCounts = {
+          5: 0,
+          4: 0,
+          3: 0,
+          2: 0,
+          1: 0,
+        };
+        
+        packageData.reviews.forEach(review => {
+          if (ratingCounts[review.rating_value] !== undefined) {
+            ratingCounts[review.rating_value]++;
+          }
+        });
+        
+        rating_summary = {
+          average: parseFloat(averageRating.toFixed(2)),
+          total_reviews: totalReviews,
+          rating_distribution: ratingCounts,
+          percentage_distribution: {
+            5: Math.round((ratingCounts[5] / totalReviews) * 100),
+            4: Math.round((ratingCounts[4] / totalReviews) * 100),
+            3: Math.round((ratingCounts[3] / totalReviews) * 100),
+            2: Math.round((ratingCounts[2] / totalReviews) * 100),
+            1: Math.round((ratingCounts[1] / totalReviews) * 100),
+          },
+          recent_reviews: packageData.reviews
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .slice(0, 3), // Get 3 most recent reviews
+        };
+      }
+
+
+      // Extract file_url from package_files (after addImageUrls has added file_url)
+      const file_url = (booking.booking_items?.[0]?.package?.package_files?.[0] as any)?.file_url || null;
+      // Calculate price breakdown
+      const bookingItem = booking.booking_items?.[0];
+      const packageInfo = bookingItem?.package;
+      const quantity = bookingItem?.quantity || 0;
+      const price = parseFloat(bookingItem?.price?.toString() || '0');
+      const serviceFee = parseFloat(packageInfo?.service_fee?.toString() || '0');
+      
+      const packageTotal = quantity * price;
+      const extraServicesTotal = booking.booking_extra_services?.reduce((sum, es) => 
+        sum + (parseFloat(es.price?.toString() || '0') * es.quantity), 0) || 0;
+      
+      const subtotal = packageTotal + serviceFee + extraServicesTotal;
+      const discount = parseFloat(packageInfo?.discount?.toString() || '0');
+      const discountAmount = (packageTotal * discount) / 100;
+      const finalTotal = subtotal - discountAmount;
+
+      const transformedBooking = {
+        ...booking,
+        booking_items: booking.booking_items?.[0] || null,
+        file_url: file_url,
+        booking_travellers: booking.booking_travellers?.[0] || null,
+        rating_summary: rating_summary,
+        price_breakdown: {
+          quantity: quantity,
+          package_price: price,
+          package_total: packageTotal,
+          service_fee: serviceFee,
+          service_fee_total: serviceFee,
+          extra_services_total: extraServicesTotal,
+          subtotal: subtotal,
+          discount_percentage: discount,
+          discount_amount: discountAmount,
+          final_total: finalTotal,
+          currency: 'USD' // You can make this dynamic
+        }
+      };
+
+       // Calculate rating summary
+       
       return {
         success: true,
-        data: booking,
+        data: transformedBooking,
         message: 'Booking retrieved successfully',
       };
     } catch (error) {

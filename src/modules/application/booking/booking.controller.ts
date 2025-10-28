@@ -25,6 +25,7 @@ import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
 import { RefundRequest } from './dto/refund-request.dto';
 import { GetUserBookingsDto } from './dto/get-user-bookings.dto';
 import { GetUserDashboardDto } from './dto/get-user-dashboard.dto';
+import { CalculateBookingTotalDto } from './dto/calculate-booking-total.dto';
 
 @ApiBearerAuth()
 @ApiTags('Booking')
@@ -313,4 +314,6 @@ export class BookingController {
     const user_id = req.user.userId;
     return await this.bookingService.refundRequest({ user_id, booking_id, refund_reason: body.refund_reason })
   }
+
+  
 }

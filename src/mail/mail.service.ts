@@ -42,7 +42,6 @@ export class MailService {
     try {
       const from = `${process.env.APP_NAME} <${appConfig().mail.from}>`;
       const subject = 'Email Verification';
-
       // add to queue
       await this.queue.add('sendOtpCodeToEmail', {
         to: email,
@@ -58,6 +57,7 @@ export class MailService {
       console.log(error);
     }
   }
+  
   
 
   async sendVerificationLink(params: {
