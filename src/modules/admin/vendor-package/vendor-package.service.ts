@@ -77,9 +77,9 @@ export class VendorPackageService {
         reason: null,
         room_type_id: null,
         price: pricingRules ? this.computeEffectivePrice(date, {
-          base_price: pricingRules.base_price,
-          weekend_price: pricingRules.weekend_price,
-          flat_discount: pricingRules.flat_discount,
+          base_price: Number(pricingRules.base_price),
+          weekend_price: Number(pricingRules.weekend_price),
+          flat_discount: Number(pricingRules.flat_discount),
           weekend_days: pricingRules.weekend_days,
         }) : null,
       }));
@@ -88,8 +88,6 @@ export class VendorPackageService {
       await this.prisma.propertyCalendar.createMany({
         data: calendarData
       });
-  
-      console.log(`✅ Calendar initialized with pricing for ${dates.length} dates`);
     } catch (error) {
       console.error('❌ Failed to initialize calendar with pricing:', error);
       // Don't throw to avoid breaking package creation
@@ -773,8 +771,17 @@ export class VendorPackageService {
         }
       }
       
-      // Handle package_policies separately before updating the package
-      const { package_policies, ...packageUpdateData } = updateVendorPackageDto;
+      // Handle fields that are not part of the Package model separately before updating the package
+      const { 
+        package_policies, 
+        initialize_calendar, 
+        close_dates, 
+        calendar_end_date,
+        close_date_ranges,
+        destinations,
+        trip_plans,
+        ...packageUpdateData 
+      } = updateVendorPackageDto;
       
       const updatedPackage = await this.prisma.package.update({
         where: {
@@ -1570,16 +1577,48 @@ export class VendorPackageService {
         };
       }
 
-      // Add package availabilities if provided
+      // Add package availabilities based on package type
       if (package_availabilities && package_availabilities.length > 0) {
-        data.package_availabilities = {
-          create: package_availabilities.map((availability: any) => ({
-            date: new Date(availability.date),
-            status: availability.status,
-            rates: availability.rates,
-            restrictions: availability.restrictions
-          }))
-        };
+        if (cleanPackageData.type === 'tour') {
+          // For tour packages, create availability only for created date
+          const createdDate = new Date();
+          data.package_availabilities = {
+            create: [{
+              date: createdDate,
+              status: 'available',
+              rates: null,
+              restrictions: null,
+            }]
+          };
+        } else if (cleanPackageData.type === 'apartment' || cleanPackageData.type === 'hotel') {
+          // For apartment/hotel, we'll create room-type wise availability after package creation
+          // Don't create availability here, it will be handled after room types are created
+        } else {
+          // For other package types, use the provided availability data as is
+          data.package_availabilities = {
+            create: package_availabilities.map((availability: any) => ({
+              date: new Date(availability.date),
+              status: availability.status,
+              rates: availability.rates,
+              restrictions: availability.restrictions
+            }))
+          };
+        }
+      } else {
+        // If no package_availabilities provided, create default availability based on package type
+        if (cleanPackageData.type === 'tour') {
+          // For tour packages, create availability for created date only
+          const createdDate = new Date();
+          data.package_availabilities = {
+            create: [{
+              date: createdDate,
+              status: 'available',
+              rates: null,
+              restrictions: null,
+            }]
+          };
+        }
+        // For apartment/hotel, we'll create availability after room types are created
       }
 
       // Add extra services if provided
@@ -1835,6 +1874,47 @@ export class VendorPackageService {
         const fullUrl = this.generateFileUrl(filename, 'package');
         return fullUrl;
       });
+
+      // Create room-type wise availability for apartment/hotel packages after package creation
+      if (cleanPackageData.type === 'apartment' || cleanPackageData.type === 'hotel') {
+        
+        // For apartment/hotel, create availability based on calendar configuration
+        const calendarStart = createVendorPackageDto.calendar_start_date || new Date();
+        const calendarEnd = createVendorPackageDto.calendar_end_date || (() => {
+          const end = new Date();
+          end.setMonth(end.getMonth() + 12);
+          return end;
+        })();
+
+        // Generate availability data for the date range
+        const dates = this.generateDateRange(calendarStart, calendarEnd);
+        const availabilityData = [];
+
+        for (const date of dates) {
+          for (const roomType of result.package_room_types || []) {
+            availabilityData.push({
+              package_id: result.id,
+              date: date,
+              status: 'available',
+              rates: null,
+              restrictions: null
+            });
+          }
+        }
+
+        // Create availability records
+        if (availabilityData.length > 0) {
+          try {
+            await this.prisma.packageAvailability.createMany({
+              data: availabilityData
+            });
+          } catch (error) {
+            console.error('❌ Failed to create availability records:', error);
+          }
+        } else {
+          console.log('⚠️ No availability data to create');
+        }
+      }
 
       // Initialize calendar with pricing (if rules provided) or default
       if (pricing_rules) {
@@ -3263,6 +3343,12 @@ export class VendorPackageService {
     closeDateRanges?: Array<{start_date: Date; end_date: Date; reason?: string}>
   ) {
     try {
+      // Get package type to determine availability logic
+      const packageData = await this.prisma.package.findUnique({
+        where: { id: packageId },
+        select: { type: true }
+      });
+
       // Use provided dates or default to next 12 months
       const calendarStart = startDate || new Date();
       const calendarEnd = endDate || (() => {
@@ -3273,52 +3359,145 @@ export class VendorPackageService {
 
       const dates = this.generateDateRange(calendarStart, calendarEnd);
       
-      // Create calendar data with close dates
-      const calendarData = dates.map(date => {
-        let status = 'available';
-        let reason = null;
+      // For tour packages, only create availability for created date
+      if (packageData?.type === 'tour') {
+        const createdDate = new Date();
+        const calendarData = [{
+          package_id: packageId,
+          date: createdDate,
+          status: 'available',
+          reason: null,
+          room_type_id: null
+        }];
 
-        // Check if date is in close_dates
-        if (closeDates && closeDates.length > 0) {
-          const isCloseDate = closeDates.some(closeDate => {
-            const closeDateStr = new Date(closeDate).toDateString();
-            const currentDateStr = date.toDateString();
-            return closeDateStr === currentDateStr;
-          });
-          
-          if (isCloseDate) {
-            status = 'closed';
-            reason = 'Closed date';
-          }
-        }
+        await this.prisma.propertyCalendar.createMany({
+          data: calendarData
+        });
+        return;
+      }
 
-        // Check if date is in close_date_ranges
-        if (closeDateRanges && closeDateRanges.length > 0) {
-          for (const range of closeDateRanges) {
-            const rangeStart = new Date(range.start_date);
-            const rangeEnd = new Date(range.end_date);
+      // For apartment/hotel packages, create room-type wise availability
+      if (packageData?.type === 'apartment' || packageData?.type === 'hotel') {
+        // Get all room types for this package
+        const roomTypes = await this.prisma.packageRoomType.findMany({
+          where: { 
+            package_id: packageId,
+            deleted_at: null 
+          },
+          select: { id: true }
+        });
+
+        const calendarData = [];
+
+        // Create availability for each date and each room type
+        for (const date of dates) {
+          let status = 'available';
+          let reason = null;
+
+          // Check if date is in close_dates
+          if (closeDates && closeDates.length > 0) {
+            const isCloseDate = closeDates.some(closeDate => {
+              const closeDateStr = new Date(closeDate).toDateString();
+              const currentDateStr = date.toDateString();
+              return closeDateStr === currentDateStr;
+            });
             
-            if (date >= rangeStart && date <= rangeEnd) {
+            if (isCloseDate) {
               status = 'closed';
-              reason = range.reason || 'Closed for maintenance';
-              break;
+              reason = 'Closed date';
             }
           }
+
+          // Check if date is in close_date_ranges
+          if (closeDateRanges && closeDateRanges.length > 0) {
+            for (const range of closeDateRanges) {
+              const rangeStart = new Date(range.start_date);
+              const rangeEnd = new Date(range.end_date);
+              
+              if (date >= rangeStart && date <= rangeEnd) {
+                status = 'closed';
+                reason = range.reason || 'Closed for maintenance';
+                break;
+              }
+            }
+          }
+
+          // Create availability for each room type
+          if (roomTypes.length > 0) {
+            for (const roomType of roomTypes) {
+              calendarData.push({
+                package_id: packageId,
+                date: date,
+                status: status,
+                reason: reason,
+                room_type_id: roomType.id
+              });
+            }
+          } else {
+            // If no room types, create general availability
+            calendarData.push({
+              package_id: packageId,
+              date: date,
+              status: status,
+              reason: reason,
+            });
+          }
         }
 
-        return {
-          package_id: packageId,
-          date: date,
-          status: status,
-          reason: reason,
-          room_type_id: null
-        };
-      });
+        // Batch insert PropertyCalendar records
+        if (calendarData.length > 0) {
+          await this.prisma.propertyCalendar.createMany({
+            data: calendarData
+          });
+        }
+      } else {
+        // For other package types, create general availability
+        const calendarData = dates.map(date => {
+          let status = 'available';
+          let reason = null;
 
-      // Batch insert PropertyCalendar records
-      const result = await this.prisma.propertyCalendar.createMany({
-        data: calendarData
-      });
+          // Check if date is in close_dates
+          if (closeDates && closeDates.length > 0) {
+            const isCloseDate = closeDates.some(closeDate => {
+              const closeDateStr = new Date(closeDate).toDateString();
+              const currentDateStr = date.toDateString();
+              return closeDateStr === currentDateStr;
+            });
+            
+            if (isCloseDate) {
+              status = 'closed';
+              reason = 'Closed date';
+            }
+          }
+
+          // Check if date is in close_date_ranges
+          if (closeDateRanges && closeDateRanges.length > 0) {
+            for (const range of closeDateRanges) {
+              const rangeStart = new Date(range.start_date);
+              const rangeEnd = new Date(range.end_date);
+              
+              if (date >= rangeStart && date <= rangeEnd) {
+                status = 'closed';
+                reason = range.reason || 'Closed for maintenance';
+                break;
+              }
+            }
+          }
+
+          return {
+            package_id: packageId,
+            date: date,
+            status: status,
+            reason: reason,
+            room_type_id: null
+          };
+        });
+
+        // Batch insert PropertyCalendar records
+        await this.prisma.propertyCalendar.createMany({
+          data: calendarData
+        });
+      }
     } catch (error) {
       console.error('Failed to initialize calendar:', error);
       console.error('Error details:', {
@@ -3559,9 +3738,9 @@ export class VendorPackageService {
 
         // Calculate new price using rules
         const newPrice = this.computeEffectivePrice(date, {
-          base_price: pricingRules.base_price,
-          weekend_price: pricingRules.weekend_price,
-          flat_discount: pricingRules.flat_discount,
+          base_price: Number(pricingRules.base_price),
+          weekend_price: Number(pricingRules.weekend_price),
+          flat_discount: Number(pricingRules.flat_discount),
           weekend_days: pricingRules.weekend_days as number[]
         });
 
@@ -3637,6 +3816,141 @@ export class VendorPackageService {
         success: true,
         data: pricingRules,
         message: pricingRules ? 'Pricing rules found' : 'No pricing rules found'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message
+      };
+    }
+  }
+
+  /**
+   * Create room-type wise availability for apartment/hotel packages
+   */
+  private async createRoomTypeWiseAvailability(
+    packageId: string,
+    packageAvailabilities: any[],
+    roomTypes: any[]
+  ) {
+    try {
+      const availabilityData = [];
+
+      // For each availability date and each room type, create availability
+      for (const availability of packageAvailabilities) {
+        const availabilityDate = new Date(availability.date);
+        
+        if (roomTypes.length > 0) {
+          // Create availability for each room type
+          for (const roomType of roomTypes) {
+            availabilityData.push({
+              package_id: packageId,
+              date: availabilityDate,
+              status: availability.status || 'available',
+              rates: availability.rates || null,
+              restrictions: availability.restrictions || null,
+              room_type_id: roomType.id
+            });
+          }
+        } else {
+          // If no room types, create general availability
+          availabilityData.push({
+            package_id: packageId,
+            date: availabilityDate,
+            status: availability.status || 'available',
+            rates: availability.rates || null,
+            restrictions: availability.restrictions || null,
+            room_type_id: null
+          });
+        }
+      }
+
+      // Batch insert availability records
+      if (availabilityData.length > 0) {
+        await this.prisma.packageAvailability.createMany({
+          data: availabilityData
+        });
+      }
+
+      console.log(`✅ Created ${availabilityData.length} availability records for package ${packageId}`);
+    } catch (error) {
+      console.error('❌ Failed to create room-type wise availability:', error);
+      // Don't throw to avoid breaking package creation
+    }
+  }
+
+  /**
+   * Get package availability summary for debugging
+   */
+  async getPackageAvailabilitySummary(packageId: string) {
+    try {
+      // Get package info
+      const packageData = await this.prisma.package.findUnique({
+        where: { id: packageId },
+        select: { 
+          id: true, 
+          name: true, 
+          type: true,
+          created_at: true 
+        }
+      });
+
+      if (!packageData) {
+        throw new Error('Package not found');
+      }
+
+      // Get availability records
+      const availabilityRecords = await this.prisma.packageAvailability.findMany({
+        where: { package_id: packageId },
+        orderBy: [
+          { date: 'asc' }
+        ]
+      });
+
+      // Get room types
+      const roomTypes = await this.prisma.packageRoomType.findMany({
+        where: { 
+          package_id: packageId,
+          deleted_at: null 
+        },
+        select: { id: true, name: true }
+      });
+
+      // Get calendar configuration
+      const calendarConfig = await this.getCalendarConfiguration(packageId);
+
+      // Group by date for better visualization
+      const availabilityByDate = availabilityRecords.reduce((acc, record) => {
+        const dateKey = record.date.toISOString().split('T')[0];
+        if (!acc[dateKey]) {
+          acc[dateKey] = [];
+        }
+        acc[dateKey].push({
+          id: record.id,
+          status: record.status,
+          rates: record.rates,
+          restrictions: record.restrictions
+        });
+        return acc;
+      }, {});
+
+      return {
+        success: true,
+        data: {
+          package: packageData,
+          roomTypes: roomTypes,
+          calendarConfiguration: calendarConfig,
+          availabilitySummary: {
+            totalRecords: availabilityRecords.length,
+            dateRange: {
+              start: availabilityRecords[0]?.date,
+              end: availabilityRecords[availabilityRecords.length - 1]?.date
+            },
+            availabilityByDate: availabilityByDate,
+            roomTypeCount: roomTypes.length,
+            datesCount: Object.keys(availabilityByDate).length
+          }
+        }
       };
     } catch (error) {
       return {
