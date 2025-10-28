@@ -829,11 +829,6 @@ export class BookingService {
         const extraServices = booking.booking_extra_services ?? [];
         const extraServicesTotal = extraServices.reduce((sum, es) => 
           sum + (parseFloat((es.price ?? 0).toString()) * (es.quantity ?? 1)), 0);
-        console.log("===============swapan============")
-        console.log('Extra services:', extraServices);
-        console.log('Extra services total:', extraServicesTotal);
-        console.log("=================================")
-        
         const subtotal = packageTotal + serviceFee + extraServicesTotal;
         const discount = parseFloat(package_data?.discount?.toString() || '0');
         const discountAmount = (packageTotal * discount) / 100;
@@ -1037,16 +1032,11 @@ export class BookingService {
 
   async findAll(user_id: string, query: { q?: string; status?: string; approve?: string; show_all?: string }) {
     try {
-      console.log('=== findAll DEBUG START ===');
-      console.log('User ID received:', user_id);
-      console.log('Query parameters:', query);
-      console.log('User ID type:', typeof user_id);
 
       // First, let's check if there are ANY bookings in the database
       const totalBookingsCount = await this.prisma.booking.count({
         where: { deleted_at: null }
       });
-      console.log('Total bookings in database:', totalBookingsCount);
 
       // Check if there are bookings for this specific user
       const userBookingsCount = await this.prisma.booking.count({
@@ -1055,7 +1045,6 @@ export class BookingService {
           deleted_at: null
         }
       });
-      console.log('Bookings for this user:', userBookingsCount);
 
       // Let's also check what user_ids exist in the database
       const allUserIds = await this.prisma.booking.findMany({
@@ -1063,8 +1052,7 @@ export class BookingService {
         select: { user_id: true },
         distinct: ['user_id']
       });
-      console.log('All user_ids in bookings table:', allUserIds.map(b => b.user_id));
-
+      
       // Determine if requester is admin
       const requester = await this.prisma.user.findUnique({
         where: { id: user_id },
@@ -1073,16 +1061,12 @@ export class BookingService {
 
       const isAdmin = requester?.type === 'admin' || requester?.type === 'su_admin';
       const showAll = query.show_all === 'true';
-      console.log('Requester type:', requester?.type);
-      console.log('Is admin:', isAdmin);
-      console.log('Show all flag:', showAll);
 
       const where: any = {
         deleted_at: null,
       };
       if (!isAdmin && !showAll) {
         where.user_id = user_id;
-        console.log('Filtering by user_id:', user_id);
       } else {
         console.log('Admin access or show_all=true - showing all bookings');
       }
@@ -1111,7 +1095,6 @@ export class BookingService {
         ];
       }
 
-      console.log('Final where clause:', JSON.stringify(where, null, 2));
 
       const bookings = await this.prisma.booking.findMany({
         where,
@@ -1216,9 +1199,6 @@ export class BookingService {
           created_at: 'desc',
         },
       });
-
-      console.log(`Query returned ${bookings.length} bookings`);
-      console.log('=== findAll DEBUG END ===');
 
       // Transform booking_items, booking_extra_services and booking_travellers array to object for each booking
       const transformedBookings = bookings.map(booking => ({

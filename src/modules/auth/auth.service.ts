@@ -427,19 +427,16 @@ export class AuthService {
   }
 
   async verifyEmail({ email, token }) {
-    console.log("swapan : ",email, token);
     try {
       const user = await UserRepository.exist({
         field: 'email',
         value: email,
       });
-      console.log(user);
       if (user) {
         const existToken = await UcodeRepository.validateToken({
           email: email,
           token: token,
         });
-        console.log("swapan : ",existToken);
 
         if (existToken) {
           await this.prisma.user.update({
