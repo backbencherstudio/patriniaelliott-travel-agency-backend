@@ -999,7 +999,7 @@ export class PackageService {
         });
       }
 
-      let { budget_end, budget_start, cursor, destinations, duration_end, duration_start, free_cancellation, languages, limit, page, q, ratings, type, popular_area } = query.data
+      let { budget_end, budget_start, cursor, destinations, duration_end, duration_start, free_cancellation, languages, limit, page, q, ratings, type, popular_area,start_date, end_date } = query.data
 
       const where_condition: any = {};
       const query_condition = {};
@@ -1031,6 +1031,20 @@ export class PackageService {
         //   gte: DateHelper.format(duration_start),
         //   lte: DateHelper.format(duration_end),
         // };
+      }
+      if (start_date && end_date) {
+        const start = new Date(start_date);
+        const end = new Date(end_date);
+        end.setHours(23, 59, 59, 999); 
+      
+        where_condition['package_availabilities'] = {
+          some: {
+            date: {
+              gte: start,
+              lte: end,
+            },
+          },
+        };
       }
       if (budget_end) {
         where_condition['price'] = {
