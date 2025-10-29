@@ -5,6 +5,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { join } from 'path';
+import PathResolver from './utils/path-resolver';
 
 // internal imports
 import { AppModule } from './app.module';
@@ -20,10 +21,8 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   app.enableCors();
   app.use(helmet());
-  // Use consistent path resolution for static assets (same as storage config)
-  const publicPath = process.env.NODE_ENV === 'production'
-    ? join(__dirname, 'dist', '../public')  // Production: resolve relative to project root
-    : join(process.cwd(), 'public');       // Development: /project/public
+  // Centralized path resolution for static assets
+  const publicPath = PathResolver.getPublicRootPath();
 
   app.useStaticAssets(publicPath, {
     index: false,
