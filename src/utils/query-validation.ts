@@ -134,6 +134,10 @@ export const packageSearchQuerySchema = z.object({
         .optional()
         .transform((val) => (val ? (Array.isArray(val) ? val : [val]) : [])),
 
+    // Optional date range filters for availability search
+    start_date: z.string().optional(),
+    end_date: z.string().optional(),
+
     cursor: z.string().optional(),
 
     limit: z
