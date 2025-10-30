@@ -5,7 +5,6 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { join } from 'path';
-import PathResolver from './utils/path-resolver';
 
 // internal imports
 import { AppModule } from './app.module';
@@ -21,8 +20,9 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   app.enableCors();
   app.use(helmet());
-  // Centralized path resolution for static assets
-  const publicPath = PathResolver.getPublicRootPath();
+  const publicPath = process.env.NODE_ENV === 'production'
+    ? join(__dirname, 'public')
+    : join(process.cwd(), 'public');
 
   app.useStaticAssets(publicPath, {
     index: false,
@@ -37,13 +37,7 @@ async function bootstrap() {
 
   app.use('/public/storage', (req, res, next) => {
     try {
-      const filePath = join(publicPath, 'storage', req.path);
-      
-      console.log('🔍 [STATIC FILE DEBUG] Static file requested:', req.path);
-      console.log('🔍 [STATIC FILE DEBUG] publicPath:', publicPath);
-      console.log('🔍 [STATIC FILE DEBUG] Full filePath:', filePath);
-      console.log('🔍 [STATIC FILE DEBUG] NODE_ENV:', process.env.NODE_ENV);
-      console.log('🔍 [STATIC FILE DEBUG] File exists:', require('fs').existsSync(filePath));
+      const filePath = join(publicPath, 'storage', req.path);      
       
       // Check if file exists
       if (require('fs').existsSync(filePath)) {
