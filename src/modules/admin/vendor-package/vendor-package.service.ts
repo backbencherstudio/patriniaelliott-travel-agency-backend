@@ -966,6 +966,10 @@ export class VendorPackageService {
           
           const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
+          console.log('-------path and file name start----------');
+          console.log({path: appConfig().storageUrl.package, filePath});
+          console.log('-------path and file name end----------');
+          
           const filePath2 = path.join(
             appConfig().storageUrl.rootUrl,
             appConfig().storageUrl.package
