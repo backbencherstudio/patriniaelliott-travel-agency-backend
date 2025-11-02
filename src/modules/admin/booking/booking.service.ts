@@ -188,6 +188,7 @@ export class BookingService {
     page,
     limit,
     sort_by,
+    dateFilter,
   }: {
     q?: string;
     status?: number;
@@ -197,6 +198,7 @@ export class BookingService {
     page?: number;
     limit?: number;
     sort_by?: string;
+    dateFilter?: string;
   }) {
     // Ensure proper default values
     const pageNumber = page || 1;
@@ -217,6 +219,25 @@ export class BookingService {
         where_condition['status'] = Number(status);
       }
 
+      if (dateFilter && dateFilter !== 'all') {
+        const now = new Date();
+        let startDate: Date;
+        switch (dateFilter) {
+          case '30days':
+            startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            break;
+          case '15days':
+            startDate = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+            break;
+          case '7days':
+            startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            break;
+          default:
+            startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        }
+        if (startDate) where_condition['created_at'] = { gte: startDate, lte: now };
+      }
+
       if (approve) {
         if (approve === 'approved') {
           where_condition['approved_at'] = { not: null };
@@ -226,33 +247,12 @@ export class BookingService {
       }
 
       // filter by type
+      console.log('Service received type:', type);
       if (type && type !== 'all') {
         where_condition['type'] = type;
-      }
-      // If type is 'all' or not provided, don't filter by type (show all types)
-
-      // filter by date range
-      if (date_range && date_range !== 'all') {
-        const now = new Date();
-        let startDate: Date;
-        
-        switch (date_range) {
-          case 'last_7_days':
-            startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            break;
-          case 'last_30_days':
-            startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            break;
-          case 'last_90_days':
-            startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-            break;
-          default:
-            startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // default to 30 days
-        }
-        
-        where_condition['created_at'] = {
-          gte: startDate,
-        };
+        console.log('Applying type filter:', type);
+      } else {
+        console.log('No type filter applied (showing all types)');
       }
 
       // Calculate pagination
@@ -480,7 +480,6 @@ export class BookingService {
       const totalPages = Math.ceil(totalCount / limitNumber);
       const hasNextPage = pageNumber < totalPages;
       const hasPreviousPage = pageNumber > 1;
-
       const paginationData = {
         current_page: pageNumber,
         total_pages: totalPages,
@@ -489,9 +488,6 @@ export class BookingService {
         has_next_page: hasNextPage,
         has_previous_page: hasPreviousPage,
       };
-
-
-
       return {
         success: true,
         data: formattedBookings,

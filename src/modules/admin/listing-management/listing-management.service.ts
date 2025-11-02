@@ -114,7 +114,10 @@ export class ListingManagementService {
           case '30days':
             startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
             break;
-          case '1week':
+          case '15days':
+            startDate = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+            break;
+          case '7days':
             startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
             break;
           default:

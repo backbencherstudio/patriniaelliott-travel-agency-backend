@@ -17,11 +17,12 @@ export class VendorUserVerificationAdminController {
 @Roles(Role.ADMIN, Role.VENDOR)
   @ApiOperation({ summary: 'List user documents' })
   @Get('documents')
-  async list(@Query() query: { status?: string; page?: number; limit?: number }) {
+  async list(@Query() query: { status?: string; page?: number; limit?: number; dateFilter?: string }) {
     return this.service.listDocuments({
-      status: query.status ,
-      page: Number(query.page ?? 1),
-      limit: Number(query.limit ?? 20),
+      status: query.status,
+      page: Number(query.page) || 1,
+      limit: Number(query.limit) || 20,
+      dateFilter: query.dateFilter,
     });
   }
 

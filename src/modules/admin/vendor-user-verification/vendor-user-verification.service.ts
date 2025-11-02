@@ -5,15 +5,36 @@ import { PrismaService } from '../../../prisma/prisma.service';
 export class VendorUserVerificationAdminService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listDocuments({ status, page = 1, limit = 20 }: { status?: string; page?: number; limit?: number }) {
+  async listDocuments(query: { status?: string; page?: number; limit?: number; dateFilter?: string }) {
     const where: any = { deleted_at: null };
-    if (status && status !== 'all') where.status = status;
+    if (query.status && query.status !== 'all') where.status = query.status;
+    if (query.dateFilter && query.dateFilter !== 'all') {
+      const now = new Date();
+      let startDate: Date;
+      switch (query.dateFilter) {
+        case '30days':
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        case '15days':
+          startDate = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+          break;
+        case '7days':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+      }
+      if (startDate) where.created_at = { gte: startDate, lte: now };
+    }
+
+    // Ensure page and limit are valid numbers with defaults
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 10;
+    const skip = (page - 1) * limit;
 
     const [docs, total] = await Promise.all([
       this.prisma.userDocument.findMany({
         where,
         orderBy: { created_at: 'desc' },
-        skip: (page - 1) * limit,
+        skip: skip,
         take: limit,
         include: {
           user: { 
@@ -74,7 +95,7 @@ export class VendorUserVerificationAdminService {
     return {
       success: true,
       data: docsWithUrls,
-      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      meta: { page: page, limit: limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
 

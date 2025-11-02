@@ -42,22 +42,30 @@ export class BookingController {
         page,
         limit,
         sort_by,
+        dateFilter,
       } = query;
 
+      // Handle duplicate query params - use the last value if array
+      const finalType = Array.isArray(type) ? type[type.length - 1] : type;
+      
       // Set default values
       const pageNumber = page || 1; 
       const limitNumber = limit || 10;
       const sortBy = sort_by || 'created_at_desc';
+      const dateFilterValue = dateFilter || 'all';
+
+      console.log('Booking query params:', { type: finalType, dateFilter: dateFilterValue, page: pageNumber, limit: limitNumber });
 
       const bookings = await this.bookingService.findAll({
         q,
         status,
         approve,
-        type,
+        type: finalType,
         date_range,
         page: pageNumber,
         limit: limitNumber,
         sort_by: sortBy,
+        dateFilter: dateFilterValue,
       });
       
       return bookings;
