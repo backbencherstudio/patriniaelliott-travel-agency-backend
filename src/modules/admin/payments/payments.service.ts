@@ -159,7 +159,7 @@ export class PaymentsService {
                 page,
                 perPage,
                 payment_method,
-                dateRange,
+                dateFilter,
                 startDate,
                 endDate,
                 type
@@ -168,18 +168,15 @@ export class PaymentsService {
             let from: Date | undefined;
             let to: Date | undefined = new Date();
 
-            switch (dateRange) {
-                case "7d":
+            switch (dateFilter) {
+                case "7days":
                     from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
                     break;
-                case "30d":
+                case "30days":
                     from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
                     break;
-                case "90d":
-                    from = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-                    break;
-                case "365d":
-                    from = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+                case "15days":
+                    from = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
                     break;
                 case "custom":
                     if (startDate && endDate) {
@@ -341,7 +338,7 @@ export class PaymentsService {
     }: {
         booking_id: string;
         status: string;
-        partial_refund: boolean;
+        partial_refund: boolean;        
     }) {
         try {
             const booking = await this.prisma.booking.findUnique({

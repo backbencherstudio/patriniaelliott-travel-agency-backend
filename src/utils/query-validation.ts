@@ -18,21 +18,21 @@ export const dashboardTransactionsQuerySchema = z.object({
         .enum(["all", "order", "refund"])
         .optional()
         .default('all'),
-    dateRange: z
-        .enum(["7d", "30d", "90d", "365d", "all", "custom"])
+    dateFilter: z
+        .enum(["7days", "30days", "15days", "all", "custom"])
         .optional()
-        .default("7d"),
+        .default("all"),
 
     startDate: z.string().datetime().optional(),
     endDate: z.string().datetime().optional(),
 }).refine(
     (data) => {
-        if (data.dateRange === "custom") {
+        if (data.dateFilter === "custom") {
             return data.startDate && data.endDate;
         }
         return true;
     },
-    { message: "startDate and endDate are required when dateRange is 'custom'" }
+    { message: "startDate and endDate are required when dateFilter is 'custom'" }
 );
 
 export const withdrawQuerySchema = z.object({
