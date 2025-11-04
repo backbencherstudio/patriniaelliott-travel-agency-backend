@@ -20,8 +20,8 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
   app.enableCors();
-  app.use(bodyParser.json({ limit: '100mb' }));
-  app.use(bodyParser.urlencoded({ limit: '100mb', extended: true }));
+  app.use(bodyParser.json({ limit: '1024mb' }));
+  app.use(bodyParser.urlencoded({ limit: '1024mb', extended: true }));
   app.use(helmet());
   const publicPath = process.env.NODE_ENV === 'production'
     ? join(__dirname, 'public')
