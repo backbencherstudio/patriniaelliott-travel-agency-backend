@@ -90,8 +90,16 @@ export class UserProfileService {
         passport_issuing_country: updateUserProfileDto.passport_issuing_country,
         passport_expiry_date: updateUserProfileDto.passport_expiry_date ? new Date(updateUserProfileDto.passport_expiry_date) : undefined,
       };
-
-      // Add avatar filename to update data if uploaded
+      if (updateUserProfileDto.first_name !== undefined || updateUserProfileDto.last_name !== undefined) {
+        const firstName = updateUserProfileDto.first_name !== undefined 
+          ? updateUserProfileDto.first_name 
+          : existingUser.first_name;
+        const lastName = updateUserProfileDto.last_name !== undefined 
+          ? updateUserProfileDto.last_name 
+          : existingUser.last_name;
+        const nameParts = [firstName, lastName].filter(part => part != null && part.trim() !== '');
+        updateData.name = nameParts.length > 0 ? nameParts.join(' ') : null;
+      }
       if (avatarFileName) {
         updateData.avatar = avatarFileName;
       }
