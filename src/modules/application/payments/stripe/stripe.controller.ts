@@ -71,7 +71,8 @@ export class StripeController {
         return this.stripeService.getOnboardingLink(user_id, stripe_account_id)
     }
 
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.VENDOR)
     @ApiOperation({ summary: 'Get stripe account status' })
     @Get('/payments/:id/status')
     async accountStatus(
