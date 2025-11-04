@@ -37,8 +37,10 @@ export class CountryService {
             name: true,
             country_code: true,
             dial_code: true,
+            created_at: true,
+            updated_at: true,
           },
-          orderBy: { name: 'asc' },
+          orderBy: { created_at: 'desc' },
         }),
         this.prisma.country.count({ where }),
       ]);
