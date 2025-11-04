@@ -147,6 +147,9 @@ export class StripeService {
     }
 
     async accountStatus(user_id: string, id: string) {
+        console.log('====================================');
+        console.log('account status');
+        console.log('====================================');
         try {
             const user = await this.prisma.user.findUnique({
                 where: {
@@ -164,7 +167,11 @@ export class StripeService {
                 }
             })
 
-            const data = await StripePayment.AccountStatus(account.account_id)
+            if (!account?.account_id) {
+                throw new NotFoundException('You not connect your stripe account yet.')
+            }
+
+            const data = await StripePayment.AccountStatus(account?.account_id)
 
             return {
                 success: true,
