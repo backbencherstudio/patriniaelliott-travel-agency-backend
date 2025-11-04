@@ -991,7 +991,7 @@ model Country {
   status       Int?          @default(1) @db.SmallInt
   flag         String?
   name         String?
-  country_code String?
+  country_code String? @unique
   dial_code    String?
   destinations Destination[]
   taxes        Tax[]
