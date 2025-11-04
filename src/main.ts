@@ -5,6 +5,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { join } from 'path';
+import bodyParser from 'body-parser';
 
 // internal imports
 import { AppModule } from './app.module';
@@ -19,6 +20,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
   app.enableCors();
+  app.use(bodyParser({ limit: '100mb' }))
   app.use(helmet());
   const publicPath = process.env.NODE_ENV === 'production'
     ? join(__dirname, 'public')
@@ -37,8 +39,8 @@ async function bootstrap() {
 
   app.use('/public/storage', (req, res, next) => {
     try {
-      const filePath = join(publicPath, 'storage', req.path);      
-      
+      const filePath = join(publicPath, 'storage', req.path);
+
       // Check if file exists
       if (require('fs').existsSync(filePath)) {
         // Set proper headers for images
