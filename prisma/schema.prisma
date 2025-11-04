@@ -387,7 +387,7 @@ model Package {
   duration_type          String?
   min_capacity           Int?      @default(1)
   max_capacity           Int?      @default(1)
-  type                   String?   @default("tour")
+  type                   String?   
   cancellation_policy_id String?
   address                String?
   amenities              Json?
@@ -406,7 +406,7 @@ model Package {
   meting_points          String?
   city                   String?
   commission_rate        Decimal?  @default(15.0)
-  country                String?
+  country                String
   host_earnings          Decimal?
   house_rules            Json?
   latitude               Float?
@@ -990,7 +990,7 @@ model Country {
   deleted_at   DateTime?
   status       Int?          @default(1) @db.SmallInt
   flag         String?
-  name         String?
+  name         String
   country_code String? @unique
   dial_code    String?
   destinations Destination[]
