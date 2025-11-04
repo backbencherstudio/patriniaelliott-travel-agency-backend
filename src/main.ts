@@ -5,7 +5,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { join } from 'path';
-import bodyParser from 'body-parser';
+import * as bodyParser from 'body-parser';
 
 // internal imports
 import { AppModule } from './app.module';
@@ -20,7 +20,8 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
   app.enableCors();
-  app.use(bodyParser({ limit: '100mb' }))
+  app.use(bodyParser.json({ limit: '100mb' }));
+  app.use(bodyParser.urlencoded({ limit: '100mb', extended: true }));
   app.use(helmet());
   const publicPath = process.env.NODE_ENV === 'production'
     ? join(__dirname, 'public')
