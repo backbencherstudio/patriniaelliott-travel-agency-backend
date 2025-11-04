@@ -387,7 +387,7 @@ model Package {
   duration_type          String?
   min_capacity           Int?      @default(1)
   max_capacity           Int?      @default(1)
-  type                   String?   @default("tour")
+  type                   String?   
   cancellation_policy_id String?
   address                String?
   amenities              Json?
