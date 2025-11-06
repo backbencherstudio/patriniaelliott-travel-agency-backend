@@ -164,18 +164,7 @@ export class PackageRoomTypeDto {
 
   @ApiProperty({ 
     required: false,
-    description: 'Bedrooms data as JSON array for this room type',
-    example: [
-      {
-        title: "Bedroom 1",
-        beds: {
-          single_bed: 2,
-          double_bed: 0,
-          large_bed: 0,
-          extra_large_bed: 0
-        }
-      }
-    ]
+    description: 'Bedrooms data as JSON array for this room type'
   })
   @IsOptional()
   @IsString()
@@ -202,7 +191,7 @@ export class PackageRoomTypeDto {
   beds?: any;
 
   @ApiProperty({ required: true })
-  price: any; // Use string or Decimal type
+  price: any; 
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -274,7 +263,7 @@ export class CreateVendorPackageDto {
 
   @ApiProperty({ required: true })
   @IsOptional()
-  price?: any; // Use string or Decimal type
+  price?: any; 
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -349,18 +338,7 @@ export class CreateVendorPackageDto {
 
   @ApiProperty({ 
     required: false,
-    description: 'Bedrooms data as JSON array',
-    example: [
-      {
-        title: "Master Bedroom",
-        beds: {
-          single_bed: 1,
-          double_bed: 1,
-          large_bed: 0,
-          extra_large_bed: 0
-        }
-      }
-    ]
+    description: 'Bedrooms data as JSON array'
   })
   @IsOptional()
   @IsString()
@@ -557,6 +535,34 @@ export class CreateVendorPackageDto {
   @IsBoolean()
   initialize_calendar?: boolean = true;
 
+  @ApiProperty({
+    required: false,
+    description: 'Per-date prices within the selected calendar range',
+    type: [Object],
+    example: [
+      { date: '2025-11-10', price: 120, status: 'available' },
+      { date: '2025-11-11', price: 150 }
+    ]
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  })
+  @IsArray()
+  date_prices?: Array<{
+    date: Date | string;
+    price: number;
+    status?: string;
+    room_type_id?: string;
+  }>;
+
   @ApiProperty({ required: false, description: 'Close specific dates', type: [Date] })
   @IsOptional()
   @IsArray()
@@ -595,10 +601,7 @@ export class CreateVendorPackageDto {
     ]
   })
   @IsOptional()
-  @Transform(({ value }) => {
-    console.log('🔧 DTO Transform - Raw value:', value);
-    console.log('🔧 DTO Transform - Value type:', typeof value);
-    
+  @Transform(({ value }) => {    
     if (typeof value === 'string') {
       try {
         const parsed = JSON.parse(value);

@@ -40,7 +40,7 @@ export class VendorPackageService {
     flat_discount: number;
     weekend_days: number[];
   }): number {
-    const day = date.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const day = date.getDay(); 
     const isWeekend = rules.weekend_days.includes(day);
     const rawPrice = isWeekend ? rules.weekend_price : rules.base_price;
     const finalPrice = Math.max(0, rawPrice - rules.flat_discount);
@@ -57,12 +57,10 @@ export class VendorPackageService {
       let endDate: Date;
   
       if (calendarInitMonth) {
-        // Initialize specific month (e.g., "2025-10")
         const [year, monthNum] = calendarInitMonth.split('-').map(Number);
         startDate = new Date(year, monthNum - 1, 1);
-        endDate = new Date(year, monthNum, 0); // Last day of month
+        endDate = new Date(year, monthNum, 0); 
       } else {
-        // Default: next 12 months
         startDate = new Date();
         endDate = new Date();
         endDate.setMonth(endDate.getMonth() + 12);
@@ -84,16 +82,13 @@ export class VendorPackageService {
         }) : null,
       }));
   
-      // Batch insert PropertyCalendar records
       await this.prisma.propertyCalendar.createMany({
         data: calendarData
       });
     } catch (error) {
       console.error('❌ Failed to initialize calendar with pricing:', error);
-      // Don't throw to avoid breaking package creation
     }
   }
-  // Use SojebStorage.url() for generating file URLs
   private generateFileUrl(filePath: string, type: 'package' | 'avatar' = 'package'): string {
     const storagePath = type === 'package' ? appConfig().storageUrl.package : appConfig().storageUrl.avatar;
     const fullPath = storagePath + filePath;
@@ -110,7 +105,7 @@ export class VendorPackageService {
       status?: number;
       categoryId?: string;
       destinationId?: string;
-      type?: string | string[]; // Allow both string and array
+      type?: string | string[]; 
       freeCancellation?: boolean;
       languages?: string[];
       ratings?: number[];
@@ -122,24 +117,18 @@ export class VendorPackageService {
   ) {
     const skip = (page - 1) * limit;
     
-    // Build where conditions
     const where: any = {
       deleted_at: null
     };
 
-    // Always restrict to vendor-owned and approved packages
-    // User must be a vendor
     where.user = { is: { type: 'vendor' } };
-    // Package must be approved (status 1) and have an approval timestamp
     where.status = 1;
     where.approved_at = { not: null };
 
-    // Add user_id filter only if provided
     if (user_id) {
       where.user_id = user_id;
     }
 
-    // Add search functionality
     if (searchParams?.searchQuery) {
       where.OR = [
         { name: { contains: searchParams.searchQuery, mode: 'insensitive' } },
@@ -147,17 +136,14 @@ export class VendorPackageService {
       ];
     }
 
-    // Add status filter
     if (searchParams?.status !== undefined) {
       where.status = Number(searchParams.status);
     }
 
-    // Add category filter
     if (searchParams?.categoryId) {
       where.category_id = searchParams.categoryId;
     }
 
-    // Add destination filter
     if (searchParams?.destinationId) {
       where.package_destinations = {
         some: {
@@ -165,13 +151,10 @@ export class VendorPackageService {
         }
       };
     }
-
-    // Add type filter
     if (searchParams?.type) {
       where.type = Array.isArray(searchParams.type) ? searchParams.type[0] : searchParams.type;
     }
 
-    // Add free cancellation filter
     if (searchParams?.freeCancellation !== undefined) {
       where.cancellation_policy = {
         is: {
@@ -183,7 +166,6 @@ export class VendorPackageService {
       };
     }
 
-    // Add languages filter
     if (searchParams?.languages && searchParams.languages.length > 0) {
       where.package_languages = {
         some: {
@@ -194,7 +176,6 @@ export class VendorPackageService {
       };
     }
 
-    // Add ratings filter
     if (searchParams?.ratings && searchParams.ratings.length > 0) {
       where.reviews = {
         some: {
@@ -205,7 +186,6 @@ export class VendorPackageService {
       };
     }
 
-    // Add budget range filter
     if (searchParams?.budgetStart !== undefined || searchParams?.budgetEnd !== undefined) {
       where.price = {};
       if (searchParams.budgetStart !== undefined) {
@@ -216,7 +196,6 @@ export class VendorPackageService {
       }
     }
 
-    // Add date range filter for availability
     if (searchParams?.durationStart || searchParams?.durationEnd) {
       where.package_availabilities = {
         some: {
@@ -282,7 +261,6 @@ export class VendorPackageService {
             } 
           },
         },
-        // Include package trip plans
         package_trip_plans: {
           where: { deleted_at: null },
           orderBy: { sort_order: 'asc' },
@@ -293,7 +271,6 @@ export class VendorPackageService {
             }
           }
         },
-        // Include package policies (only inner JSON array to reduce payload)
         package_policies: {
           where: { deleted_at: null },
           select: { package_policies: true }
@@ -303,7 +280,6 @@ export class VendorPackageService {
       this.prisma.package.count({ where }),
     ]);
   
-    // Fetch rating aggregates for all returned package IDs in one query
     const packageIds = packages.map(p => p.id);
     const ratingAgg = await this.prisma.review.groupBy({
       by: ['package_id'],
@@ -323,7 +299,6 @@ export class VendorPackageService {
         totalReviews: row._count?.rating_value ?? 0,
       });
     }
-    // Build per-package rating distribution (1..5)
     const distributionAgg = await this.prisma.review.groupBy({
       by: ['package_id', 'rating_value'],
       where: {
@@ -337,7 +312,7 @@ export class VendorPackageService {
     const packageIdToDistribution = new Map<string, Record<number, number>>();
     for (const row of distributionAgg as any[]) {
       const current = packageIdToDistribution.get(row.package_id) ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-      // rating_value may be float; clamp to 1..5 integer bucket
+      
       const bucket = Math.round(row.rating_value as number) as 1|2|3|4|5;
       if (bucket >= 1 && bucket <= 5) {
         current[bucket] = row._count?.rating_value ?? 0;
@@ -345,7 +320,6 @@ export class VendorPackageService {
       packageIdToDistribution.set(row.package_id, current);
     }
 
-    // Confirmed bookings per package (approved bookings only)
     const confirmedAgg = await this.prisma.bookingItem.groupBy({
       by: ['package_id'],
       where: {
@@ -368,7 +342,6 @@ export class VendorPackageService {
       });
     }
   
-    // Process the data to add file URLs, avatar URLs, and rating summary
     const processedData = packages.map(pkg => {
       const normalizedPolicies = Array.isArray((pkg as any).package_policies)
         ? ((pkg as any).package_policies[0]?.package_policies ?? [])
@@ -398,7 +371,6 @@ export class VendorPackageService {
         }
       }));
 
-      // Process trip plans with their images
       const processedTripPlans = pkg.package_trip_plans.map(tripPlan => ({
         ...tripPlan,
         package_trip_plan_images: tripPlan.package_trip_plan_images.map(image => {
@@ -424,12 +396,10 @@ export class VendorPackageService {
       const confirmed = packageIdToConfirmed.get(pkg.id) ?? { confirmedBookings: 0, confirmedQuantity: 0 };
       const approvedDate = pkg.approved_at ? pkg.approved_at.toISOString() : null;
 
-      // Extract room photos from processed data
     const allRoomPhotos = processedRoomTypes.flatMap(roomType => roomType.room_photos || []);
 
       return {
         ...pkg,
-        // Return package_policies as an object containing the array
         package_policies: {
           data: normalizedPolicies
         },
@@ -452,7 +422,6 @@ export class VendorPackageService {
       } as any;
     });
 
-    // Add calendar configuration to each package
     for (const pkg of processedData) {
       const calendarConfig = await this.getCalendarConfiguration(pkg.id);
       if (calendarConfig) {
@@ -479,7 +448,6 @@ export class VendorPackageService {
         id: user_id  
       },
       include: {
-        // Add this to include package files
         package_files: {
           where: {
             deleted_at: null
@@ -488,7 +456,6 @@ export class VendorPackageService {
             sort_order: 'asc'
           }
         },
-        // Include package room types
         package_room_types: {
           where: {
             deleted_at: null
@@ -497,7 +464,6 @@ export class VendorPackageService {
             created_at: 'asc'
           }
         },
-        // Include package availabilities
         package_availabilities: {
           orderBy: {
             date: 'asc'
@@ -523,7 +489,6 @@ export class VendorPackageService {
             } 
           },
         },
-        // Include package trip plans
         package_trip_plans: {
           where: {
             deleted_at: null
@@ -542,7 +507,6 @@ export class VendorPackageService {
             }
           }
         },
-        // Include package policies
         package_policies: {
           where: { deleted_at: null },
           select: {
@@ -564,7 +528,6 @@ export class VendorPackageService {
       };
     }
 
-    // Fetch rating aggregates
     const ratingAgg = await this.prisma.review.groupBy({
       by: ['package_id'],
       where: {
@@ -581,7 +544,6 @@ export class VendorPackageService {
       totalReviews: ratingAgg[0]._count?.rating_value ?? 0,
     } : { averageRating: 0, totalReviews: 0 };
 
-    // Build rating distribution
     const distributionAgg = await this.prisma.review.groupBy({
       by: ['package_id', 'rating_value'],
       where: {
@@ -597,7 +559,6 @@ export class VendorPackageService {
       ratingDistribution[stat.rating_value] = stat._count?.rating_value ?? 0;
     });
 
-    // Confirmed bookings
     const confirmedAgg = await this.prisma.bookingItem.groupBy({
       by: ['package_id'],
       where: {
@@ -617,7 +578,6 @@ export class VendorPackageService {
       confirmedQuantity: confirmedAgg[0]._sum?.quantity ?? 0,
     } : { confirmedBookings: 0, confirmedQuantity: 0 };
 
-    // Process the data to add full file URLs
     const processedData = {
       ...data,
       package_files: data.package_files.map(file => ({
@@ -654,7 +614,6 @@ export class VendorPackageService {
           })
         };
       }),
-      // Include package_policies in the response as an object
       package_policies: {
         data: data.package_policies || []
       },
@@ -674,7 +633,6 @@ export class VendorPackageService {
 
     const allRoomPhotos = processedData.package_room_types.flatMap(roomType => roomType.room_photos || []);
 
-    // Add calendar configuration
     const calendarConfig = await this.getCalendarConfiguration(processedData.id);
     if (calendarConfig) {
       (processedData as any).calendar_configuration = calendarConfig;
@@ -689,7 +647,6 @@ export class VendorPackageService {
   }
 
   async create(createVendorPackageDto: CreateVendorPackageDto, userId: string) {
-    // Check user and vendor verification status
     const userData = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!userData) {
       throw new Error('User not found');
@@ -702,15 +659,12 @@ export class VendorPackageService {
     const isVendorType = (userData.type || '').toLowerCase() === 'vendor';
     const isVendorVerified = !!vendorVerification && vendorVerification.status === 'approved';
 
-    // Always require admin approval for vendor-created packages
-    // approved_at remains null so it appears in admin dashboard pending approval
     const data: any = {
       ...createVendorPackageDto,
       user: { connect: { id: userId } },
       approved_at: null,
     };
 
-    // Normalize bedrooms only (do not use total_bedrooms scalar on Package)
     try {
       if (typeof data.bedrooms === 'string') {
         data.bedrooms = JSON.parse(data.bedrooms);
@@ -719,7 +673,6 @@ export class VendorPackageService {
 
     const vendorPackage = await this.prisma.package.create({ data });
 
-    // Compute and persist computed_price for vendor-created package
     try {
       const basePrice = Number((createVendorPackageDto as any)?.price ?? 0);
       const discountPercentRaw = (createVendorPackageDto as any)?.discount ?? 0;
@@ -761,17 +714,14 @@ export class VendorPackageService {
         throw new Error('Package not found or you do not have permission to update it');
       }
       
-      // Parse bedrooms JSON if provided
       if (updateVendorPackageDto.bedrooms && typeof updateVendorPackageDto.bedrooms === 'string') {
         try {
           updateVendorPackageDto.bedrooms = JSON.parse(updateVendorPackageDto.bedrooms);
         } catch (error) {
           console.error('Failed to parse bedrooms JSON in update:', error);
-          // Keep as string if parsing fails
         }
       }
       
-      // Handle fields that are not part of the Package model separately before updating the package
       const { 
         package_policies, 
         initialize_calendar, 
@@ -790,7 +740,6 @@ export class VendorPackageService {
         data: packageUpdateData
       });
 
-      // Parse package_policies if it's a JSON string
       let parsedPackagePolicies = package_policies;
       if (typeof package_policies === 'string') {
         try {
@@ -801,11 +750,9 @@ export class VendorPackageService {
         }
       }
 
-      // Handle package_policies if provided
       if (parsedPackagePolicies && Array.isArray(parsedPackagePolicies)) {
         try {
           
-          // Delete existing package policies
           await this.prisma.packagePolicy.deleteMany({
             where: {
               packages: {
@@ -816,7 +763,6 @@ export class VendorPackageService {
             }
           });
           
-          // Create new package policy with the provided data
           const items = parsedPackagePolicies.filter(
             (policy) => policy.title && policy.description && policy.description.trim() !== ''
           );
@@ -842,8 +788,6 @@ export class VendorPackageService {
           console.error('Failed to update package policies:', e?.message || e);
         }
       }
-
-      // Recompute and persist computed_price after vendor update
       try {
         const basePrice = Number((updateVendorPackageDto?.price != null ? updateVendorPackageDto.price : (packageData as any).price) ?? 0);
         const discountRaw = (updateVendorPackageDto?.discount != null ? updateVendorPackageDto.discount : (packageData as any).discount) ?? 0;
@@ -900,15 +844,13 @@ export class VendorPackageService {
     }
   }
 
-  // New method for creating with files
   async createWithFiles(
     createVendorPackageDto: CreateVendorPackageDto, 
     user_id: string,
     files?: {
       package_files?: Express.Multer.File[];
       trip_plans_images?: Express.Multer.File[];
-      package_trip_plan_images?: Express.Multer.File[]; // Add this field for compatibility
-      // Dynamic day-wise trip plan images
+      package_trip_plan_images?: Express.Multer.File[]; 
       day_1_images?: Express.Multer.File[];
       day_2_images?: Express.Multer.File[];
       day_3_images?: Express.Multer.File[];
@@ -919,7 +861,6 @@ export class VendorPackageService {
       day_8_images?: Express.Multer.File[];
       day_9_images?: Express.Multer.File[];
       day_10_images?: Express.Multer.File[];
-      // Dynamic trip plans images (trip_plans_0_images, trip_plans_1_images, etc.)
       trip_plans_0_images?: Express.Multer.File[];
       trip_plans_1_images?: Express.Multer.File[];
       trip_plans_2_images?: Express.Multer.File[];
@@ -930,45 +871,32 @@ export class VendorPackageService {
       trip_plans_7_images?: Express.Multer.File[];
       trip_plans_8_images?: Express.Multer.File[];
       trip_plans_9_images?: Express.Multer.File[];
-      room_photos?: Express.Multer.File[]; // Add room_photos files
+      room_photos?: Express.Multer.File[]; 
     }
   ) {
     try {
-      // Validate user exists to avoid failed nested connect
       const existingUser = await this.prisma.user.findUnique({ where: { id: user_id } });
       if (!existingUser) {
         throw new Error('User not found');
       }
-      
-      // Ensure storage directory exists
       this.ensureStorageDirectory();
-      
-      // Upload files using SojebStorage and get filenames
       const package_files: string[] = [];
       const trip_plans_images: string[] = [];
       const room_photos: string[] = [];
-      
-      // Upload package files
       if (files?.package_files) {
         for (const file of files.package_files) {
-          // Generate unique filename with timestamp and clean name (consistent with package controller)
           const timestamp = Date.now();
           const randomName = Array(16)
             .fill(null)
             .map(() => Math.round(Math.random() * 16).toString(16))
             .join('');
-          
-          // Clean the original filename to remove special characters and spaces
           const cleanOriginalName = file.originalname
-            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
-            .replace(/_+/g, '_') // Replace multiple underscores with single
-            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+            .replace(/[^a-zA-Z0-9.-]/g, '_') 
+            .replace(/_+/g, '_') 
+            .replace(/^_|_$/g, ''); 
           
           const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
-          console.log('-------path and file name start----------');
-          console.log({path: appConfig().storageUrl.package, filePath});
-          console.log('-------path and file name end----------');
           
           const filePath2 = path.join(
             appConfig().storageUrl.rootUrl,
@@ -980,22 +908,17 @@ export class VendorPackageService {
           
         }
       }
-      
-      // Upload trip plans images
       if (files?.trip_plans_images) {
         for (const file of files.trip_plans_images) {
-          // Generate unique filename with timestamp and clean name (consistent with package controller)
           const timestamp = Date.now();
           const randomName = Array(16)
             .fill(null)
             .map(() => Math.round(Math.random() * 16).toString(16))
             .join('');
-          
-          // Clean the original filename to remove special characters and spaces
           const cleanOriginalName = file.originalname
-            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
-            .replace(/_+/g, '_') // Replace multiple underscores with single
-            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+            .replace(/[^a-zA-Z0-9.-]/g, '_') 
+            .replace(/_+/g, '_') 
+            .replace(/^_|_$/g, '');
           
           const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
@@ -1004,7 +927,6 @@ export class VendorPackageService {
         }
       }
       
-      // Upload room photos
       if (files?.room_photos) {
         for (const file of files.room_photos) {
           const timestamp = Date.now();
@@ -1013,11 +935,11 @@ export class VendorPackageService {
             .map(() => Math.round(Math.random() * 16).toString(16))
             .join('');
           
-          // Clean the original filename to remove special characters and spaces
+          
           const cleanOriginalName = file.originalname
-            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
-            .replace(/_+/g, '_') // Replace multiple underscores with single
-            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+            .replace(/[^a-zA-Z0-9.-]/g, '_') 
+            .replace(/_+/g, '_') 
+            .replace(/^_|_$/g, ''); 
           
           const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
@@ -1029,25 +951,21 @@ export class VendorPackageService {
         
       }
       
-      // Upload day-wise trip plan images
       const day_wise_images: { [key: number]: string[] } = {};
       for (let day = 1; day <= 10; day++) {
         const dayKey = `day_${day}_images` as keyof typeof files;
         if (files?.[dayKey]) {
           day_wise_images[day] = [];
           for (const file of files[dayKey]!) {
-            // Generate unique filename with timestamp and clean name
             const timestamp = Date.now();
             const randomName = Array(16)
               .fill(null)
               .map(() => Math.round(Math.random() * 16).toString(16))
               .join('');
-            
-            // Clean the original filename to remove special characters and spaces
             const cleanOriginalName = file.originalname
-              .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
-              .replace(/_+/g, '_') // Replace multiple underscores with single
-              .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+              .replace(/[^a-zA-Z0-9.-]/g, '_') 
+              .replace(/_+/g, '_') 
+              .replace(/^_|_$/g, ''); 
             
             const fileName = `${timestamp}_${randomName}_day${day}_${cleanOriginalName}`;
             const filePath = appConfig().storageUrl.package + fileName;
@@ -1058,31 +976,26 @@ export class VendorPackageService {
         }
       }
 
-      // Handle package_trip_plan_images (alternative field name) - merge with trip_plans_images
+     
       if (files?.package_trip_plan_images) {
         for (const file of files.package_trip_plan_images) {
-          // Generate unique filename with timestamp and clean name
           const timestamp = Date.now();
           const randomName = Array(16)
             .fill(null)
             .map(() => Math.round(Math.random() * 16).toString(16))
             .join('');
-          
-          // Clean the original filename to remove special characters and spaces
           const cleanOriginalName = file.originalname
-            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
-            .replace(/_+/g, '_') // Replace multiple underscores with single
-            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+            .replace(/[^a-zA-Z0-9.-]/g, '_') 
+            .replace(/_+/g, '_') 
+            .replace(/^_|_$/g, ''); 
           
           const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
-          trip_plans_images.push(fileName); // Add to the same array as trip_plans_images
+          trip_plans_images.push(fileName);
           
         }
       }
-
-      // Handle dynamic trip_plans_X_images fields
       for (let i = 0; i <= 9; i++) {
         const fieldName = `trip_plans_${i}_images` as keyof typeof files;
         const tripPlanImages = files?.[fieldName];
@@ -1090,23 +1003,20 @@ export class VendorPackageService {
         if (tripPlanImages && tripPlanImages.length > 0) {
           
           for (const file of tripPlanImages) {
-            // Generate unique filename with timestamp and clean name
             const timestamp = Date.now();
             const randomName = Array(16)
               .fill(null)
               .map(() => Math.round(Math.random() * 16).toString(16))
               .join('');
-            
-            // Clean the original filename to remove special characters and spaces
             const cleanOriginalName = file.originalname
-              .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
-              .replace(/_+/g, '_') // Replace multiple underscores with single
-              .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+              .replace(/[^a-zA-Z0-9.-]/g, '_') 
+              .replace(/_+/g, '_') 
+              .replace(/^_|_$/g, ''); 
             
             const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
             const filePath = appConfig().storageUrl.package + fileName;
             await SojebStorage.put(filePath, file.buffer);
-            trip_plans_images.push(fileName); // Add to the same array as trip_plans_images
+            trip_plans_images.push(fileName); 
             
           }
         }
@@ -1129,7 +1039,6 @@ export class VendorPackageService {
         ...packageData 
       } = createVendorPackageDto;
       
-      // Parse package_policies if it's a JSON string
       let package_policies = rawPackagePolicies;
       if (typeof rawPackagePolicies === 'string') {
         try {
@@ -1140,10 +1049,7 @@ export class VendorPackageService {
       } else {
       }
       
-      // Extract room_photos separately to avoid including it in package data
       let roomPhotosFromDto = (createVendorPackageDto as any).room_photos;
-      
-      // If room_photos is a string, try to parse it as JSON
       if (typeof roomPhotosFromDto === 'string') {
         try {
           roomPhotosFromDto = JSON.parse(roomPhotosFromDto);
@@ -1152,36 +1058,26 @@ export class VendorPackageService {
         }
       }
       
-      // Filter out room_photos, country_id, countryId, country, and total_bedrooms from packageData to prevent them from being included in the main package
-      const { room_photos: _, country_id: __, countryId: ___, country: ____, total_bedrooms: _____, ...cleanPackageData } = packageData as any
-      
-      // Normalize keys to avoid issues like "  tour_type"
+     const { room_photos: _, country_id: __, countryId: ___, country: ____, total_bedrooms: _____, ...cleanPackageData } = packageData as any
       const trimmedOnce = this.trimObjectKeys(cleanPackageData);
-      // Remove original keys that had whitespace
       Object.keys(cleanPackageData).forEach((key) => {
         if (typeof key === 'string' && key !== key.trim()) {
           delete (cleanPackageData as any)[key];
         }
       });
       Object.assign(cleanPackageData, trimmedOnce);
-      
-      // Remove trip-plan-only fields that do not exist on Package
       const forbiddenRootTripFields = ['title', 'meetingPoint', 'tripPlan'];
       for (const key of forbiddenRootTripFields) {
         if (key in cleanPackageData) {
           delete cleanPackageData[key];
         }
       }
-
-      // Remove any other fields that don't exist in the Package schema
       const invalidPackageFields = ['total_bedrooms', 'room_photos', 'country_id', 'countryId'];
       for (const key of invalidPackageFields) {
         if (key in cleanPackageData) {
           delete cleanPackageData[key];
         }
       }
-
-      // Normalize and persist extra_services JSON from DTO onto package
       if (extra_services !== undefined) {
         try {
           const parsedExtra = typeof extra_services === 'string' ? JSON.parse(extra_services) : extra_services;
@@ -1190,8 +1086,6 @@ export class VendorPackageService {
           (cleanPackageData as any).extra_services = extra_services as any;
         }
       }
-
-      // If trip-plan fields were sent at root, capture them to create a nested PackageTripPlan later
       let rootTripPlanPayload: any = null;
       const rawPackageData = packageData as any;
       if (rawPackageData && (rawPackageData.title || rawPackageData.meetingPoint || rawPackageData.tripPlan)) {
@@ -1216,11 +1110,8 @@ export class VendorPackageService {
           };
         }
       }
-
-      // Clean string values by removing extra quotes
       const cleanStringValue = (value: any): any => {
         if (typeof value === 'string') {
-          // Remove surrounding quotes if they exist
           return value.replace(/^"(.*)"$/, '$1');
         }
         return value;
@@ -1241,8 +1132,6 @@ export class VendorPackageService {
       if (cleanPackageData.price) {
         cleanPackageData.price = cleanStringValue(cleanPackageData.price);
       }
-      
-      // Clean other string fields that might have quotes
       const stringFieldsToClean = [
         'address', 'city', 'country', 'postal_code', 'unit_number',
         'cancellation_policy_id', 'booking_method', 'commission_rate',
@@ -1254,8 +1143,6 @@ export class VendorPackageService {
           cleanPackageData[field] = cleanStringValue(cleanPackageData[field]);
         }
       });
-
-      // Coerce numeric scalars to correct types where needed
       const numericFields: Array<keyof typeof cleanPackageData> = [
         'discount', 'service_fee', 'bathrooms', 'max_guests', 'size_sqm', 'min_capacity', 'max_capacity', 'latitude', 'longitude'
       ] as any;
@@ -1265,25 +1152,19 @@ export class VendorPackageService {
           if (!Number.isNaN(n)) {
             (cleanPackageData as any)[field] = n;
           } else {
-            // remove invalid numeric to avoid Prisma type errors
             delete (cleanPackageData as any)[field];
           }
         }
       });
-
-      // Normalize language JSON field on Package (language: Json?)
       if ((cleanPackageData as any).language != null) {
         const rawLang = (cleanPackageData as any).language;
         try {
           if (typeof rawLang === 'string') {
-            // Try strict JSON parse first
             (cleanPackageData as any).language = JSON.parse(rawLang);
           }
         } catch {
-          // Fallback: convert formats like "{\"en\", \"bn\"}" to ["en","bn"]
           if (typeof rawLang === 'string') {
             const trimmed = rawLang.trim();
-            // Replace curly braces with square and remove stray quotes around items
             const inner = trimmed.replace(/^\{/, '[').replace(/\}$/, ']');
             const parts = inner
               .replace(/^[\[]|[\]]$/g, '')
@@ -1294,24 +1175,16 @@ export class VendorPackageService {
           }
         }
       }
-      // Parse bedrooms JSON if provided
       if (cleanPackageData.bedrooms && typeof cleanPackageData.bedrooms === 'string') {
         try {
           cleanPackageData.bedrooms = JSON.parse(cleanPackageData.bedrooms);
         } catch (error) {
           console.error('Failed to parse bedrooms JSON:', error);
-          // Keep as string if parsing fails
         }
       }
-
-      // Collect nested relations before constructing final data
       const nested: any = {};
-
-      // Handle trip_plans separately if provided
       if (trip_plans) {
         let tripPlansArray = [];
-        
-        // Parse trip_plans if it's a string
         if (typeof trip_plans === 'string') {
           try {
             tripPlansArray = JSON.parse(trip_plans);
@@ -1321,10 +1194,7 @@ export class VendorPackageService {
         } else if (Array.isArray(trip_plans)) {
           tripPlansArray = trip_plans;
         }
-        
-        // Create package_trip_plans relationship
         if (tripPlansArray.length > 0) {
-          // If no day-wise images are provided, distribute general trip plan images across days
           let imagesToDistribute: string[] = [];
           if (Object.keys(day_wise_images).length === 0 && trip_plans_images.length > 0) {
             imagesToDistribute = trip_plans_images;
@@ -1334,10 +1204,7 @@ export class VendorPackageService {
             create: tripPlansArray.map((tripPlan: any, index: number) => {
               const dayNumber = index + 1;
               let dayImages = day_wise_images[dayNumber] || [];
-              
-              // If no day-specific images but we have general images, distribute them
               if (dayImages.length === 0 && imagesToDistribute.length > 0) {
-                // Distribute images evenly across days
                 const imagesPerDay = Math.ceil(imagesToDistribute.length / tripPlansArray.length);
                 const startIndex = index * imagesPerDay;
                 const endIndex = Math.min(startIndex + imagesPerDay, imagesToDistribute.length);
@@ -1352,7 +1219,7 @@ export class VendorPackageService {
                   const tf = tripPlan.ticket_free ?? tripPlan.tripPlan ?? [];
                   return typeof tf === 'string' ? tf : JSON.stringify(tf);
                 })(),
-                day_wise_data: tripPlan.day_wise_data || null, // Map day_wise_data from trip_plans
+                day_wise_data: tripPlan.day_wise_data || null, 
                 sort_order: index,
                 package_trip_plan_images: {
                   create: dayImages.map(imageFilename => ({
@@ -1365,24 +1232,19 @@ export class VendorPackageService {
             })
           };
         }
-      }
-
-      // If root trip-plan fields were provided and trip_plans was not provided, add a single trip plan
+      }      
       if (rootTripPlanPayload && !('package_trip_plans' in nested)) {
-        // Ensure ticket_free is a string here as well
         const normalizedRoot = {
           ...rootTripPlanPayload,
           ticket_free: typeof rootTripPlanPayload.ticket_free === 'string' 
             ? rootTripPlanPayload.ticket_free 
             : JSON.stringify(rootTripPlanPayload.ticket_free ?? []),
-          day_wise_data: rootTripPlanPayload.day_wise_data || null // Map day_wise_data from root payload
+          day_wise_data: rootTripPlanPayload.day_wise_data || null
         };
         nested.package_trip_plans = {
           create: [normalizedRoot]
         };
       }
-
-      // add extra services JSON directly on package if present
       if ((cleanPackageData as any).extra_services !== undefined) {
         try {
           const raw = (cleanPackageData as any).extra_services;
@@ -1390,12 +1252,9 @@ export class VendorPackageService {
           (cleanPackageData as any).extra_services = parsed;
         } catch {}
       }
-
-      // Build the data object for Prisma
       const data: any = {
         ...cleanPackageData,
         user_id: user_id,
-        // Create package files
         package_files: {
           create: [
             ...package_files.map(filename => ({
@@ -1415,8 +1274,6 @@ export class VendorPackageService {
           ]
         }
       };
-
-      // Merge nested relations (e.g., trip plans) built earlier
       if (nested.package_trip_plans) {
         data.package_trip_plans = nested.package_trip_plans;
       }
@@ -1435,19 +1292,22 @@ export class VendorPackageService {
       if ('calendar_init_month' in data) {
         delete data.calendar_init_month;
       }
+      if ('date_prices' in data) {
+        delete data.date_prices;
+      }
+      if ('date_price_ranges' in data) {
+        delete data.date_price_ranges;
+      }
 
-      // Normalize bedrooms only (do not use total_bedrooms scalar on Package)
-      try {
+     try {
         if (typeof data.bedrooms === 'string') {
           data.bedrooms = JSON.parse(data.bedrooms);
         }
       } catch (_) {}
 
-      // Explicitly handle country field - set as string to avoid relationship issues
       if (createVendorPackageDto.country) {
         data.country = createVendorPackageDto.country;
       } else if ((createVendorPackageDto as any).country_id) {
-        // If country_id is provided, look up the country name and set as string
         try {
           const country = await this.prisma.country.findUnique({
             where: { id: (createVendorPackageDto as any).country_id },
@@ -1463,12 +1323,8 @@ export class VendorPackageService {
           console.log('Skipping country field due to error.');
         }
       }
-
-      // Handle destinations separately if provided
       if (destinations) {
         let destinationsArray = [];
-        
-        // Parse destinations if it's a string
         if (typeof destinations === 'string') {
           try {
             destinationsArray = JSON.parse(destinations);
@@ -1478,10 +1334,7 @@ export class VendorPackageService {
         } else if (Array.isArray(destinations)) {
           destinationsArray = destinations;
         }
-        
-        // Create package_destinations relationship
         if (destinationsArray.length > 0) {
-          // Validate that destination IDs exist
           const destinationIds = destinationsArray.map((dest: any) => dest.id);
           const existingDestinations = await this.prisma.destination.findMany({
             where: { id: { in: destinationIds } },
@@ -1502,32 +1355,21 @@ export class VendorPackageService {
           };
         }
       }
-
-      // Add package room types if provided
       if (package_room_types && package_room_types.length > 0) {
         data.package_room_types = {
           create: package_room_types.map((roomType: any, index: number) => {
-            // Handle room_photos assignment
             let roomPhotos = roomType.room_photos || [];
-            
-            // If room_photos files are uploaded, assign them to room types
             if (room_photos.length > 0) {
-              // Option 1: Assign all uploaded photos to the first room type
               if (index === 0) {
                 roomPhotos = room_photos;
               }
-              // Option 2: If you want to distribute photos across multiple room types, you can modify this logic
-              // For example: assign first 5 photos to first room type, next 5 to second, etc.
             }
-            
-            // Parse bedrooms JSON for room type if provided
             let parsedBedrooms = roomType.bedrooms;
             if (roomType.bedrooms && typeof roomType.bedrooms === 'string') {
               try {
                 parsedBedrooms = JSON.parse(roomType.bedrooms);
               } catch (error) {
                 console.error('Failed to parse room type bedrooms JSON:', error);
-                // Keep as string if parsing fails
               }
             }
             
@@ -1553,7 +1395,6 @@ export class VendorPackageService {
         if (room_photos.length > 0) {
           photosToUse = room_photos;
         } else if (roomPhotosFromDto) {
-          // If roomPhotosFromDto is an array of objects with file paths, extract the paths
           if (Array.isArray(roomPhotosFromDto)) {
             photosToUse = roomPhotosFromDto.map((photo: any) => {
               if (typeof photo === 'string') {
@@ -1580,11 +1421,8 @@ export class VendorPackageService {
           }]
         };
       }
-
-      // Add package availabilities based on package type
       if (package_availabilities && package_availabilities.length > 0) {
         if (cleanPackageData.type === 'tour') {
-          // For tour packages, create availability only for created date
           const createdDate = new Date();
           data.package_availabilities = {
             create: [{
@@ -1595,10 +1433,7 @@ export class VendorPackageService {
             }]
           };
         } else if (cleanPackageData.type === 'apartment' || cleanPackageData.type === 'hotel') {
-          // For apartment/hotel, we'll create room-type wise availability after package creation
-          // Don't create availability here, it will be handled after room types are created
         } else {
-          // For other package types, use the provided availability data as is
           data.package_availabilities = {
             create: package_availabilities.map((availability: any) => ({
               date: new Date(availability.date),
@@ -1609,9 +1444,7 @@ export class VendorPackageService {
           };
         }
       } else {
-        // If no package_availabilities provided, create default availability based on package type
         if (cleanPackageData.type === 'tour') {
-          // For tour packages, create availability for created date only
           const createdDate = new Date();
           data.package_availabilities = {
             create: [{
@@ -1622,10 +1455,7 @@ export class VendorPackageService {
             }]
           };
         }
-        // For apartment/hotel, we'll create availability after room types are created
       }
-
-      // Add extra services if provided
       if (extra_services && extra_services.length > 0) {
         data.package_extra_services = {
           create: extra_services.map((service: any) => ({
@@ -1639,19 +1469,13 @@ export class VendorPackageService {
           }))
         };
       }
-
-      // Vendor verification status
       const userData = await this.prisma.user.findUnique({ where: { id: user_id } });
       const vendorVerification = await this.prisma.vendorVerification.findUnique({
         where: { user_id },
       });
       const isVendorType = (userData?.type || '').toLowerCase() === 'vendor';
       const isVendorVerified = !!vendorVerification && vendorVerification.status === 'approved';
-
-      // Always require admin approval for vendor-created packages
       data.approved_at = null;
-
-      // Compute computed_price before create
       try {
         const basePrice = Number((cleanPackageData as any)?.price ?? 0);
         const discountPercent = Math.max(0, Math.min(100, Number((cleanPackageData as any)?.discount ?? 0) || 0));
@@ -1677,8 +1501,6 @@ export class VendorPackageService {
           user: true,
         },
       });
-
-      // After package creation, optionally create and link cancellation policy
       try {
         const cancellationPolicyRaw = (createVendorPackageDto as any)?.cancellation_policy;
         const policyDescription = (createVendorPackageDto as any)?.policy_description;
@@ -1698,13 +1520,10 @@ export class VendorPackageService {
       } catch (e) {
         console.error('Failed to create/link PackageCancellationPolicy:', e?.message || e);
       }
-
-      // After package creation, optionally create and link PackagePolicy built from dto items
       try {
         
         let items = [];
         
-        // Check if package_policies array is provided directly
         if (package_policies && Array.isArray(package_policies)) {
           
           items = package_policies.filter(
@@ -1742,11 +1561,8 @@ export class VendorPackageService {
       } catch (e) {
         console.error('Failed to create/link PackagePolicy:', e?.message || e);
       }
-
-      // Save pricing rules if provided (before re-fetch)
       if (pricing_rules) {
         try {
-          // Validate pricing rules business logic
           this.validatePricingRulesBusinessLogic(pricing_rules);
           
           const savedPricingRule = await this.prisma.packagePricingRule.create({
@@ -1764,13 +1580,11 @@ export class VendorPackageService {
           });
         } catch (error) {
           console.error('❌ Failed to save pricing rules:', error);
-          // Don't throw to avoid breaking package creation
         }
       } else {
         console.log('🔍 Debug - No pricing rules provided');
       }
 
-      // Re-fetch the package to include newly linked relations (package_policies, trip plans, pricing rules)
       result = await this.prisma.package.findUnique({
         where: { id: result.id },
         include: {
@@ -1787,8 +1601,7 @@ export class VendorPackageService {
         },
       }) as any;
 
-      // Store calendar configuration
-      await this.storeCalendarConfiguration(
+      const calendarConfigRecord = await this.storeCalendarConfiguration(
         result.id,
         createVendorPackageDto.calendar_start_date,
         createVendorPackageDto.calendar_end_date,
@@ -1796,7 +1609,6 @@ export class VendorPackageService {
         createVendorPackageDto.close_date_ranges
       );
 
-      // Initialize PropertyCalendar with close dates if requested
       if (createVendorPackageDto.initialize_calendar !== false) {
         await this.initializePropertyCalendarWithCloseDates(
           result.id, 
@@ -1806,21 +1618,57 @@ export class VendorPackageService {
           createVendorPackageDto.close_dates,
           createVendorPackageDto.close_date_ranges
         );
-        
-        // Verify calendar creation by fetching some records
         const calendarRecords = await this.prisma.propertyCalendar.findMany({
           where: { package_id: result.id },
           take: 5,
           orderBy: { date: 'asc' }
         });
       }
+      if (Array.isArray((createVendorPackageDto as any).date_prices) &&
+          createVendorPackageDto.calendar_start_date &&
+          createVendorPackageDto.calendar_end_date) {
+        const rangeStart = new Date(createVendorPackageDto.calendar_start_date);
+        const rangeEnd = new Date(createVendorPackageDto.calendar_end_date);
+        const entries = (createVendorPackageDto as any).date_prices as Array<{ date: Date | string; price: number; status?: string; room_type_id?: string }>;
 
-      // Get calendar configuration
+        for (const item of entries) {
+          const d = new Date(item.date as any);
+          if (isNaN(d.getTime())) continue;
+          if (d < rangeStart || d > rangeEnd) continue;
+
+          const existingEntry = await this.prisma.propertyCalendar.findFirst({
+            where: {
+              package_id: result.id,
+              date: d,
+              room_type_id: item.room_type_id ?? null
+            }
+          });
+
+          if (existingEntry) {
+            await this.prisma.propertyCalendar.update({
+              where: { id: existingEntry.id },
+              data: {
+                price: item.price as any,
+                ...(item.status ? { status: item.status } : {})
+              }
+            });
+          } else {
+            await this.prisma.propertyCalendar.create({
+              data: {
+                package_id: result.id,
+                date: d,
+                status: item.status || 'available',
+                reason: null,
+                room_type_id: item.room_type_id ?? null,
+                price: item.price as any
+              }
+            });
+          }
+        }
+      }
       const calendarConfig = await this.getCalendarConfiguration(result.id);
-      // Post-process to attach public URLs using existing image function
       const processedResult = {
         ...result,
-        // Return package_policies as an object containing the array
         package_policies: {
           data: Array.isArray((result as any).package_policies)
             ? ((result as any).package_policies[0]?.package_policies ?? [])
@@ -1863,34 +1711,25 @@ export class VendorPackageService {
                 : null,
             }
           : null,
-        // Add calendar configuration
         calendar_configuration: calendarConfig,
-        // Add pricing rules if they exist (get the first one since there should only be one per package)
-        pricing_rules: (result as any).package_pricing_rules && (result as any).package_pricing_rules.length > 0 
+         pricing_rules: (result as any).package_pricing_rules && (result as any).package_pricing_rules.length > 0 
           ? (result as any).package_pricing_rules[0] 
           : null,
-        // Add calendar init month if provided
         calendar_init_month: calendar_init_month || null,
       };
 
-      // Generate full URLs for room_photos in the return value
       const roomPhotosWithUrls = room_photos.map(filename => {
         const fullUrl = this.generateFileUrl(filename, 'package');
         return fullUrl;
       });
 
-      // Create room-type wise availability for apartment/hotel packages after package creation
       if (cleanPackageData.type === 'apartment' || cleanPackageData.type === 'hotel') {
-        
-        // For apartment/hotel, create availability based on calendar configuration
         const calendarStart = createVendorPackageDto.calendar_start_date || new Date();
         const calendarEnd = createVendorPackageDto.calendar_end_date || (() => {
           const end = new Date();
           end.setMonth(end.getMonth() + 12);
           return end;
         })();
-
-        // Generate availability data for the date range
         const dates = this.generateDateRange(calendarStart, calendarEnd);
         const availabilityData = [];
 
@@ -1905,8 +1744,6 @@ export class VendorPackageService {
             });
           }
         }
-
-        // Create availability records
         if (availabilityData.length > 0) {
           try {
             await this.prisma.packageAvailability.createMany({
@@ -1919,8 +1756,6 @@ export class VendorPackageService {
           console.log('⚠️ No availability data to create');
         }
       }
-
-      // Initialize calendar with pricing (if rules provided) or default
       if (pricing_rules) {
         await this.initializePropertyCalendarWithPricing(
           result.id, 
@@ -1932,9 +1767,32 @@ export class VendorPackageService {
         await this.initializePropertyCalendarDefault(result.id, user_id);
       }
 
+      let calendarRange: any = null;
+      if (calendarConfigRecord && createVendorPackageDto.calendar_start_date && createVendorPackageDto.calendar_end_date) {
+        const rangeStart = new Date(createVendorPackageDto.calendar_start_date);
+        const rangeEnd = new Date(createVendorPackageDto.calendar_end_date);
+        const calendarDates = await this.prisma.propertyCalendar.findMany({
+          where: {
+            package_id: result.id,
+            date: { gte: rangeStart, lte: rangeEnd }
+          },
+          orderBy: { date: 'asc' },
+          select: { id: true, date: true, price: true, status: true, room_type_id: true }
+        });
+        calendarRange = {
+          id: calendarConfigRecord.id,
+          start_date: rangeStart,
+          end_date: rangeEnd,
+          dates: calendarDates
+        };
+      }
+
       return {
         success: true,
-        data: processedResult,
+        data: {
+          ...processedResult,
+          calendar_range: calendarRange
+        },
         roomPhotos: roomPhotosWithUrls,
         message: 'Package created successfully with files, room types, and availabilities',
         meta: {
@@ -1951,7 +1809,6 @@ export class VendorPackageService {
     }
   }
 
-  // New method for updating with files
   async updateWithFiles(
     packageId: string,
     user_id: string,
@@ -1959,8 +1816,7 @@ export class VendorPackageService {
     files?: {
       package_files?: Express.Multer.File[];
       trip_plans_images?: Express.Multer.File[];
-      package_trip_plan_images?: Express.Multer.File[]; // Add this field for compatibility
-      // Dynamic trip plans images (trip_plans_0_images, trip_plans_1_images, etc.)
+      package_trip_plan_images?: Express.Multer.File[]; 
       trip_plans_0_images?: Express.Multer.File[];
       trip_plans_1_images?: Express.Multer.File[];
       trip_plans_2_images?: Express.Multer.File[];
@@ -1971,14 +1827,12 @@ export class VendorPackageService {
       trip_plans_7_images?: Express.Multer.File[];
       trip_plans_8_images?: Express.Multer.File[];
       trip_plans_9_images?: Express.Multer.File[];
-      room_photos?: Express.Multer.File[]; // Add room_photos files
+      room_photos?: Express.Multer.File[]; 
     }
   ) {
     try {
-      // Ensure storage directory exists
       this.ensureStorageDirectory();
       
-      // Check if package exists and belongs to user
       const existingPackage = await this.prisma.package.findFirst({
         where: {
           id: packageId,
@@ -1990,26 +1844,22 @@ export class VendorPackageService {
         throw new Error('Package not found or access denied');
       }
 
-      // Upload files using SojebStorage and get filenames
       const package_files: string[] = [];
       const trip_plans_images: string[] = [];
       const room_photos: string[] = [];
       
-      // Upload package files
       if (files?.package_files) {
         for (const file of files.package_files) {
-          // Generate unique filename with timestamp and clean name (consistent with package controller)
           const timestamp = Date.now();
           const randomName = Array(16)
             .fill(null)
             .map(() => Math.round(Math.random() * 16).toString(16))
             .join('');
           
-          // Clean the original filename to remove special characters and spaces
           const cleanOriginalName = file.originalname
-            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
-            .replace(/_+/g, '_') // Replace multiple underscores with single
-            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+            .replace(/[^a-zA-Z0-9.-]/g, '_') 
+            .replace(/_+/g, '_') 
+            .replace(/^_|_$/g, ''); 
           
           const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
@@ -2019,21 +1869,18 @@ export class VendorPackageService {
         }
       }
       
-      // Upload trip plans images
       if (files?.trip_plans_images) {
         for (const file of files.trip_plans_images) {
-          // Generate unique filename with timestamp and clean name (consistent with package controller)
           const timestamp = Date.now();
           const randomName = Array(16)
             .fill(null)
             .map(() => Math.round(Math.random() * 16).toString(16))
             .join('');
           
-          // Clean the original filename to remove special characters and spaces
           const cleanOriginalName = file.originalname
-            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
-            .replace(/_+/g, '_') // Replace multiple underscores with single
-            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+            .replace(/[^a-zA-Z0-9.-]/g, '_') 
+            .replace(/_+/g, '_') 
+            .replace(/^_|_$/g, ''); 
           
           const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
@@ -2042,32 +1889,27 @@ export class VendorPackageService {
           
         }
       }
-
-      // Handle package_trip_plan_images (alternative field name) - merge with trip_plans_images
       if (files?.package_trip_plan_images) {
         for (const file of files.package_trip_plan_images) {
-          // Generate unique filename with timestamp and clean name
           const timestamp = Date.now();
           const randomName = Array(16)
             .fill(null)
             .map(() => Math.round(Math.random() * 16).toString(16))
             .join('');
           
-          // Clean the original filename to remove special characters and spaces
           const cleanOriginalName = file.originalname
-            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
-            .replace(/_+/g, '_') // Replace multiple underscores with single
-            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+            .replace(/[^a-zA-Z0-9.-]/g, '_') 
+            .replace(/_+/g, '_') 
+            .replace(/^_|_$/g, ''); 
           
           const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
           await SojebStorage.put(filePath, file.buffer);
-          trip_plans_images.push(fileName); // Add to the same array as trip_plans_images
+          trip_plans_images.push(fileName); 
           
         }
       }
 
-      // Handle dynamic trip_plans_X_images fields
       for (let i = 0; i <= 9; i++) {
         const fieldName = `trip_plans_${i}_images` as keyof typeof files;
         const tripPlanImages = files?.[fieldName];
@@ -2075,43 +1917,38 @@ export class VendorPackageService {
         if (tripPlanImages && tripPlanImages.length > 0) {
           
           for (const file of tripPlanImages) {
-            // Generate unique filename with timestamp and clean name
             const timestamp = Date.now();
             const randomName = Array(16)
               .fill(null)
               .map(() => Math.round(Math.random() * 16).toString(16))
               .join('');
             
-            // Clean the original filename to remove special characters and spaces
             const cleanOriginalName = file.originalname
-              .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
-              .replace(/_+/g, '_') // Replace multiple underscores with single
-              .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+              .replace(/[^a-zA-Z0-9.-]/g, '_') 
+              .replace(/_+/g, '_') 
+              .replace(/^_|_$/g, ''); 
             
             const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
             const filePath = appConfig().storageUrl.package + fileName;
             await SojebStorage.put(filePath, file.buffer);
-            trip_plans_images.push(fileName); // Add to the same array as trip_plans_images
+            trip_plans_images.push(fileName);
             
           }
         }
       }
       
-      // Upload room photos
       if (files?.room_photos) {
         for (const file of files.room_photos) {
-          // Generate unique filename with timestamp and clean name (consistent with package controller)
           const timestamp = Date.now();
           const randomName = Array(16)
             .fill(null)
             .map(() => Math.round(Math.random() * 16).toString(16))
             .join('');
           
-          // Clean the original filename to remove special characters and spaces
           const cleanOriginalName = file.originalname
-            .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special chars with underscore
-            .replace(/_+/g, '_') // Replace multiple underscores with single
-            .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+            .replace(/[^a-zA-Z0-9.-]/g, '_') 
+            .replace(/_+/g, '_') 
+            .replace(/^_|_$/g, ''); 
           
           const fileName = `${timestamp}_${randomName}_${cleanOriginalName}`;
           const filePath = appConfig().storageUrl.package + fileName;
@@ -2120,23 +1957,16 @@ export class VendorPackageService {
         }
       } else {
       }
-
-      // Extract nested data from DTO
       const { package_room_types, package_availabilities, ...packageData } = updateVendorPackageDto;
 
-      // Normalize keys to avoid issues like "  tour_type"
       const normalizedPackageData = this.trimObjectKeys(packageData as any);
-      
-      // Clean string values by removing extra quotes
       const cleanStringValue = (value: any): any => {
         if (typeof value === 'string') {
-          // Remove surrounding quotes if they exist
           return value.replace(/^"(.*)"$/, '$1');
         }
         return value;
       };
       
-      // Clean string fields
       if (normalizedPackageData.type) {
         normalizedPackageData.type = cleanStringValue(normalizedPackageData.type).toLowerCase();
       }
@@ -2153,7 +1983,6 @@ export class VendorPackageService {
         normalizedPackageData.price = cleanStringValue(normalizedPackageData.price);
       }
       
-      // Clean other string fields that might have quotes
       const stringFieldsToClean = [
         'address', 'city', 'country', 'postal_code', 'unit_number',
         'cancellation_policy_id', 'booking_method', 'commission_rate',
@@ -2166,22 +1995,17 @@ export class VendorPackageService {
         }
       });
       
-      // Parse bedrooms JSON if provided
       if (normalizedPackageData.bedrooms && typeof normalizedPackageData.bedrooms === 'string') {
         try {
           normalizedPackageData.bedrooms = JSON.parse(normalizedPackageData.bedrooms);
         } catch (error) {
           console.error('Failed to parse bedrooms JSON in updateWithFiles:', error);
-          // Keep as string if parsing fails
         }
       }
-
-      // Build the data object for Prisma
       const data: any = {
         ...normalizedPackageData,
-        // Update package files
         package_files: {
-          deleteMany: {}, // Delete existing files
+          deleteMany: {}, 
           create: [
             ...package_files.map(filename => ({
               file: filename,
@@ -2201,33 +2025,24 @@ export class VendorPackageService {
         }
       };
 
-      // Update package room types if provided
       if (package_room_types && package_room_types.length > 0) {
         data.package_room_types = {
-          deleteMany: {}, // Delete existing room types
+          deleteMany: {}, 
           create: package_room_types.map((roomType: any, index: number) => {
-            // Handle room_photos assignment
             let roomPhotos = roomType.room_photos || [];
             
-            // If room_photos files are uploaded, assign them to room types
             if (room_photos.length > 0) {
-              // Option 1: Assign all uploaded photos to the first room type
               if (index === 0) {
                 roomPhotos = room_photos;
               }
-              // Option 2: If you want to distribute photos across multiple room types, you can modify this logic
-              // For example: assign first 5 photos to first room type, next 5 to second, etc.
             }
             
-            
-            // Parse bedrooms JSON for room type if provided
             let parsedBedrooms = roomType.bedrooms;
             if (roomType.bedrooms && typeof roomType.bedrooms === 'string') {
               try {
                 parsedBedrooms = JSON.parse(roomType.bedrooms);
               } catch (error) {
                 console.error('Failed to parse room type bedrooms JSON in update:', error);
-                // Keep as string if parsing fails
               }
             }
             
@@ -2249,7 +2064,7 @@ export class VendorPackageService {
         };
       } else if (room_photos.length > 0) {
         data.package_room_types = {
-          deleteMany: {}, // Delete existing room types
+          deleteMany: {}, 
           create: [{
             name: 'Default Room',
             description: 'Default room type with uploaded photos',
@@ -2262,10 +2077,9 @@ export class VendorPackageService {
         };
       }
 
-      // Update package availabilities if provided
       if (package_availabilities && package_availabilities.length > 0) {
         data.package_availabilities = {
-          deleteMany: {}, // Delete existing availabilities
+          deleteMany: {}, 
           create: package_availabilities.map((availability: any) => ({
             date: new Date(availability.date),
             status: availability.status,
@@ -2275,7 +2089,6 @@ export class VendorPackageService {
         };
       }
 
-      // Update package with nested data
       const result = await this.prisma.package.update({
         where: { id: packageId },
         data,
@@ -2297,7 +2110,6 @@ export class VendorPackageService {
         }
       });
 
-      // Recompute and persist computed_price after updateWithFiles
       try {
         const basePrice = Number((normalizedPackageData as any)?.price ?? (result as any).price ?? 0);
         const discountPercent = Math.max(0, Math.min(100, Number((normalizedPackageData as any)?.discount ?? (result as any).discount ?? 0) || 0));
@@ -2309,7 +2121,6 @@ export class VendorPackageService {
         console.error('Failed to compute/persist computed_price (vendor updateWithFiles):', e?.message || e);
       }
 
-      // Parse package_policies if it's a JSON string in updateWithFiles
       let parsedPackagePolicies = normalizedPackageData.package_policies;
       if (typeof normalizedPackageData.package_policies === 'string') {
         try {
@@ -2320,10 +2131,8 @@ export class VendorPackageService {
         }
       }
 
-      // Handle package_policies if provided in updateWithFiles
       if (parsedPackagePolicies && Array.isArray(parsedPackagePolicies)) {
         try {
-          // Delete existing package policies
           await this.prisma.packagePolicy.deleteMany({
             where: {
               packages: {
@@ -2334,7 +2143,6 @@ export class VendorPackageService {
             }
           });
           
-          // Create new package policy with the provided data
           const items = parsedPackagePolicies.filter(
             (policy) => policy.title && policy.description && policy.description.trim() !== ''
           );
@@ -2361,10 +2169,8 @@ export class VendorPackageService {
         }
       }
 
-      // Post-process to attach public URLs using existing image function
       const processedResult = {
         ...result,
-        // Return package_policies as an object containing the array
         package_policies: {
           data: Array.isArray((result as any).package_policies)
             ? ((result as any).package_policies[0]?.package_policies ?? [])
@@ -2414,7 +2220,6 @@ export class VendorPackageService {
     createReviewDto: CreateReviewDto,
   ) {
     try {
-      // Check if package exists
       const packageRecord = await this.prisma.package.findFirst({
         where: { id: packageId },
       });
@@ -2423,7 +2228,6 @@ export class VendorPackageService {
         throw new Error('Package not found');
       }
 
-      // Check if user has already reviewed this package
       const existingReview = await this.prisma.review.findFirst({
         where: { 
           user_id: userId, 
@@ -2436,7 +2240,6 @@ export class VendorPackageService {
         throw new Error('You have already reviewed this package');
       }
 
-      // Only validate booking_id if it's provided and not empty
       if (createReviewDto.booking_id && createReviewDto.booking_id.trim() !== '') {
         const booking = await this.prisma.booking.findFirst({
           where: { 
@@ -2448,13 +2251,10 @@ export class VendorPackageService {
         if (!booking) {
           throw new Error(`Booking with ID '${createReviewDto.booking_id}' not found. For simple package reviews, omit the booking_id field.`);
         }
-
-        // Check if the booking belongs to the user
         if (booking.user_id !== userId) {
           throw new Error('You can only review bookings that belong to you');
         }
 
-        // Check if the booking is for the same package
         const bookingItem = await this.prisma.bookingItem.findFirst({
           where: {
             booking_id: createReviewDto.booking_id,
@@ -2467,8 +2267,6 @@ export class VendorPackageService {
           throw new Error('This booking is not associated with the specified package');
         }
       }
-
-      // Create the review (booking_id will be null for simple package reviews)
       const review = await this.prisma.review.create({
         data: {
           user_id: userId,
@@ -2491,7 +2289,6 @@ export class VendorPackageService {
         },
       });
 
-             // Add avatar URL if exists
        if (review.user && review.user.avatar) {
          review.user['avatar_url'] = this.generateFileUrl(review.user.avatar, 'avatar');
        }
@@ -2516,8 +2313,6 @@ export class VendorPackageService {
   async getPackageReviews(packageId: string, page: number = 1, limit: number = 10) {
     try {
       const skip = (page - 1) * limit;
-
-      // Check if package exists
       const packageRecord = await this.prisma.package.findFirst({
         where: { id: packageId },
       });
@@ -2525,8 +2320,6 @@ export class VendorPackageService {
       if (!packageRecord) {
         throw new Error('Package not found');
       }
-
-      // Get reviews with pagination
       const reviews = await this.prisma.review.findMany({
         where: {
           package_id: packageId,
@@ -2549,7 +2342,6 @@ export class VendorPackageService {
         },
       });
 
-      // Get total count for pagination
       const totalReviews = await this.prisma.review.count({
         where: {
           package_id: packageId,
@@ -2558,7 +2350,6 @@ export class VendorPackageService {
         },
       });
 
-      // Calculate average rating
       const averageRating = await this.prisma.review.aggregate({
         where: {
           package_id: packageId,
@@ -2573,7 +2364,6 @@ export class VendorPackageService {
         },
       });
 
-      // Build rating distribution (1..5) with counts
       const distributionAgg = await this.prisma.review.groupBy({
         by: ['rating_value'],
         where: {
@@ -2592,7 +2382,6 @@ export class VendorPackageService {
         }
       }
 
-             // Add avatar URLs
        for (const review of reviews) {
          if (review.user && review.user.avatar) {
            review.user['avatar_url'] = this.generateFileUrl(review.user.avatar, 'avatar');
@@ -2628,7 +2417,6 @@ export class VendorPackageService {
     updateReviewDto: UpdateReviewDto,
   ) {
     try {
-      // Check if review exists and belongs to user
       const existingReview = await this.prisma.review.findFirst({
         where: {
           id: reviewId,
@@ -2642,7 +2430,6 @@ export class VendorPackageService {
         throw new Error('Review not found or access denied');
       }
 
-      // Update the review
       const updatedReview = await this.prisma.review.update({
         where: { id: reviewId },
         data: {
@@ -2663,7 +2450,6 @@ export class VendorPackageService {
         },
       });
 
-             // Add avatar URL if exists
        if (updatedReview.user && updatedReview.user.avatar) {
          updatedReview.user['avatar_url'] = this.generateFileUrl(updatedReview.user.avatar, 'avatar');
        }
@@ -2680,7 +2466,6 @@ export class VendorPackageService {
 
   async deleteReview(packageId: string, reviewId: string, userId: string) {
     try {
-      // Check if review exists and belongs to user
       const existingReview = await this.prisma.review.findFirst({
         where: {
           id: reviewId,
@@ -2694,7 +2479,6 @@ export class VendorPackageService {
         throw new Error('Review not found or access denied');
       }
 
-      // Soft delete the review
       await this.prisma.review.update({
         where: { id: reviewId },
         data: {
@@ -2713,7 +2497,6 @@ export class VendorPackageService {
 
   async getPackageRatingSummary(packageId: string) {
     try {
-      // Check if package exists
       const packageRecord = await this.prisma.package.findFirst({
         where: { id: packageId },
       });
@@ -2722,7 +2505,6 @@ export class VendorPackageService {
         throw new Error('Package not found');
       }
 
-      // Get rating statistics
       const ratingStats = await this.prisma.review.groupBy({
         by: ['rating_value'],
         where: {
@@ -2735,7 +2517,6 @@ export class VendorPackageService {
         },
       });
 
-      // Calculate average rating
       const averageRating = await this.prisma.review.aggregate({
         where: {
           package_id: packageId,
@@ -2750,7 +2531,6 @@ export class VendorPackageService {
         },
       });
 
-      // Create rating distribution
       const ratingDistribution = {
         1: 0,
         2: 0,
@@ -2775,15 +2555,12 @@ export class VendorPackageService {
       throw new Error(`Failed to get package rating summary: ${error.message}`);
     }
   }
-
-  // Enhanced create with PropertyCalendar initialization
   async createWithCalendar(
     createVendorPackageDto: CreateVendorPackageDto, 
     userId: string, 
     files?: any
   ) {
     try {
-      // First create the package using existing logic
       const packageResult = await this.createWithFiles(createVendorPackageDto, userId, files);
       
       if (!packageResult.success) {
@@ -2792,7 +2569,6 @@ export class VendorPackageService {
 
       const packageId = packageResult.data.id;
 
-      // Initialize PropertyCalendar with default availability for next 12 months
       await this.initializePropertyCalendarDefault(packageId, userId);
 
       return {
@@ -2807,11 +2583,10 @@ export class VendorPackageService {
     }
   }
 
-  // Initialize PropertyCalendar with default settings
   private async initializePropertyCalendarDefault(packageId: string, userId: string) {
     const startDate = new Date();
     const endDate = new Date();
-    endDate.setMonth(endDate.getMonth() + 12); // 12 months ahead
+    endDate.setMonth(endDate.getMonth() + 12);
 
     const dates = this.generateDateRange(startDate, endDate);
     
@@ -2823,20 +2598,17 @@ export class VendorPackageService {
       room_type_id: null
     }));
 
-    // Batch insert PropertyCalendar records
     await this.prisma.propertyCalendar.createMany({
       data: calendarData
     });
   }
 
-  // Initialize PropertyCalendar with custom date range
   async initializePropertyCalendar(
     packageId: string,
     userId: string,
     calendarInitDto: CalendarInitDto
   ) {
     try {
-      // Verify package ownership
       const packageData = await this.prisma.package.findFirst({
         where: {
           id: packageId,
@@ -2849,7 +2621,6 @@ export class VendorPackageService {
         throw new Error('Package not found or access denied');
       }
 
-      // Validate date range
       if (calendarInitDto.end_date <= calendarInitDto.start_date) {
         throw new Error('End date must be after start date');
       }
@@ -2864,7 +2635,6 @@ export class VendorPackageService {
         room_type_id: calendarInitDto.room_type_id || null
       }));
 
-      // Batch insert PropertyCalendar records
       await this.prisma.propertyCalendar.createMany({
         data: calendarData
       });
@@ -2889,7 +2659,6 @@ export class VendorPackageService {
     }
   }
 
-  // Get PropertyCalendar data for a package
   async getPropertyCalendarData(
     packageId: string, 
     userId: string, 
@@ -2897,7 +2666,6 @@ export class VendorPackageService {
     roomTypeId?: string
   ) {
     try {
-      // Verify package ownership
       const packageData = await this.prisma.package.findFirst({
         where: {
           id: packageId,
@@ -2919,18 +2687,15 @@ export class VendorPackageService {
     }
   }
 
-  // Helper method to get calendar data for a package
   private async getCalendarDataForPackage(
     packageId: string,
     month: string,
     roomTypeId?: string
   ) {
-    // Parse month (YYYY-MM format)
     const [year, monthNum] = month.split('-').map(Number);
     const startDate = new Date(year, monthNum - 1, 1);
-    const endDate = new Date(year, monthNum, 0); // Last day of month
+    const endDate = new Date(year, monthNum, 0); 
 
-    // Build where condition
     const where: any = {
       package_id: packageId,
       date: {
@@ -2943,7 +2708,6 @@ export class VendorPackageService {
       where.room_type_id = roomTypeId;
     }
 
-    // Get PropertyCalendar data for the month
     const calendarData = await this.prisma.propertyCalendar.findMany({
       where,
       orderBy: {
@@ -2960,7 +2724,6 @@ export class VendorPackageService {
       }
     });
 
-    // Get room types if specified
     const roomTypes = roomTypeId ? 
       await this.prisma.packageRoomType.findMany({
         where: {
@@ -2974,7 +2737,6 @@ export class VendorPackageService {
         }
       });
 
-    // Format calendar data
     return {
       success: true,
       data: {
@@ -2997,14 +2759,12 @@ export class VendorPackageService {
     };
   }
 
-  // Update single date in PropertyCalendar
   async updatePropertyCalendarDate(
     packageId: string,
     userId: string,
     updateDto: SingleDateUpdateDto
   ) {
     try {
-      // Verify package ownership
       const packageData = await this.prisma.package.findFirst({
         where: {
           id: packageId,
@@ -3017,7 +2777,6 @@ export class VendorPackageService {
         throw new Error('Package not found or access denied');
       }
 
-      // Check if PropertyCalendar record exists
       let calendarEntry = await this.prisma.propertyCalendar.findFirst({
         where: {
           package_id: packageId,
@@ -3027,7 +2786,6 @@ export class VendorPackageService {
       });
 
       if (calendarEntry) {
-        // Update existing record
         calendarEntry = await this.prisma.propertyCalendar.update({
           where: { id: calendarEntry.id },
           data: {
@@ -3037,7 +2795,6 @@ export class VendorPackageService {
           }
         });
       } else {
-        // Create new record
         calendarEntry = await this.prisma.propertyCalendar.create({
           data: {
             package_id: packageId,
@@ -3063,14 +2820,12 @@ export class VendorPackageService {
     }
   }
 
-  // Update PropertyCalendar for date range (bulk operation)
   async updatePropertyCalendarBulk(
     packageId: string,
     userId: string,
     bulkUpdateDto: BulkDateRangeUpdateDto
   ) {
     try {
-      // Verify package ownership
       const packageData = await this.prisma.package.findFirst({
         where: {
           id: packageId,
@@ -3083,18 +2838,15 @@ export class VendorPackageService {
         throw new Error('Package not found or access denied');
       }
 
-      // Validate date range
       if (bulkUpdateDto.end_date <= bulkUpdateDto.start_date) {
         throw new Error('End date must be after start date');
       }
 
-      // Generate date range
       const dates = this.generateDateRange(
         bulkUpdateDto.start_date,
         bulkUpdateDto.end_date
       );
 
-      // Prepare data for bulk operations
       const calendarData = dates.map(date => ({
         package_id: packageId,
         date: date,
@@ -3104,7 +2856,6 @@ export class VendorPackageService {
         ...(bulkUpdateDto.price !== undefined ? { price: bulkUpdateDto.price } : {})
       }));
 
-      // Use upsert to handle both insert and update
       const results = await Promise.all(
         calendarData.map(async (data) => {
           const existingEntry = await this.prisma.propertyCalendar.findFirst({
@@ -3152,7 +2903,6 @@ export class VendorPackageService {
     }
   }
 
-  // Get PropertyCalendar summary
   async getPropertyCalendarSummary(
     packageId: string,
     userId: string,
@@ -3161,7 +2911,6 @@ export class VendorPackageService {
     roomTypeId?: string
   ) {
     try {
-      // Verify package ownership
       const packageData = await this.prisma.package.findFirst({
         where: {
           id: packageId,
@@ -3174,7 +2923,6 @@ export class VendorPackageService {
         throw new Error('Package not found or access denied');
       }
 
-      // Build where condition
       const where: any = {
         package_id: packageId,
         date: {
@@ -3187,7 +2935,6 @@ export class VendorPackageService {
         where.room_type_id = roomTypeId;
       }
 
-      // Get PropertyCalendar data for the date range
       const calendarData = await this.prisma.propertyCalendar.findMany({
         where,
         orderBy: {
@@ -3195,7 +2942,6 @@ export class VendorPackageService {
         }
       });
 
-      // Calculate summary statistics
       const totalDays = calendarData.length;
       const availableDays = calendarData.filter(entry => entry.status === 'available').length;
       const bookedDays = calendarData.filter(entry => entry.status === 'booked').length;
@@ -3234,7 +2980,6 @@ export class VendorPackageService {
     }
   }
 
-  // Helper method to generate date range
   private generateDateRange(startDate: Date, endDate: Date): Date[] {
     const dates: Date[] = [];
     const currentDate = new Date(startDate);
@@ -3247,7 +2992,6 @@ export class VendorPackageService {
     return dates;
   }
 
-  // Method to get PropertyCalendar data for a package
   async getPropertyCalendarForPackage(packageId: string) {
     try {
       const calendarData = await this.prisma.propertyCalendar.findMany({
@@ -3287,7 +3031,6 @@ export class VendorPackageService {
     }
   }
 
-  // Store calendar configuration in PropertyCalendar table
   private async storeCalendarConfiguration(
     packageId: string,
     startDate?: Date,
@@ -3296,11 +3039,10 @@ export class VendorPackageService {
     closeDateRanges?: Array<{start_date: Date; end_date: Date; reason?: string}>
   ) {
     try {
-      // Create a special PropertyCalendar record to store configuration
       const configRecord = await this.prisma.propertyCalendar.create({
         data: {
           package_id: packageId,
-          date: new Date('1900-01-01'), // Special date to identify config record
+          date: new Date('1900-01-01'), 
           status: 'config',
           reason: JSON.stringify({
             calendar_start_date: startDate,
@@ -3317,7 +3059,6 @@ export class VendorPackageService {
     }
   }
 
-  // Retrieve calendar configuration from PropertyCalendar table
   private async getCalendarConfiguration(packageId: string) {
     try {
       const configRecord = await this.prisma.propertyCalendar.findFirst({
@@ -3347,13 +3088,11 @@ export class VendorPackageService {
     closeDateRanges?: Array<{start_date: Date; end_date: Date; reason?: string}>
   ) {
     try {
-      // Get package type to determine availability logic
       const packageData = await this.prisma.package.findUnique({
         where: { id: packageId },
         select: { type: true }
       });
 
-      // Use provided dates or default to next 12 months
       const calendarStart = startDate || new Date();
       const calendarEnd = endDate || (() => {
         const end = new Date();
@@ -3363,7 +3102,6 @@ export class VendorPackageService {
 
       const dates = this.generateDateRange(calendarStart, calendarEnd);
       
-      // For tour packages, only create availability for created date
       if (packageData?.type === 'tour') {
         const createdDate = new Date();
         const calendarData = [{
@@ -3380,9 +3118,7 @@ export class VendorPackageService {
         return;
       }
 
-      // For apartment/hotel packages, create room-type wise availability
       if (packageData?.type === 'apartment' || packageData?.type === 'hotel') {
-        // Get all room types for this package
         const roomTypes = await this.prisma.packageRoomType.findMany({
           where: { 
             package_id: packageId,
@@ -3393,12 +3129,10 @@ export class VendorPackageService {
 
         const calendarData = [];
 
-        // Create availability for each date and each room type
         for (const date of dates) {
           let status = 'available';
           let reason = null;
 
-          // Check if date is in close_dates
           if (closeDates && closeDates.length > 0) {
             const isCloseDate = closeDates.some(closeDate => {
               const closeDateStr = new Date(closeDate).toDateString();
@@ -3412,7 +3146,6 @@ export class VendorPackageService {
             }
           }
 
-          // Check if date is in close_date_ranges
           if (closeDateRanges && closeDateRanges.length > 0) {
             for (const range of closeDateRanges) {
               const rangeStart = new Date(range.start_date);
@@ -3426,7 +3159,6 @@ export class VendorPackageService {
             }
           }
 
-          // Create availability for each room type
           if (roomTypes.length > 0) {
             for (const roomType of roomTypes) {
               calendarData.push({
@@ -3438,7 +3170,6 @@ export class VendorPackageService {
               });
             }
           } else {
-            // If no room types, create general availability
             calendarData.push({
               package_id: packageId,
               date: date,
@@ -3448,19 +3179,16 @@ export class VendorPackageService {
           }
         }
 
-        // Batch insert PropertyCalendar records
         if (calendarData.length > 0) {
           await this.prisma.propertyCalendar.createMany({
             data: calendarData
           });
         }
       } else {
-        // For other package types, create general availability
         const calendarData = dates.map(date => {
           let status = 'available';
           let reason = null;
 
-          // Check if date is in close_dates
           if (closeDates && closeDates.length > 0) {
             const isCloseDate = closeDates.some(closeDate => {
               const closeDateStr = new Date(closeDate).toDateString();
@@ -3474,7 +3202,6 @@ export class VendorPackageService {
             }
           }
 
-          // Check if date is in close_date_ranges
           if (closeDateRanges && closeDateRanges.length > 0) {
             for (const range of closeDateRanges) {
               const rangeStart = new Date(range.start_date);
@@ -3497,7 +3224,6 @@ export class VendorPackageService {
           };
         });
 
-        // Batch insert PropertyCalendar records
         await this.prisma.propertyCalendar.createMany({
           data: calendarData
         });
@@ -3509,7 +3235,6 @@ export class VendorPackageService {
         stack: error.stack,
         code: error.code
       });
-      // Don't throw error to avoid breaking package creation
     }
   }
 
@@ -3535,17 +3260,14 @@ export class VendorPackageService {
       weekend_days
     } = pricingRules;
 
-    // 1. Ensure minimum stay is not greater than maximum stay
     if (min_stay_nights > max_stay_nights) {
       throw new Error('Minimum stay nights cannot be greater than maximum stay nights');
     }
 
-    // 2. Ensure flat discount doesn't make prices negative
     if (flat_discount > Math.min(base_price, weekend_price)) {
       throw new Error('Flat discount cannot be greater than the minimum of base price or weekend price');
     }
 
-    // 3. Ensure weekend days are valid (0-6)
     if (Array.isArray(weekend_days)) {
       for (const day of weekend_days) {
         if (!Number.isInteger(day) || day < 0 || day > 6) {
@@ -3554,7 +3276,6 @@ export class VendorPackageService {
       }
     }
 
-    // 4. Ensure prices are reasonable (base and weekend prices should be positive after discount)
     const effectiveBasePrice = base_price - flat_discount;
     const effectiveWeekendPrice = weekend_price - flat_discount;
     
@@ -3562,26 +3283,20 @@ export class VendorPackageService {
       throw new Error('Effective prices (after flat discount) must be greater than $0');
     }
 
-    // 5. Ensure reasonable price differences
     const priceDifference = Math.abs(base_price - weekend_price);
     if (priceDifference > 100) {
       throw new Error('Price difference between base and weekend prices cannot exceed $100');
     }
 
-    // 6. Ensure minimum stay is reasonable for business
     if (min_stay_nights > 30) {
       throw new Error('Minimum stay cannot exceed 30 nights');
     }
 
-    // 7. Ensure advance notice is reasonable
-    if (pricingRules.advance_notice_hours > 168) { // 1 week
+    if (pricingRules.advance_notice_hours > 168) { 
       throw new Error('Advance notice cannot exceed 168 hours (1 week)');
     }
   }
 
-  /**
-   * Update pricing rules for a package and optionally recompute calendar
-   */
   async updatePricingRules(
     packageId: string,
     userId: string,
@@ -3593,7 +3308,6 @@ export class VendorPackageService {
     }
   ) {
     try {
-      // Verify package ownership
       const packageData = await this.prisma.package.findFirst({
         where: {
           id: packageId,
@@ -3606,10 +3320,7 @@ export class VendorPackageService {
         throw new Error('Package not found or access denied');
       }
 
-      // Additional business logic validation
       this.validatePricingRulesBusinessLogic(updateDto.pricing_rules);
-
-      // Update or create pricing rules
       const pricingRules = await this.prisma.packagePricingRule.upsert({
         where: { package_id: packageId },
         update: {
@@ -3636,8 +3347,6 @@ export class VendorPackageService {
       });
 
       let recomputeResult = null;
-
-      // Recompute calendar if requested
       if (updateDto.recompute_calendar !== false) {
         const startDate = updateDto.recompute_start_date || new Date();
         const endDate = updateDto.recompute_end_date || (() => {
@@ -3673,9 +3382,6 @@ export class VendorPackageService {
     }
   }
 
-  /**
-   * Recompute calendar prices for a date range
-   */
   async recomputeCalendarPrices(
     packageId: string,
     userId: string,
@@ -3687,7 +3393,6 @@ export class VendorPackageService {
     }
   ) {
     try {
-      // Verify package ownership
       const packageData = await this.prisma.package.findFirst({
         where: {
           id: packageId,
@@ -3700,7 +3405,6 @@ export class VendorPackageService {
         throw new Error('Package not found or access denied');
       }
 
-      // Get pricing rules
       const pricingRules = await this.prisma.packagePricingRule.findUnique({
         where: { package_id: packageId }
       });
@@ -3709,7 +3413,6 @@ export class VendorPackageService {
         throw new Error('No pricing rules found for this package');
       }
 
-      // Set date range
       const startDate = recomputeDto.start_date || new Date();
       const endDate = recomputeDto.end_date || (() => {
         const end = new Date();
@@ -3717,15 +3420,11 @@ export class VendorPackageService {
         return end;
       })();
 
-      // Generate date range
       const dates = this.generateDateRange(startDate, endDate);
       
       let updatedCount = 0;
       let preservedCount = 0;
-
-      // Update each date
       for (const date of dates) {
-        // Check if there's an existing calendar entry
         const existingEntry = await this.prisma.propertyCalendar.findFirst({
           where: {
             package_id: packageId,
@@ -3733,22 +3432,16 @@ export class VendorPackageService {
             room_type_id: recomputeDto.room_type_id || null
           }
         });
-
-        // Skip if preserving overrides and entry has a custom price
         if (recomputeDto.preserve_overrides !== false && existingEntry?.price !== null) {
           preservedCount++;
           continue;
         }
-
-        // Calculate new price using rules
         const newPrice = this.computeEffectivePrice(date, {
           base_price: Number(pricingRules.base_price),
           weekend_price: Number(pricingRules.weekend_price),
           flat_discount: Number(pricingRules.flat_discount),
           weekend_days: pricingRules.weekend_days as number[]
         });
-
-        // Update or create calendar entry
         if (existingEntry) {
           await this.prisma.propertyCalendar.update({
             where: { id: existingEntry.id },
@@ -3793,12 +3486,9 @@ export class VendorPackageService {
     }
   }
 
-  /**
-   * Get pricing rules for a package
-   */
+  
   async getPricingRules(packageId: string, userId: string) {
     try {
-      // Verify package ownership
       const packageData = await this.prisma.package.findFirst({
         where: {
           id: packageId,
@@ -3811,7 +3501,6 @@ export class VendorPackageService {
         throw new Error('Package not found or access denied');
       }
 
-      // Get pricing rules
       const pricingRules = await this.prisma.packagePricingRule.findUnique({
         where: { package_id: packageId }
       });
@@ -3839,13 +3528,10 @@ export class VendorPackageService {
   ) {
     try {
       const availabilityData = [];
-
-      // For each availability date and each room type, create availability
       for (const availability of packageAvailabilities) {
         const availabilityDate = new Date(availability.date);
         
         if (roomTypes.length > 0) {
-          // Create availability for each room type
           for (const roomType of roomTypes) {
             availabilityData.push({
               package_id: packageId,
@@ -3857,7 +3543,6 @@ export class VendorPackageService {
             });
           }
         } else {
-          // If no room types, create general availability
           availabilityData.push({
             package_id: packageId,
             date: availabilityDate,
@@ -3868,8 +3553,6 @@ export class VendorPackageService {
           });
         }
       }
-
-      // Batch insert availability records
       if (availabilityData.length > 0) {
         await this.prisma.packageAvailability.createMany({
           data: availabilityData
@@ -3879,16 +3562,10 @@ export class VendorPackageService {
       console.log(`✅ Created ${availabilityData.length} availability records for package ${packageId}`);
     } catch (error) {
       console.error('❌ Failed to create room-type wise availability:', error);
-      // Don't throw to avoid breaking package creation
     }
   }
-
-  /**
-   * Get package availability summary for debugging
-   */
   async getPackageAvailabilitySummary(packageId: string) {
     try {
-      // Get package info
       const packageData = await this.prisma.package.findUnique({
         where: { id: packageId },
         select: { 
@@ -3902,16 +3579,12 @@ export class VendorPackageService {
       if (!packageData) {
         throw new Error('Package not found');
       }
-
-      // Get availability records
       const availabilityRecords = await this.prisma.packageAvailability.findMany({
         where: { package_id: packageId },
         orderBy: [
           { date: 'asc' }
         ]
       });
-
-      // Get room types
       const roomTypes = await this.prisma.packageRoomType.findMany({
         where: { 
           package_id: packageId,
@@ -3919,11 +3592,7 @@ export class VendorPackageService {
         },
         select: { id: true, name: true }
       });
-
-      // Get calendar configuration
       const calendarConfig = await this.getCalendarConfiguration(packageId);
-
-      // Group by date for better visualization
       const availabilityByDate = availabilityRecords.reduce((acc, record) => {
         const dateKey = record.date.toISOString().split('T')[0];
         if (!acc[dateKey]) {
