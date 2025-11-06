@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -137,11 +138,20 @@ export class AuthController {
 
   @Get('google/redirect')
   @UseGuards(AuthGuard('google'))
-  async googleLoginRedirect(@Req() req: Request): Promise<any> {
-    return {
-      statusCode: HttpStatus.OK,
-      data: req.user,
-    };
+  async googleLoginRedirect(@Req() req: Request, @Res() res: any): Promise<any> {
+    try {
+      const user: any = req.user
+    const response: any = await this.authService.register({
+      name: `${user.firstName} ${user.lastName}`,
+      email: user.email,
+    });
+    console.log('response', response);
+    res.cookie('tourAccessToken', response.authorization.token);
+    return res.redirect(`${process.env.FRONTEND_URL}/?token=${response.authorization.token}`);
+    } catch (error) {
+      console.log('error message', error?.message);
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=${error?.message}`);
+    }
   }
 
   // update user
@@ -190,8 +200,6 @@ export class AuthController {
   async getUsers(@Req() req: Request) {
     try {
       const usersResponse = await this.userService.findAll();
-      
-      // Filter users to only return necessary fields for notification demo
       const filteredUsers = usersResponse.data.map(user => ({
         id: user.id,
         name: user.name,

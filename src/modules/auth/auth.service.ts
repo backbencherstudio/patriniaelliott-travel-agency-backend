@@ -19,7 +19,7 @@ export class AuthService {
     private jwtService: JwtService,
     private prisma: PrismaService,
     private mailService: MailService,
-  ) {}
+  ) { }
 
   async me(userId: string) {
     try {
@@ -41,7 +41,7 @@ export class AuthService {
           appConfig().storageUrl.avatar + user.avatar,
         );
       }
-      const {password:_, ...result} = user;
+      const { password: _, ...result } = user;
       if (user) {
         return {
           success: true,
@@ -241,7 +241,7 @@ export class AuthService {
     // first_name: string;
     // last_name: string;
     email: string;
-    password: string;
+    password?: string;
     type?: string;
   }) {
     try {
@@ -251,7 +251,7 @@ export class AuthService {
         value: String(email),
       });
 
-      if (userEmailExist) {
+      if (userEmailExist && password) {
         return {
           statusCode: 401,
           message: 'Email already exist',
@@ -266,51 +266,61 @@ export class AuthService {
         password: password,
         type: type,
       });
-      
 
-      if (user == null && user.success == false) {
+
+      if (user == null && user.success == false && password) {
         return {
           success: false,
           message: 'Failed to create account',
         };
       }
 
-      // create stripe customer account
-      const stripeCustomer = await StripePayment.createCustomer({
-        user_id: user.data.id,
-        email: email,
-        name: name,
-      });
+      console.log('userEmailExist', userEmailExist);
+      
 
-      if (stripeCustomer) {
-        await this.prisma.user.update({
-          where: {
-            id: user.data.id,
-          },
-          data: {
-            billing_id: stripeCustomer.id,
-          },
+      if (password) {
+        // create stripe customer account
+        const stripeCustomer = await StripePayment.createCustomer({
+          user_id: user.data.id,
+          email: email,
+          name: name,
         });
+
+        if (stripeCustomer) {
+          await this.prisma.user.update({
+            where: {
+              id: user.data.id,
+            },
+            data: {
+              billing_id: stripeCustomer.id,
+            },
+          });
+        }
+        // ----------------------------------------------------
+        // create otp code
+        const token = await UcodeRepository.createToken({
+          userId: user.data.id,
+          isOtp: true,
+        });
+
+        // send otp code to email
+        await this.mailService.sendOtpCodeToEmail({
+          email: email,
+          name: name,
+          otp: token,
+        });
+
+        return {
+          success: true,
+          message: 'We have sent an OTP code to your email',
+        };
+      } else {
+        const response = await this.login({
+          email: user?.data?.email || userEmailExist?.email,
+          userId: user?.data?.id || userEmailExist?.id,
+        })
+        return response;
       }
-
-      // ----------------------------------------------------
-      // create otp code
-      const token = await UcodeRepository.createToken({
-        userId: user.data.id,
-        isOtp: true,
-      });
-
-      // send otp code to email
-       await this.mailService.sendOtpCodeToEmail({
-        email: email,
-        name: name,
-        otp: token,
-      });
-
-      return {
-        success: true,
-        message: 'We have sent an OTP code to your email',
-      };
 
       // ----------------------------------------------------
 
